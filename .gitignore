@@ -30,3 +30,8 @@ __pycache__/
 # Node
 node_modules/
 dist/
+
+# Working notes for the iSec MAPT template conversion and the report-sections
+# investigation. Kept on disk, deliberately not tracked.
+REPORT_TEMPLATE_UPDATES.md
+TO_DO_PLAN.md
