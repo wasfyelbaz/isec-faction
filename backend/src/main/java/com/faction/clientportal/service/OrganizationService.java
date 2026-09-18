@@ -36,6 +36,7 @@ public class OrganizationService {
     private final ApplicationRepository applicationRepository;
     private final EntityFieldConfigRepository entityFieldConfigRepository;
     private final UserRepository userRepository;
+    private final ClientImageService clientImageService;
 
     public Organization createOrganization(Organization organization) {
         return organizationRepository.save(organization);
@@ -179,6 +180,11 @@ public class OrganizationService {
                     "Cannot delete organization with " + members
                     + " member user(s). Remove them from the organization first.");
         }
+
+        // Last, once every refusal above has passed — the images go with the organization, and
+        // nothing else ever scans that storage prefix, so rows and objects left behind here would
+        // simply sit there unreachable.
+        clientImageService.deleteAllForOrganization(id);
 
         organizationRepository.deleteById(id);
     }

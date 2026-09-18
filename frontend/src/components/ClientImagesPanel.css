@@ -1,0 +1,116 @@
+.client-images-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+/* thumbnail | name + file | delete — the meta column takes the slack so the buttons stay aligned. */
+.client-images-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--primary-bg);
+}
+
+/* Fixed box with the image contained rather than cropped: a logo is usually much wider than it is
+   tall, and cover-cropping one to a square hides the part that identifies it. */
+.client-images-thumb {
+  flex: 0 0 auto;
+  width: 4rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  /* Light, because a logo is nearly always drawn for a light background — on the dark theme its
+     own dark strokes would otherwise vanish into the panel. */
+  background: #fff;
+  overflow: hidden;
+}
+
+.client-images-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.client-images-thumb-missing {
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+.client-images-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.client-images-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.client-images-file {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-images-upload {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.client-images-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.client-images-field--file {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.client-images-file-input {
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+}
+
+.client-images-empty {
+  padding: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.client-images-error {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+  font-size: 0.8125rem;
+}
+
+.client-images-panel code {
+  font-size: 0.8125em;
+  padding: 0 0.2em;
+}

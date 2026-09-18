@@ -7,6 +7,7 @@ import type { ClientContact, UpdateOrganizationRequest, UserDefinedField } from 
 import type { AssignedUser } from '../types';
 import RichTextEditor from '../components/RichTextEditor';
 import Page from '../components/Page';
+import ClientImagesPanel from '../components/ClientImagesPanel';
 import SubOrganizationsPanel from '../components/SubOrganizationsPanel';
 import UserSelector from '../components/UserSelector';
 import {
@@ -350,8 +351,10 @@ export default function OrganizationEdit() {
           )}
         </div>
 
-        {/* Divisions are managed independently of the organization form — each add, rename or
-            delete is its own request, so they aren't part of this form's save. */}
+        {/* Images and divisions are both managed independently of this form — each upload, add,
+            rename or delete is its own request, so neither is part of this form's save. */}
+        {id && <ClientImagesPanel organizationId={id} canWrite={canWrite} />}
+
         {id && <SubOrganizationsPanel organizationId={id} canWrite={canWrite} />}
 
         <div className="modal-actions">

@@ -3,6 +3,7 @@ import axios from 'axios';
 import type { MentionableUser, AssessorAvailability, RetestCompletionLog, RetestActivitySummary, LoginRequest, LoginResponse, User, Role, ResourcePermissions, ApiResponse, PagedApiResponse, CreateUserRequest, UpdateUserRequest, Team, CreateTeamRequest, UpdateTeamRequest, CreateRoleRequest, UpdateRoleRequest, ApiKey, CreateApiKeyRequest, CreateApiKeyResponse, AssessmentType, CreateAssessmentTypeRequest, UpdateAssessmentTypeRequest, Organization, CreateOrganizationRequest, UpdateOrganizationRequest, Application, ApplicationStatus, ApplicationComment, ApplicationImportResult, CreateApplicationRequest, UpdateApplicationRequest, ApplicationConnection, CreateApplicationConnectionRequest, UpdateApplicationConnectionRequest, ReportTemplate, ReportTemplateSummary, CreateReportTemplateRequest, UpdateReportTemplateRequest, Assessment, CreateAssessmentRequest, UpdateAssessmentRequest, AssessmentMetrics, VulnerabilityCategory, CreateVulnerabilityCategoryRequest, UpdateVulnerabilityCategoryRequest, DefaultVulnerability, CreateDefaultVulnerabilityRequest, UpdateDefaultVulnerabilityRequest, DefaultVulnerabilityImportResult, UserDefinedField, Vulnerability, VulnerabilityListItem, VulnerabilityComment, CreateVulnerabilityRequest, UpdateVulnerabilityRequest, UpdateVulnerabilityExceptionRequest, AssessmentFile, EntityFieldConfig, FieldScope, PeerReview, UpdatePeerReviewRequest, AcceptPeerReviewRequest, AssessmentWorkflowConfig, ChecklistTemplate, CreateChecklistTemplateRequest, UpdateChecklistTemplateRequest, AssessmentChecklist, AddAssessmentChecklistRequest, UpdateAssessmentChecklistRequest, AssignedUser, AssignUserRequest, UserApplicationAssignment, SsoConfig, SsoStatus, AzureDirectoryUser, NotebookNode, NotebookSearchResult, CreateNotebookNodeRequest, UpdateNotebookNodeRequest, MoveNotebookNodeRequest, NotebookAttachment, Retest, CreateRetestRequest, UpdateRetestRequest, CompleteRetestRequest, EmailConfig, UpdateEmailConfigRequest, TestEmailRequest, TestEmailResponse, InboundEmailConfig, UpdateInboundEmailConfigRequest, Branding, BrandingAssetSlot, UpdateBrandingSizesRequest, EmailNotificationConfig, UpdateEmailNotificationConfigRequest, NotificationPreference, UpdateNotificationPreferencesRequest, AiProviderConfig, SaveAiProviderConfigRequest, TestAiProviderRequest, TestAiProviderResponse, AiPromptTemplate, SaveAiPromptTemplateRequest, AiPromptSummary, AiPromptScope, ExecuteAiPromptRequest, AskAiRequest, AiGenerationResponse, SuggestAiTitleRequest, WebSearchConfig, UpdateWebSearchConfigRequest, AiAnonymizationConfig, UpdateAiAnonymizationConfigRequest, AiLogConfig, UpdateAiLogConfigRequest, AiRequestLog, AiTokenUsageDay, Notification, NotificationTargetType, SurveyTemplate, CreateSurveyTemplateRequest, UpdateSurveyTemplateRequest, AssessmentSurvey, AddAssessmentSurveyRequest, UpdateAssessmentSurveyRequest, ApplicationIdConfig, ReportDocuments, Campaign, CreateCampaignRequest, UpdateCampaignRequest, ManagerDashboardSummary, ManagerDashboardStats, ManagerDashboardAssessment, ManagerDashboardVulnerability, ManagerDashboardVulnerabilityDetail, ManagerDashboardFilters, VulnerabilityTrendSummary, RemediationQueueRow, RemediationQueueSummary, AssignableUser, SubOrganization, SubOrganizationRequest, VulnerabilityStageCompletion, Extension, ExtensionLog, UpdateExtensionRequest, ExternalApplication, EditionStatus, UpgradeRequired, ContentTemplate, ContentTemplateScope, SaveContentTemplateRequest,
   PasswordPolicy,
   TerminologyConfig,
+  ClientImage,
 } from './types';
 
 const api = axios.create({
@@ -610,6 +611,47 @@ export const organizationsApi = {
 
   removeAssignedUser: async (orgId: string, userId: string): Promise<ApiResponse<void>> => {
     const response = await api.delete<ApiResponse<void>>(`/organizations/${orgId}/users/${userId}`);
+    return response.data;
+  },
+};
+
+/**
+ * A client's images, held in named slots — logo, cover, signature.
+ *
+ * <p>Unlike branding, whose assets are public so the sign-in page can paint before anyone has a
+ * session, these are a specific client's marks and the endpoint requires a token. So the bytes are
+ * fetched through this authenticated client as a blob and handed to an object URL — an `<img src>`
+ * pointed straight at the API would arrive without the Authorization header and 401.
+ */
+export const clientImagesApi = {
+  list: async (orgId: string): Promise<ApiResponse<ClientImage[]>> => {
+    const response = await api.get<ApiResponse<ClientImage[]>>(`/organizations/${orgId}/images`);
+    return response.data;
+  },
+
+  upload: async (orgId: string, name: string, file: File): Promise<ApiResponse<ClientImage>> => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('name', name);
+    const response = await api.post<ApiResponse<ClientImage>>(
+      `/organizations/${orgId}/images`, form,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return response.data;
+  },
+
+  /** The raw bytes. The caller owns the object URL it builds and must revoke it. */
+  content: async (orgId: string, name: string): Promise<Blob> => {
+    const response = await api.get(
+      `/organizations/${orgId}/images/${encodeURIComponent(name)}/content`,
+      { responseType: 'blob' },
+    );
+    return response.data as Blob;
+  },
+
+  delete: async (orgId: string, name: string): Promise<ApiResponse<void>> => {
+    const response = await api.delete<ApiResponse<void>>(
+      `/organizations/${orgId}/images/${encodeURIComponent(name)}`);
     return response.data;
   },
 };

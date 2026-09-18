@@ -286,6 +286,23 @@ export interface ClientContact {
   email?: string;
 }
 
+/**
+ * One of a client's images, held in a named slot — `logo`, `cover`, `signature`.
+ *
+ * <p>No storage key or URL: the bytes come from the authenticated
+ * `clientImagesApi.content` call, which is the only route to them.
+ */
+export interface ClientImage {
+  id: string;
+  /** The slot this image fills. Lowercase, unique per client. */
+  name: string;
+  originalFileName?: string;
+  contentType?: string;
+  fileSize?: number;
+  uploadedBy?: string;
+  uploadedAt?: string;
+}
+
 export interface OrganizationRemediationOwner {
   userId: string;
   username: string;
