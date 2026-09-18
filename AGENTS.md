@@ -4,6 +4,52 @@ This file provides standing instructions for Codex when working on this reposito
 
 ---
 
+## Ask Before Changing Source Code, Committing, or Pushing
+
+**These three actions require the developer to ask for them explicitly, every time. Assume the
+answer is no until they say otherwise.**
+
+### 1. Do not modify or write application source code unless asked
+
+This covers everything under `backend/src/main/` and `frontend/src/` — anything that ships in
+the running application.
+
+Tests (`backend/src/test/`, `frontend/tests/`) are **exempt**: write and change them freely, as
+the Backend Testing section below requires.
+
+Also exempt: documentation, report templates, and other non-code assets.
+
+If a task looks like it needs a source change, **stop and ask first**. Do not make the change
+and report it afterwards. In the request, give the developer:
+
+- **What** — the specific files and functions, and the change in one or two lines
+- **Why** — the problem it solves, and what breaks if it is not made
+- **Blast radius** — what else the change affects, and anything it turns on or off elsewhere
+- **The alternative** — what can be delivered without touching source code, if anything
+
+Then wait. Do everything that does not depend on the answer in the meantime, and say what is
+blocked on it.
+
+### 2. Do not commit unless asked
+
+Let related changes accumulate in the working tree and report what changed. When the developer
+does ask, group the work into coherent commits rather than one per edit. The Git Commits
+section below still applies: `git commit -s`, and never add `Co-Authored-By`.
+
+### 3. Do not push unless asked
+
+Asking to commit is not asking to push. Treat them as separate permissions.
+
+### Why
+
+A one-line source change can alter the whole application's behaviour while looking trivial in a
+diff. `CommunityEditionPolicy.enabled()` returning `true` instead of `false` is eight words, and
+it unlocks every gated feature and changes how many roles a fresh install seeds. Changes like
+that are the developer's call, not the agent's — and a change already pushed is far more
+expensive to reverse than one still waiting for an answer.
+
+---
+
 ## Page Layout
 
 **Every routed page must wrap its content in the `Page` component** (`frontend/src/components/Page.tsx`). This is the single, reusable layout contract for everything rendered inside the dashboard content area — it guarantees consistent full-width sizing so new features never need bespoke width CSS.
