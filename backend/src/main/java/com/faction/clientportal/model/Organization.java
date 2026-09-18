@@ -52,4 +52,14 @@ public class Organization {
     @Builder.Default
     @JdbcTypeCode(SqlTypes.JSON)
     private List<String> remediationOwnerIds = new ArrayList<>();
+
+    /**
+     * Who the client's finished reports go to — see {@link ClientContact}.
+     *
+     * <p>The client's own people, not accounts here, so this is plain recorded data with no
+     * access-control meaning: naming someone on the list grants them nothing.
+     */
+    @Builder.Default
+    @JdbcTypeCode(SqlTypes.JSON)
+    private List<ClientContact> distributionList = new ArrayList<>();
 }

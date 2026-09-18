@@ -1063,4 +1063,182 @@ class OrganizationControllerTest extends TestContainersConfig {
         List<String> names = com.jayway.jsonpath.JsonPath.read(json, "$.data[*].name");
         assertThat(names.indexOf("Zed's org")).isLessThan(names.indexOf("Alice's org"));
     }
+
+    // ── Distribution list ─────────────────────────────────────────────────────────
+
+    @Test
+    void createOrganization_withADistributionList_storesAndReturnsIt() throws Exception {
+        String token = jwtService.generateToken(superAdminUser.getUsername(),
+                List.of(new SimpleGrantedAuthority("super_admin")));
+
+        String body = """
+                {
+                  "name": "Northwind",
+                  "description": "d",
+                  "distributionList": [
+                    {"name": "Dana Reed", "title": "CISO", "email": "dana@northwind.test"},
+                    {"name": "Sam Okafor"}
+                  ]
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/organizations")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json").content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.distributionList.length()").value(2))
+                .andExpect(jsonPath("$.data.distributionList[0].name").value("Dana Reed"))
+                .andExpect(jsonPath("$.data.distributionList[0].title").value("CISO"))
+                .andExpect(jsonPath("$.data.distributionList[0].email").value("dana@northwind.test"))
+                // A name on its own is a complete entry: plenty of lists record who gets a
+                // printed copy, with no address to give.
+                .andExpect(jsonPath("$.data.distributionList[1].name").value("Sam Okafor"))
+                .andExpect(jsonPath("$.data.distributionList[1].email").doesNotExist());
+
+        Organization saved = organizationRepository.findByName("Northwind").orElseThrow();
+        assertThat(saved.getDistributionList()).extracting(ClientContact::getName)
+                .containsExactly("Dana Reed", "Sam Okafor");
+    }
+
+    @Test
+    void createOrganization_withoutADistributionList_startsEmptyRatherThanNull() throws Exception {
+        String token = jwtService.generateToken(superAdminUser.getUsername(),
+                List.of(new SimpleGrantedAuthority("super_admin")));
+
+        mockMvc.perform(post("/api/v1/organizations")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content("{\"name\": \"Listless\", \"description\": \"d\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.distributionList").isArray())
+                .andExpect(jsonPath("$.data.distributionList.length()").value(0));
+
+        assertThat(organizationRepository.findByName("Listless").orElseThrow().getDistributionList())
+                .isEmpty();
+    }
+
+    @Test
+    void updateOrganization_replacesTheDistributionList_keepsItWhenAbsent_clearsItWhenEmpty()
+            throws Exception {
+        String token = jwtService.generateToken(superAdminUser.getUsername(),
+                List.of(new SimpleGrantedAuthority("super_admin")));
+        Organization org = organizationRepository.save(Organization.builder().name("Contoso")
+                .distributionList(new ArrayList<>(List.of(
+                        ClientContact.builder().name("Old Contact").email("old@contoso.test").build())))
+                .build());
+
+        // A list in the payload replaces the stored one outright — it is not merged.
+        mockMvc.perform(put("/api/v1/organizations/" + org.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content("""
+                                {"name": "Contoso", "distributionList": [
+                                  {"name": "New Contact", "title": "Head of IT", "email": "new@contoso.test"}
+                                ]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.distributionList.length()").value(1))
+                .andExpect(jsonPath("$.data.distributionList[0].name").value("New Contact"));
+
+        // Absent means unchanged, like remediationOwnerIds and fieldValues: the organization form
+        // is also submitted by screens that never loaded this field.
+        mockMvc.perform(put("/api/v1/organizations/" + org.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content("{\"name\": \"Contoso\", \"description\": \"edited\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.distributionList[0].name").value("New Contact"));
+
+        // An empty list is the only way to say "nobody", and it must not be confused with absent.
+        mockMvc.perform(put("/api/v1/organizations/" + org.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content("{\"name\": \"Contoso\", \"distributionList\": []}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.distributionList.length()").value(0));
+
+        assertThat(organizationRepository.findById(org.getId()).orElseThrow().getDistributionList())
+                .isEmpty();
+    }
+
+    @Test
+    void createOrganization_withAMalformedContactEmail_returnsBadRequest() throws Exception {
+        String token = jwtService.generateToken(superAdminUser.getUsername(),
+                List.of(new SimpleGrantedAuthority("super_admin")));
+
+        mockMvc.perform(post("/api/v1/organizations")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content("""
+                                {"name": "Typo Ltd", "distributionList": [
+                                  {"name": "Dana Reed", "email": "dana(at)typo.test"}
+                                ]}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        // A typo'd address is a report that silently never arrives, so nothing is stored.
+        assertThat(organizationRepository.findByName("Typo Ltd")).isEmpty();
+    }
+
+    @Test
+    void createOrganization_withANamelessContact_returnsBadRequest() throws Exception {
+        String token = jwtService.generateToken(superAdminUser.getUsername(),
+                List.of(new SimpleGrantedAuthority("super_admin")));
+
+        mockMvc.perform(post("/api/v1/organizations")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content("""
+                                {"name": "Anon Ltd", "distributionList": [
+                                  {"title": "CISO", "email": "someone@anon.test"}
+                                ]}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        assertThat(organizationRepository.findByName("Anon Ltd")).isEmpty();
+    }
+
+    @Test
+    void distributionList_isRefusedBeyondFiftyContacts() throws Exception {
+        String token = jwtService.generateToken(superAdminUser.getUsername(),
+                List.of(new SimpleGrantedAuthority("super_admin")));
+
+        // 51 — one past the cap, so the boundary itself is what is being tested.
+        String tooMany = java.util.stream.IntStream.rangeClosed(1, 51)
+                .mapToObj(i -> String.format("{\"name\": \"Contact %d\"}", i))
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+
+        mockMvc.perform(post("/api/v1/organizations")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content(String.format(
+                                "{\"name\": \"Crowded\", \"distributionList\": %s}", tooMany)))
+                .andExpect(status().isBadRequest());
+        assertThat(organizationRepository.findByName("Crowded")).isEmpty();
+
+        // Exactly at the cap is fine — an off-by-one here would refuse a list the UI allows.
+        String justEnough = java.util.stream.IntStream.rangeClosed(1, 50)
+                .mapToObj(i -> String.format("{\"name\": \"Contact %d\"}", i))
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+
+        mockMvc.perform(post("/api/v1/organizations")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content(String.format(
+                                "{\"name\": \"Full\", \"distributionList\": %s}", justEnough)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.distributionList.length()").value(50));
+
+        // The update path carries the same cap; a payload that a create refuses must not slip in
+        // through a PUT.
+        Organization full = organizationRepository.findByName("Full").orElseThrow();
+        mockMvc.perform(put("/api/v1/organizations/" + full.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content(String.format(
+                                "{\"name\": \"Full\", \"distributionList\": %s}", tooMany)))
+                .andExpect(status().isBadRequest());
+        assertThat(organizationRepository.findById(full.getId()).orElseThrow().getDistributionList())
+                .hasSize(50);
+    }
 }

@@ -271,6 +271,19 @@ export interface Organization {
   /** Internal users responsible for every finding under this organization's applications. */
   remediationOwnerIds?: string[];
   remediationOwners?: OrganizationRemediationOwner[];
+  /** Who this client's finished reports go to. */
+  distributionList?: ClientContact[];
+}
+
+/**
+ * One person on a client's distribution list — who the finished report goes to.
+ *
+ * <p>The client's own people, not accounts here: naming someone grants them nothing.
+ */
+export interface ClientContact {
+  name: string;
+  title?: string;
+  email?: string;
 }
 
 export interface OrganizationRemediationOwner {
@@ -284,6 +297,8 @@ export interface CreateOrganizationRequest {
   name: string;
   description: string;
   fieldValues?: Record<string, string>;
+  /** At most 50 contacts; the server refuses more. */
+  distributionList?: ClientContact[];
 }
 
 export interface UpdateOrganizationRequest {
@@ -292,6 +307,8 @@ export interface UpdateOrganizationRequest {
   fieldValues?: Record<string, string>;
   /** Full replacement; omit to leave the list unchanged. */
   remediationOwnerIds?: string[];
+  /** Full replacement; omit to leave it unchanged, send [] to clear it. At most 50. */
+  distributionList?: ClientContact[];
 }
 
 export interface EntityFieldConfig {

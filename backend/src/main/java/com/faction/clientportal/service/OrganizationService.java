@@ -73,6 +73,7 @@ public class OrganizationService {
                 .name(request.getName())
                 .description(request.getDescription())
                 .fieldValues(request.getFieldValues() != null ? request.getFieldValues() : new HashMap<>())
+                .distributionList(toContacts(request.getDistributionList()))
                 .build();
 
         Organization savedOrganization = organizationRepository.save(organization);
@@ -123,6 +124,11 @@ public class OrganizationService {
         }
         if (request.getRemediationOwnerIds() != null) {
             organization.setRemediationOwnerIds(validateRemediationOwners(request.getRemediationOwnerIds()));
+        }
+        // Null leaves the stored list alone; an empty list clears it. See the field's javadoc —
+        // screens that never loaded the distribution list also submit this form.
+        if (request.getDistributionList() != null) {
+            organization.setDistributionList(toContacts(request.getDistributionList()));
         }
 
         Organization updatedOrganization = organizationRepository.save(organization);
@@ -418,6 +424,49 @@ public class OrganizationService {
                 .orElse(username);
     }
 
+    /**
+     * A distribution list off the wire, as it is stored.
+     *
+     * <p>Trimmed, because a trailing space is invisible in the form field and glaring on a report's
+     * cover page. Entries with no name left are dropped rather than refused: a half-filled row the
+     * author abandoned should not stop the rest of the form saving, and validation already refuses
+     * a name that was blank on arrival.
+     */
+    private static List<ClientContact> toContacts(List<ClientContactDto> dtos) {
+        if (dtos == null) {
+            return new ArrayList<>();
+        }
+        return dtos.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(dto -> ClientContact.builder()
+                        .name(trimToNull(dto.getName()))
+                        .title(trimToNull(dto.getTitle()))
+                        .email(trimToNull(dto.getEmail()))
+                        .build())
+                .filter(contact -> contact.getName() != null)
+                .collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    private static List<ClientContactDto> toContactDtos(List<ClientContact> contacts) {
+        if (contacts == null) {
+            return new ArrayList<>();
+        }
+        return contacts.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(contact -> ClientContactDto.builder()
+                        .name(contact.getName())
+                        .title(contact.getTitle())
+                        .email(contact.getEmail())
+                        .build())
+                .collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private String buildDisplayName(User user) {
         String firstName = user.getFirstName() != null ? user.getFirstName() : "";
         String lastName = user.getLastName() != null ? user.getLastName() : "";
@@ -457,6 +506,7 @@ public class OrganizationService {
                 .assignedUsers(assignedUserDtos)
                 .remediationOwnerIds(new ArrayList<>(ownerIds))
                 .remediationOwners(owners)
+                .distributionList(toContactDtos(organization.getDistributionList()))
                 .build();
     }
 }

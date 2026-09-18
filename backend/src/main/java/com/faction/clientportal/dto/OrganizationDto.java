@@ -23,6 +23,8 @@ public class OrganizationDto {
     @Builder.Default private List<String> remediationOwnerIds = new java.util.ArrayList<>();
     /** The same people resolved for display. */
     @Builder.Default private List<RemediationOwner> remediationOwners = new java.util.ArrayList<>();
+    /** Who this client's finished reports go to; see Organization#distributionList. */
+    @Builder.Default private List<ClientContactDto> distributionList = new java.util.ArrayList<>();
 
     @Data
     @Builder

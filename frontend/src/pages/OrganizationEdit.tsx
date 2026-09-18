@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Plus, Trash2 } from 'lucide-react';
 import { organizationsApi, entityFieldsApi } from '../api';
 import { usePageTitle } from '../context/PageTitleContext';
-import type { UpdateOrganizationRequest, UserDefinedField } from '../types';
+import type { ClientContact, UpdateOrganizationRequest, UserDefinedField } from '../types';
 import type { AssignedUser } from '../types';
 import RichTextEditor from '../components/RichTextEditor';
 import Page from '../components/Page';
@@ -13,6 +14,7 @@ import {
   FormGroup,
   FormHint,
   FormLabel,
+  IconButton,
   Input,
   Select,
   Textarea,
@@ -20,6 +22,9 @@ import {
 } from '../components';
 import './Organizations.css';
 import { useTerminology } from '../context/TerminologyContext';
+
+/** Matches the server's cap; see OrganizationContactLimits.MAX_DISTRIBUTION_LIST. */
+const MAX_DISTRIBUTION_LIST = 50;
 
 export default function OrganizationEdit() {
   const { organizationLower, organizationPlural, organizationSingular } = useTerminology();
@@ -34,6 +39,7 @@ export default function OrganizationEdit() {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [assignedUsers, setAssignedUsers] = useState<AssignedUser[]>([]);
   const [remediationOwnerIds, setRemediationOwnerIds] = useState<string[]>([]);
+  const [distributionList, setDistributionList] = useState<ClientContact[]>([]);
   const { setBreadcrumbs } = usePageTitle();
 
   useEffect(() => {
@@ -68,6 +74,7 @@ export default function OrganizationEdit() {
           setFieldValues(orgRes.data.fieldValues || {});
           setAssignedUsers(orgRes.data.assignedUsers || []);
           setRemediationOwnerIds(orgRes.data.remediationOwnerIds || []);
+          setDistributionList(orgRes.data.distributionList || []);
         }
       })
       .catch((err: any) => {
@@ -103,6 +110,10 @@ export default function OrganizationEdit() {
         description: formData.description,
         fieldValues: Object.keys(fieldValues).length > 0 ? fieldValues : undefined,
         remediationOwnerIds,
+        // Rows the author left entirely blank are dropped rather than sent: an empty row is an
+        // add they thought better of, and the server would refuse it for a missing name.
+        distributionList: distributionList.filter(
+          (c) => (c.name || '').trim() || (c.title || '').trim() || (c.email || '').trim()),
       };
       await organizationsApi.update(id, updateData);
       navigate('/organizations');
@@ -110,6 +121,23 @@ export default function OrganizationEdit() {
       setError(err.response?.data?.message || `Failed to save ${organizationLower}`);
       setSaving(false);
     }
+  };
+
+  const updateContact = (index: number, patch: Partial<ClientContact>) => {
+    setDistributionList((current) =>
+      current.map((contact, i) => (i === index ? { ...contact, ...patch } : contact)));
+  };
+
+  const addContact = () => {
+    setDistributionList((current) =>
+      current.length >= MAX_DISTRIBUTION_LIST
+        ? current
+        : [...current, { name: '', title: '', email: '' }]);
+  };
+
+  // No confirmation: nothing is removed until the form is saved, so Cancel already undoes it.
+  const removeContact = (index: number) => {
+    setDistributionList((current) => current.filter((_, i) => i !== index));
   };
 
   if (loading) {
@@ -240,6 +268,86 @@ export default function OrganizationEdit() {
             disabled={!canWrite}
             internalOnly
           />
+        </div>
+
+        {/* Part of this form's save, unlike the divisions panel below: these rows are plain
+            columns on the organization, so they go with the rest of the record. */}
+        <div className="form-panel">
+          <h3 className="form-section-title">Distribution List</h3>
+          <FormHint>
+            Who this {organizationLower}'s finished reports go to. These are the {organizationLower}'s
+            own people, not accounts here — naming someone grants them no access. A name is required;
+            a title and an address are optional, so a list can record who receives a printed copy.
+          </FormHint>
+
+          {distributionList.length === 0 ? (
+            <div className="dist-list-empty">No contacts yet.</div>
+          ) : (
+            <ul className="dist-list">
+              <li className="dist-list-head" aria-hidden="true">
+                <span>Name</span>
+                <span>Title</span>
+                <span>Email</span>
+                <span />
+              </li>
+              {distributionList.map((contact, index) => (
+                // Indexed because a contact has no id and any field may be edited — a key built
+                // from the values would remount the row on every keystroke and lose the caret.
+                <li className="dist-list-row" key={index}>
+                  <Input
+                    value={contact.name || ''}
+                    onChange={(e) => updateContact(index, { name: e.target.value })}
+                    placeholder="Full name"
+                    disabled={!canWrite}
+                    aria-label={`Contact ${index + 1} name`}
+                  />
+                  <Input
+                    value={contact.title || ''}
+                    onChange={(e) => updateContact(index, { title: e.target.value })}
+                    placeholder="Job title"
+                    disabled={!canWrite}
+                    aria-label={`Contact ${index + 1} title`}
+                  />
+                  <Input
+                    type="email"
+                    value={contact.email || ''}
+                    onChange={(e) => updateContact(index, { email: e.target.value })}
+                    placeholder="name@example.com"
+                    disabled={!canWrite}
+                    aria-label={`Contact ${index + 1} email`}
+                  />
+                  {canWrite && (
+                    <IconButton
+                      icon={Trash2}
+                      variant="delete"
+                      title="Remove contact"
+                      onClick={() => removeContact(index)}
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {canWrite && (
+            <div className="dist-list-add">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                icon={Plus}
+                onClick={addContact}
+                disabled={distributionList.length >= MAX_DISTRIBUTION_LIST}
+              >
+                Add contact
+              </Button>
+              {distributionList.length >= MAX_DISTRIBUTION_LIST && (
+                <span className="dist-list-limit">
+                  A distribution list holds at most {MAX_DISTRIBUTION_LIST} contacts.
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Divisions are managed independently of the organization form — each add, rename or

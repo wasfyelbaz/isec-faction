@@ -1,11 +1,13 @@
 package com.faction.clientportal.service;
 
 import com.faction.clientportal.config.TestContainersConfig;
+import com.faction.clientportal.dto.ClientContactDto;
 import com.faction.clientportal.dto.CreateOrganizationRequest;
 import com.faction.clientportal.dto.OrganizationDto;
 import com.faction.clientportal.dto.UpdateOrganizationRequest;
 import com.faction.clientportal.exception.ResourceNotFoundException;
 import com.faction.clientportal.model.Application;
+import com.faction.clientportal.model.ClientContact;
 import com.faction.clientportal.model.Organization;
 import com.faction.clientportal.repository.ApplicationRepository;
 import com.faction.clientportal.repository.OrganizationRepository;
@@ -17,8 +19,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -365,5 +370,80 @@ class OrganizationServiceTest extends TestContainersConfig {
         Page<OrganizationDto> results = organizationService.searchOrganizations("NonExistent", PageRequest.of(0, 10));
 
         assertThat(results.getContent()).isEmpty();
+    }
+
+    // ── Distribution list ─────────────────────────────────────────────────────────
+
+    @Test
+    void distributionList_survivesARoundTripThroughTheDatabase() {
+        // The list is a JSONB column, so it is serialized on the way in and parsed on the way
+        // out. A round trip through a real Postgres is the only thing that proves all three
+        // fields — including the optional ones — come back as they went in.
+        CreateOrganizationRequest request = new CreateOrganizationRequest();
+        request.setName("Northwind");
+        request.setDistributionList(List.of(
+                ClientContactDto.builder().name("Dana Reed").title("CISO")
+                        .email("dana@northwind.test").build(),
+                ClientContactDto.builder().name("Sam Okafor").build()));
+
+        OrganizationDto created = organizationService.createOrganizationDto(request);
+        assertThat(created.getDistributionList()).hasSize(2);
+
+        Organization stored = organizationRepository.findByName("Northwind").orElseThrow();
+        assertThat(stored.getDistributionList())
+                .extracting(ClientContact::getName, ClientContact::getTitle, ClientContact::getEmail)
+                .containsExactly(
+                        tuple("Dana Reed", "CISO", "dana@northwind.test"),
+                        tuple("Sam Okafor", null, null));
+
+        OrganizationDto reread = organizationService.findOrganizationById(created.getId());
+        assertThat(reread.getDistributionList())
+                .extracting(ClientContactDto::getName, ClientContactDto::getTitle,
+                        ClientContactDto::getEmail)
+                .containsExactly(
+                        tuple("Dana Reed", "CISO", "dana@northwind.test"),
+                        tuple("Sam Okafor", null, null));
+    }
+
+    @Test
+    void distributionListEntriesAreTrimmed_andEmptyRowsAreDropped() {
+        // A trailing space is invisible in the form field and glaring on a report's cover page.
+        // A row the author started and abandoned should not block the rest of the form saving.
+        CreateOrganizationRequest request = new CreateOrganizationRequest();
+        request.setName("Whitespace Ltd");
+        request.setDistributionList(List.of(
+                ClientContactDto.builder().name("  Dana Reed  ").title("  CISO ")
+                        .email(" dana@northwind.test ").build(),
+                ClientContactDto.builder().name("   ").title("").email("").build()));
+
+        OrganizationDto created = organizationService.createOrganizationDto(request);
+
+        assertThat(created.getDistributionList())
+                .extracting(ClientContactDto::getName, ClientContactDto::getTitle,
+                        ClientContactDto::getEmail)
+                .containsExactly(tuple("Dana Reed", "CISO", "dana@northwind.test"));
+    }
+
+    @Test
+    void updateDistributionList_nullKeepsIt_emptyClearsIt() {
+        CreateOrganizationRequest create = new CreateOrganizationRequest();
+        create.setName("Contoso");
+        create.setDistributionList(List.of(ClientContactDto.builder().name("Dana Reed").build()));
+        OrganizationDto created = organizationService.createOrganizationDto(create);
+
+        UpdateOrganizationRequest untouched = new UpdateOrganizationRequest();
+        untouched.setName("Contoso");
+        untouched.setDescription("edited");
+        OrganizationDto afterEdit = organizationService.updateOrganizationDto(created.getId(), untouched);
+        assertThat(afterEdit.getDistributionList())
+                .extracting(ClientContactDto::getName).containsExactly("Dana Reed");
+
+        UpdateOrganizationRequest cleared = new UpdateOrganizationRequest();
+        cleared.setName("Contoso");
+        cleared.setDistributionList(List.of());
+        OrganizationDto afterClear = organizationService.updateOrganizationDto(created.getId(), cleared);
+        assertThat(afterClear.getDistributionList()).isEmpty();
+        assertThat(organizationRepository.findById(created.getId()).orElseThrow()
+                .getDistributionList()).isEmpty();
     }
 }
