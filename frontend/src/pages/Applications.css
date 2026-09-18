@@ -242,10 +242,10 @@
 }
 
 .app-stat-total   .app-stat-value { color: #3b82f6; }
-.app-stat-critical .app-stat-value { color: #ef4444; }
-.app-stat-high    .app-stat-value { color: #f97316; }
-.app-stat-medium  .app-stat-value { color: #eab308; }
-.app-stat-low     .app-stat-value { color: #22c55e; }
+.app-stat-critical .app-stat-value { color: var(--sev-critical); }
+.app-stat-high    .app-stat-value { color: var(--sev-high); }
+.app-stat-medium  .app-stat-value { color: var(--sev-medium); }
+.app-stat-low     .app-stat-value { color: var(--sev-low); }
 .app-stat-pastdue .app-stat-value { color: var(--text-muted); }
 
 /* ── Donut card (VulnTrendPanel) ─────────────────────────── */
@@ -390,10 +390,10 @@
   color: #fff;
 }
 
-.vuln-critical { background-color: #ef4444; }
-.vuln-high     { background-color: #f97316; }
-.vuln-medium   { background-color: #eab308; color: #1a1a1a; }
-.vuln-low      { background-color: #22c55e; }
+.vuln-critical { background-color: var(--sev-critical); }
+.vuln-high     { background-color: var(--sev-high); }
+.vuln-medium   { background-color: var(--sev-medium); color: #1a1a1a; }
+.vuln-low      { background-color: var(--sev-low); }
 
 /* ── Vulnerabilities Tab ─────────────────────────────────── */
 .app-vulns-tab {

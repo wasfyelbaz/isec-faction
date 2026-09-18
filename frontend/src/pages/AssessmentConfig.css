@@ -285,19 +285,19 @@
   text-shadow: none;
 }
 
-.sla-severity--critical { background: rgba(239,68,68,0.15); color: #ef4444; }
-.sla-severity--high     { background: rgba(249,115,22,0.15); color: #f97316; }
-.sla-severity--medium   { background: rgba(234,179,8,0.15);  color: #eab308; }
-.sla-severity--low      { background: rgba(34,197,94,0.15);  color: #22c55e; }
-.sla-severity--informational { background: rgba(107,114,128,0.15); color: #6b7280; }
+.sla-severity--critical { background: rgba(239,68,68,0.15); color: var(--sev-critical); }
+.sla-severity--high     { background: rgba(249,115,22,0.15); color: var(--sev-high); }
+.sla-severity--medium   { background: rgba(234,179,8,0.15);  color: var(--sev-medium); }
+.sla-severity--low      { background: rgba(34,197,94,0.15);  color: var(--sev-low); }
+.sla-severity--informational { background: rgba(107,114,128,0.15); color: var(--sev-info); }
 
 /* Light mode badge overrides */
 [data-theme="light"] .sla-severity { font-weight: 700; }
-[data-theme="light"] .sla-severity--critical { background: rgba(239,68,68,0.15); color: #b91c1c; }
-[data-theme="light"] .sla-severity--high     { background: rgba(249,115,22,0.15); color: #c2410c; }
-[data-theme="light"] .sla-severity--medium   { background: rgba(234,179,8,0.15);  color: #b45309; }
+[data-theme="light"] .sla-severity--critical { background: rgba(239,68,68,0.15); color: var(--sev-critical); }
+[data-theme="light"] .sla-severity--high     { background: rgba(249,115,22,0.15); color: var(--sev-high); }
+[data-theme="light"] .sla-severity--medium   { background: rgba(234,179,8,0.15);  color: var(--sev-medium); }
 [data-theme="light"] .sla-severity--low      { background: rgba(34,197,94,0.15);  color: #15803d; }
-[data-theme="light"] .sla-severity--informational { background: rgba(107,114,128,0.15); color: #334155; }
+[data-theme="light"] .sla-severity--informational { background: rgba(107,114,128,0.15); color: var(--sev-info); }
 
 .sla-remove {
   background: none;

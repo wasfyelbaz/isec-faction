@@ -31,14 +31,15 @@ export const SEVERITY_OPTIONS: { value: VulnerabilitySeverity; label: string }[]
 
 // Canonical severity palette for inline styles (CVSS score text, left-borders,
 // dashboard bars). SeverityBadge renders the same colors via CSS classes; this map
-// is the JS-value equivalent for callers that need a color string. INFORMATIONAL is
-// theme-aware so it adapts to light/dark like the rest of the muted UI.
+// is the JS-value equivalent for callers that need a color string. These are CSS
+// custom properties rather than literals so the palette has one definition
+// (index.css) shared with every stylesheet, and matches the DOCX report exactly.
 export const SEVERITY_COLORS: Record<VulnerabilitySeverity, string> = {
-  CRITICAL: '#ef4444',
-  HIGH: '#f97316',
-  MEDIUM: '#eab308',
-  LOW: '#22c55e',
-  INFORMATIONAL: 'var(--text-muted)',
+  CRITICAL: 'var(--sev-critical)',
+  HIGH: 'var(--sev-high)',
+  MEDIUM: 'var(--sev-medium)',
+  LOW: 'var(--sev-low)',
+  INFORMATIONAL: 'var(--sev-info)',
 };
 
 export type SeverityBadgeVariant = 'danger' | 'warning' | 'info' | 'success' | 'secondary';

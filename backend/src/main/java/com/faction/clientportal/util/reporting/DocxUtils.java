@@ -883,6 +883,24 @@ public class DocxUtils {
         int index  = 0;
         String prevSev = "";
 
+        /*
+         * Rich text is expanded only after every finding's block has been inserted.
+         *
+         * It used to be expanded inside this loop, immediately after each finding was placed.
+         * That corrupted the layout: ${details} converts one placeholder paragraph into as many
+         * paragraphs as the HTML needs, so the document grew mid-loop while `begin` — the
+         * insertion cursor — did not. Every finding after the first was then inserted that many
+         * positions too early, landing inside the previous finding's block and displacing its
+         * trailing content. A ${pageBreak} at the end of the block was the visible symptom: the
+         * breaks piled up at the end of the section instead of one per finding, so findings
+         * shared pages and blank pages appeared between sections.
+         *
+         * Holding the maps and draining them afterwards keeps `begin` truthful. Order still
+         * matches finding to placeholder, because replaceHTML with once=true consumes the first
+         * remaining occurrence of each key, and these are drained in the order they were built.
+         */
+        List<Map<String, List<Object>>> pendingRichText = new ArrayList<>();
+
         for (ReportData.ReportVulnerability v : filteredVulns) {
             String sev = v.getSeverity() == null ? "" : v.getSeverity();
             if (sev.equals(prevSev)) {
@@ -1037,12 +1055,11 @@ public class DocxUtils {
                 }
             }
 
-            // The rich-text paragraphs just inserted expand to as many blocks as their HTML has
-            // (steps, screenshots, code, tables), or to none. Advance the insertion point by that
-            // difference, or the next finding lands inside this one's Proof of Concept.
-            int sizeBefore = mlp.getMainDocumentPart().getContent().size();
-            replaceHTML(mlp.getMainDocumentPart(), map2, true);
-            begin += mlp.getMainDocumentPart().getContent().size() - sizeBefore;
+            pendingRichText.add(map2);
+        }
+
+        for (Map<String, List<Object>> pending : pendingRichText) {
+            replaceHTML(mlp.getMainDocumentPart(), pending, true);
         }
     }
 
