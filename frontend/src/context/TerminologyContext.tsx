@@ -5,13 +5,16 @@ import { SEVERITY_LABELS, VULNERABILITY_SEVERITIES } from '../utils/vulnSeverity
 import type { TerminologyConfig, VulnerabilitySeverity } from '../types';
 
 /**
- * The product's own wording, used until the installation says otherwise. Also what renders during
- * the first paint before the request lands — a screen that flashes "Organizations" and settles on
- * "Value Streams" is better than one that flashes an empty heading.
+ * This installation's wording, used until the server says otherwise. Also what renders during the
+ * first paint before the request lands — a screen that flashes "Clients" and settles on "Value
+ * Streams" is better than one that flashes an empty heading.
+ *
+ * <p>Must match the backend's {@code TerminologyConfig} defaults, or the first paint says one thing
+ * and the settled render says another.
  */
 const DEFAULTS: TerminologyConfig = {
-  organizationSingular: 'Organization',
-  organizationPlural: 'Organizations',
+  organizationSingular: 'Client',
+  organizationPlural: 'Clients',
   subOrganizationSingular: 'Sub-organization',
   subOrganizationPlural: 'Sub-organizations',
   severityCritical: SEVERITY_LABELS.CRITICAL,
@@ -67,11 +70,11 @@ const isSeverity = (value: string): value is VulnerabilitySeverity =>
 
 const TerminologyContext = createContext<TerminologyContextValue>({
   ...DEFAULTS,
-  organizationLower: 'organization',
-  organizationsLower: 'organizations',
+  organizationLower: 'client',
+  organizationsLower: 'clients',
   subOrganizationLower: 'sub-organization',
   subOrganizationsLower: 'sub-organizations',
-  organizationArticle: 'an',
+  organizationArticle: 'a',
   severityLabel: (severity) => String(severity ?? ''),
   severityOptions: VULNERABILITY_SEVERITIES.map((value) => ({
     value, label: SEVERITY_LABELS[value],
@@ -120,7 +123,8 @@ export function TerminologyProvider({ children }: { children: ReactNode }) {
 }
 
 /**
- * What this installation calls organizations.
+ * What this installation calls organizations — "Client" here, unless an administrator says
+ * otherwise.
  *
  * <p>Use it for anything a person reads. Field names, route paths and API payloads keep saying
  * "organization" — renaming those would turn a wording preference into a data migration.

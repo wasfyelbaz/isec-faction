@@ -4,7 +4,9 @@ public enum PermissionResource {
     APPLICATIONS("Applications", "Application management permissions"),
     ASSESSMENTS("Assessments", "Assessment management permissions"),
     USERS("Users", "User management permissions"),
-    ORGANIZATIONS("Organizations", "Organization management permissions"),
+    // The permission keys stay "organizations:*" — only the heading the roles screen prints
+    // follows this installation's wording. See TerminologyConfig.
+    ORGANIZATIONS("Clients", "Client management permissions"),
     VULNERABILITIES("Vulnerabilities", "Vulnerability management permissions"),
     REPORTING("Reporting", "Reporting and document generation permissions"),
     ROLES("Roles", "Role management permissions"),

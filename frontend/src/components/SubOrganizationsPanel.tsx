@@ -19,7 +19,8 @@ export interface SubOrganizationsPanelProps {
  * editing the organization itself.
  */
 export default function SubOrganizationsPanel({ organizationId, canWrite }: SubOrganizationsPanelProps) {
-  const { subOrganizationLower, subOrganizationPlural, subOrganizationSingular } = useTerminology();
+  const { organizationLower, subOrganizationLower, subOrganizationPlural, subOrganizationSingular,
+    subOrganizationsLower } = useTerminology();
   const [subs, setSubs] = useState<SubOrganization[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,8 +105,8 @@ export default function SubOrganizationsPanel({ organizationId, canWrite }: SubO
     <div className="form-panel sub-orgs-panel">
       <h3 className="form-section-title">{subOrganizationPlural}</h3>
       <p className="sub-orgs-intro">
-        Divisions within this organization — business units, subsidiaries or regions. Applications
-        can be attributed to one. This does not change who can see the application.
+        Divisions within this {organizationLower} — business units, subsidiaries or regions.
+        Applications can be attributed to one. This does not change who can see the application.
       </p>
 
       {error && <div className="sub-orgs-error">{error}</div>}
@@ -113,7 +114,7 @@ export default function SubOrganizationsPanel({ organizationId, canWrite }: SubO
       {loading ? (
         <div className="sub-orgs-empty">Loading…</div>
       ) : subs.length === 0 ? (
-        <div className="sub-orgs-empty">No sub-organizations yet.</div>
+        <div className="sub-orgs-empty">No {subOrganizationsLower} yet.</div>
       ) : (
         <ul className="sub-orgs-list">
           {subs.map(sub => (

@@ -27,7 +27,7 @@ interface ConfirmDeleteState {
 }
 
 export default function OrgConfig() {
-  const { organizationSingular } = useTerminology();
+  const { organizationLower, organizationPlural, organizationSingular } = useTerminology();
   const [orgFields, setOrgFields] = useState<UserDefinedField[]>([]);
   const [appFields, setAppFields] = useState<UserDefinedField[]>([]);
   const [loading, setLoading] = useState(true);
@@ -522,7 +522,7 @@ export default function OrgConfig() {
             {orgFields.map((field, index) => renderFieldItem('ORGANIZATION', field, index))}
             {orgFields.length === 0 && (
               <div className="empty-state">
-                No organization fields yet. Click "Add Field" to create one.
+                No {organizationLower} fields yet. Click "Add Field" to create one.
               </div>
             )}
           </div>
@@ -556,8 +556,11 @@ export default function OrgConfig() {
                 behave changes, and existing data is untouched.
               </p>
               {([
-                ['organizationSingular', 'Organization (singular)', 'Value Stream'],
-                ['organizationPlural', 'Organizations (plural)', 'Value Streams'],
+                // Labelled with the current wording, not the product's original noun: this is the
+                // field that sets it, so "Organization (singular)" on an installation that already
+                // says "Client" reads as a different setting than the one it is.
+                [ 'organizationSingular', `${organizationSingular} (singular)`, 'Value Stream'],
+                [ 'organizationPlural', `${organizationPlural} (plural)`, 'Value Streams'],
                 ['subOrganizationSingular', 'Sub-organization (singular)', 'Sub-value Stream'],
                 ['subOrganizationPlural', 'Sub-organizations (plural)', 'Sub-value Streams'],
               ] as [keyof TerminologyConfig, string, string][]).map(([key, label, example]) => (

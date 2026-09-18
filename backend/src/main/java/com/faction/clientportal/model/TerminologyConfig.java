@@ -39,13 +39,19 @@ public class TerminologyConfig {
     @Id
     private String id;
 
+    /**
+     * This fork is a consultancy's: the companies it holds work for are its clients, so that is
+     * what the screens say out of the box. Only the wording moves — the entity, the table, the
+     * routes and every API payload still say "organization", because renaming those would turn a
+     * wording preference into a data migration and a merge conflict with upstream.
+     */
     @Builder.Default
     @Column(nullable = false)
-    private String organizationSingular = "Organization";
+    private String organizationSingular = "Client";
 
     @Builder.Default
     @Column(nullable = false)
-    private String organizationPlural = "Organizations";
+    private String organizationPlural = "Clients";
 
     @Builder.Default
     @Column(nullable = false)

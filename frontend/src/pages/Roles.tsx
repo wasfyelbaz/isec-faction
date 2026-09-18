@@ -21,6 +21,7 @@ import {
   ErrorMessage,
 } from '../components';
 import Page from '../components/Page';
+import { useTerminology } from '../context/TerminologyContext';
 import './Roles.css';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -31,9 +32,12 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
  */
 const SCOPES: Record<string, { label: string; description: string }> = {
   all: { label: 'All', description: 'Every record in the system' },
-  org: { label: 'Organization', description: "Records in the user's own organization" },
+  // `{Org}`/`{org}`/`{orgs}` carry this installation's word for an organization — "Client" here.
+  // The permission keys they describe are still `…:org`, which is why the placeholder exists at
+  // all: the wording follows the terminology setting, the key never does. See fillOrgNoun.
+  org: { label: '{Org}', description: "Records in the user's own {org}" },
   team: { label: 'Team', description: "Records belonging to the user's teams" },
-  owned: { label: 'Owned', description: 'Applications or organizations assigned to the user' },
+  owned: { label: 'Owned', description: 'Applications or {orgs} assigned to the user' },
   assigned: { label: 'Assigned', description: 'Records the user is assigned to' },
   assessment: { label: 'Assessment', description: 'Records inside an assessment the user can reach' },
   self: { label: 'Self', description: "The user's own records" },
@@ -105,7 +109,16 @@ interface MatrixRow {
  * Columns are per group: only the actions that resource actually has get a column, so
  * Reporting doesn't carry four empty verb columns to show one Download.
  */
-function buildMatrix(group: ResourcePermissions): { actions: string[]; rows: MatrixRow[] } {
+/** This installation's word for an organization, in the three forms the scope texts need. */
+interface OrgNoun { singular: string; lower: string; pluralLower: string }
+
+/** Substitutes the configured noun into a scope label or description. */
+const fillOrgNoun = (text: string, noun: OrgNoun): string => text
+  .replace(/\{Org\}/g, noun.singular)
+  .replace(/\{orgs\}/g, noun.pluralLower)
+  .replace(/\{org\}/g, noun.lower);
+
+function buildMatrix(group: ResourcePermissions, orgNoun: OrgNoun): { actions: string[]; rows: MatrixRow[] } {
   const rows = new Map<string, MatrixRow>();
   const actions = new Set<string>();
 
@@ -127,7 +140,11 @@ function buildMatrix(group: ResourcePermissions): { actions: string[]; rows: Mat
     const rowKey = `${subject}|${scope ?? ''}`;
     let row = rows.get(rowKey);
     if (!row) {
-      const scopeMeta = scope ? SCOPES[scope] : undefined;
+      const rawMeta = scope ? SCOPES[scope] : undefined;
+      const scopeMeta = rawMeta && {
+        label: fillOrgNoun(rawMeta.label, orgNoun),
+        description: fillOrgNoun(rawMeta.description, orgNoun),
+      };
       const isPrimary = subject === primarySubject;
       row = {
         key: rowKey,
@@ -171,6 +188,7 @@ const TABLE_KEY = 'roles';
 
 export default function Roles() {
   const canCustomiseRoles = useEdition().hasFeature('custom_roles');
+  const { organizationSingular, organizationLower, organizationsLower } = useTerminology();
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -343,8 +361,15 @@ export default function Roles() {
   };
 
   const permissionMatrix = useMemo(
-    () => permissionGroups.map(group => ({ group, ...buildMatrix(group) })),
-    [permissionGroups]
+    () => {
+      const orgNoun = {
+        singular: organizationSingular,
+        lower: organizationLower,
+        pluralLower: organizationsLower,
+      };
+      return permissionGroups.map(group => ({ group, ...buildMatrix(group, orgNoun) }));
+    },
+    [permissionGroups, organizationSingular, organizationLower, organizationsLower]
   );
 
   const handlePageChange = useCallback((page: number) => {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { usePageTitle } from '../context/PageTitleContext';
+import { useTerminology } from '../context/TerminologyContext';
 import { emailNotificationConfigApi } from '../api';
 import type {
   EmailNotificationAudience,
@@ -28,8 +29,15 @@ type SwitchField =
   | 'includeMentionedUsers'
   | 'notifyOrgUsers';
 
-/** Sections, in the order they read: the assessment lifecycle, then what follows from it. */
-const GROUPS: Array<{ title: string; hint: string; match: (e: EmailNotificationEvent) => boolean }> = [
+/**
+ * Sections, in the order they read: the assessment lifecycle, then what follows from it.
+ *
+ * <p>Built from the configured wording rather than written as a constant, because one hint names
+ * the record type — and a page that says "organizations" while the rest of the product says
+ * "clients" reads as a different feature.
+ */
+const groupsFor = (organizationsLower: string):
+    Array<{ title: string; hint: string; match: (e: EmailNotificationEvent) => boolean }> => [
   {
     title: 'Assessments',
     hint: 'Sent as the engagement moves through its lifecycle.',
@@ -43,7 +51,7 @@ const GROUPS: Array<{ title: string; hint: string; match: (e: EmailNotificationE
   {
     title: 'Vulnerabilities',
     hint: 'Due-date reminders are digests — one email covering every finding across all '
-        + 'applications and organizations, never one email per finding. Findings in the '
+        + `applications and ${organizationsLower}, never one email per finding. Findings in the `
         + 'Exception state are never included.',
     match: e => e.event.startsWith('VULNERABILITY_'),
   },
@@ -51,6 +59,7 @@ const GROUPS: Array<{ title: string; hint: string; match: (e: EmailNotificationE
 
 export default function EmailNotificationsPage() {
   const { setPageTitle } = usePageTitle();
+  const { organizationLower, organizationsLower } = useTerminology();
 
   const [config, setConfig] = useState<EmailNotificationConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -143,10 +152,10 @@ export default function EmailNotificationsPage() {
 
   const grouped = useMemo(() => {
     if (!config) return [];
-    return GROUPS
+    return groupsFor(organizationsLower)
       .map(group => ({ ...group, events: config.events.filter(group.match) }))
       .filter(group => group.events.length > 0);
-  }, [config]);
+  }, [config, organizationsLower]);
 
   if (!config) {
     return (
@@ -183,7 +192,7 @@ export default function EmailNotificationsPage() {
             Choose who is emailed about each event. Stakeholders and app owners are the
             addresses recorded on the assessment and its application — they do not need an
             account. <strong>Org access</strong> covers the external users assigned to the
-            application's organization — they hear about everything in it. An external user
+            application's {organizationLower} — they hear about everything in it. An external user
             restricted to specific applications only hears about those. People who <em>do</em> have accounts can
             still mute what they receive from their own profile.
           </p>

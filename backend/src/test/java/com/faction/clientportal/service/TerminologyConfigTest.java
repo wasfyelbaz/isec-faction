@@ -27,11 +27,13 @@ class TerminologyConfigTest extends TestContainersConfig {
     }
 
     @Test
-    void anInstallationThatNeverTouchesThisReadsExactlyAsBefore() {
+    void anInstallationThatNeverTouchesThisCallsAnOrganizationAClient() {
         TerminologyConfig defaults = service.getConfig();
 
-        assertThat(defaults.getOrganizationSingular()).isEqualTo("Organization");
-        assertThat(defaults.getOrganizationPlural()).isEqualTo("Organizations");
+        // This fork is a consultancy's, so the screens say "Client" without anyone configuring it.
+        // The entity, the table and the routes still say organization — see TerminologyConfig.
+        assertThat(defaults.getOrganizationSingular()).isEqualTo("Client");
+        assertThat(defaults.getOrganizationPlural()).isEqualTo("Clients");
         assertThat(defaults.getSubOrganizationSingular()).isEqualTo("Sub-organization");
         assertThat(defaults.getSubOrganizationPlural()).isEqualTo("Sub-organizations");
         assertThat(defaults.getSeverityCritical()).isEqualTo("Critical");

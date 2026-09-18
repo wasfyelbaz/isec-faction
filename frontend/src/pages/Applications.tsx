@@ -53,7 +53,8 @@ type ApplicationsTab = 'applications' | 'assessments' | 'vulnerabilities';
 const TABLE_KEY = 'applications';
 
 export default function Applications() {
-  const { organizationPlural, organizationSingular, subOrganizationPlural } = useTerminology();
+  const { organizationLower, organizationPlural, organizationsLower, organizationSingular,
+    subOrganizationPlural } = useTerminology();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -581,7 +582,7 @@ export default function Applications() {
           onPageSizeChange={handlePageSizeChange}
           onSearchChange={handleSearchChange}
           initialSearch={searchQuery}
-          searchPlaceholder="Search name, app ID, organization, status, technology or owner"
+          searchPlaceholder={`Search name, app ID, ${organizationLower}, status, technology or owner`}
           emptyMessage="No applications found"
           idAccessor="id"
           sort={sort}
@@ -658,7 +659,7 @@ export default function Applications() {
         <div className="app-import">
           <p className="app-import-lede">
             Each row is upserted: matched by <strong>appId</strong> first, then by{' '}
-            <strong>name</strong>, and inserted when neither matches. Organizations and
+            <strong>name</strong>, and inserted when neither matches. {organizationPlural} and
             sub-organizations named in a row are created if they don't exist yet. Columns left out
             of the file are left untouched on the applications it updates.
           </p>
@@ -702,7 +703,7 @@ export default function Applications() {
 
               {importResult.createdOrganizations.length > 0 && (
                 <p className="text-sm">
-                  New organizations: {importResult.createdOrganizations.join(', ')}
+                  New {organizationsLower}: {importResult.createdOrganizations.join(', ')}
                 </p>
               )}
               {importResult.createdSubOrganizations.length > 0 && (

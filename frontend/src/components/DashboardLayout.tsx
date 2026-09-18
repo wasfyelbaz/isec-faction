@@ -367,15 +367,20 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
     authorities.some((a: string) => a.endsWith(':org') || a.endsWith(':owned'));
 
   // Check if user has permission to view a menu item
-  const { organizationPlural } = useTerminology();
+  const { organizationPlural, organizationSingular } = useTerminology();
 
   /**
    * The wording shown for a menu entry. Deliberately separate from `name`, which is the entry's
    * identity — hasPermission and the external-user gate both key off it, so renaming the field
    * would silently unhook a menu item from its permission.
    */
-  const menuLabel = (name: string): string =>
-    name === 'Organizations' ? organizationPlural : name;
+  const menuLabel = (name: string): string => {
+    if (name === 'Organizations') return organizationPlural;
+    // The config page for those records follows the same noun, so the two menu entries never
+    // disagree about what the thing is called.
+    if (name === 'Organization Config') return `${organizationSingular} Config`;
+    return name;
+  };
 
   const hasPermission = (menuName: string): boolean => {
     // Super admin can see everything
@@ -625,7 +630,7 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
                             key={subItem.path}
                             onClick={() => subItem.path && navigate(subItem.path)}
                             className={`nav-subitem ${subItem.path && (location.pathname === subItem.path || location.pathname.startsWith(subItem.path + '/')) ? 'active' : ''}`}
-                            title={subItem.label ?? subItem.name}
+                            title={subItem.label ?? menuLabel(subItem.name)}
                           >
                             <SubIcon className="nav-icon" size={18} />
                             <span className="nav-label">{subItem.label ?? menuLabel(subItem.name)}</span>
@@ -760,11 +765,13 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
                   {pageTitle ||
                    (() => {
                      const top = menuItems.find(item => item.path === location.pathname);
-                     return top ? top.label ?? top.name : undefined;
+                     return top ? top.label ?? menuLabel(top.name) : undefined;
                    })() ||
                    (() => {
                      const sub = menuItems.flatMap(item => item.subItems || []).find(subItem => subItem.path === location.pathname);
-                     return sub ? sub.label ?? sub.name : undefined;
+                     // menuLabel, not the raw name: this heading is the page's title on every
+                     // route that sets no breadcrumbs, so it must say what the sidebar says.
+                     return sub ? sub.label ?? menuLabel(sub.name) : undefined;
                    })() ||
                    'Dashboard'}
                 </h1>
