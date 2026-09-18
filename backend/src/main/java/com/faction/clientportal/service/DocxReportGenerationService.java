@@ -78,6 +78,7 @@ public class DocxReportGenerationService implements ReportGenerationService {
     private final OrganizationRepository        organizationRepository;
     private final EntityFieldConfigRepository   entityFieldConfigRepository;
     private final ClientImageRepository         clientImageRepository;
+    private final ApplicationRepository         applicationRepository;
 
     /**
      * The order findings appear in a report: the assessment's display order, exactly as the
@@ -424,15 +425,23 @@ public class DocxReportGenerationService implements ReportGenerationService {
 
         // The client: the organization the assessment belongs to, with its organization-scoped
         // custom fields flattened to variableName → value exactly like the assessment's own. An
-        // assessment with no organization, or one whose organization is gone, simply has no client.
+        // assessment records its organization when it is created, so one created before its
+        // application was assigned to a client, or whose application has since been moved, has
+        // none of its own; the application's client is then the client. An assessment with
+        // neither, or whose organization is gone, simply has no client.
         String clientName = null;
         Map<String, String>    clientFieldValues = new HashMap<>();
         Map<String, FieldType> clientFieldTypes  = new HashMap<>();
         List<ReportData.ReportContact> clientContacts = new ArrayList<>();
         Map<String, byte[]>  clientImageBytes        = new HashMap<>();
         Map<String, String>  clientImageContentTypes = new HashMap<>();
-        Organization client = assessment.getOrganizationId() == null ? null
-                : organizationRepository.findById(assessment.getOrganizationId()).orElse(null);
+        String clientId = assessment.getOrganizationId();
+        if (clientId == null && assessment.getApplicationId() != null) {
+            clientId = applicationRepository.findById(assessment.getApplicationId())
+                    .map(Application::getOrganizationId).orElse(null);
+        }
+        Organization client = clientId == null ? null
+                : organizationRepository.findById(clientId).orElse(null);
         if (client != null) {
             clientName = client.getName();
             List<UserDefinedField> clientFieldDefinitions = entityFieldConfigRepository
