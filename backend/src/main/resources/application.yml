@@ -100,14 +100,6 @@ faction:
     url: ${DEFAULT_REPORT_TEMPLATE_URL:https://github.com/factionsecurity/report_templates/raw/refs/heads/main/default-report-template.docx}
     name: ${DEFAULT_REPORT_TEMPLATE_NAME:Default Pentest Report}
 
-  default-web-checklists:
-    # The two Web checklists from the report template (sections 4.1 and 4.2) are created on
-    # start for the "Web Application Pentest" assessment type, from
-    # resources/checklists/web-default-checklists.json. Seeding is by name, so an edited
-    # template is never overwritten — but a deleted one comes back on the next restart. Set
-    # false to stop seeding them entirely.
-    enabled: ${DEFAULT_WEB_CHECKLISTS_ENABLED:true}
-
   # Development override for exercising the open source edition from this build.
   # Set to "community" to suppress EnterpriseEditionPolicy, which caps every quota and
   # turns every paid feature off. It can only take capability away — in the open source

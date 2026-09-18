@@ -35,7 +35,6 @@ public class BootstrapService implements ApplicationRunner {
     private final CampaignRepository campaignRepository;
     private final EditionPolicy editionPolicy;
     private final DefaultReportTemplateService defaultReportTemplateService;
-    private final DefaultWebChecklistSeeder defaultWebChecklistSeeder;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -77,11 +76,6 @@ public class BootstrapService implements ApplicationRunner {
         // After the assessment types above: a report template belongs to one, so there is
         // nothing to attach it to before they exist.
         defaultReportTemplateService.ensureDefaultTemplate();
-
-        // Same reason — a checklist template belongs to an assessment type. These are the two
-        // lists the Web report already prints, so a Web assessment can work through the same
-        // methodology it is going to be reported against.
-        defaultWebChecklistSeeder.ensureWebChecklists();
 
         if (vulnerabilityCategoryRepository.countByDeletedAtIsNull() == 0) {
             log.info("No vulnerability categories found. Initializing OWASP Top 10 categories...");
