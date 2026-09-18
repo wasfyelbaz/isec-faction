@@ -75,6 +75,8 @@ public class DocxReportGenerationService implements ReportGenerationService {
     private final ReportEncryptor               reportEncryptor;
     private final com.faction.clientportal.service.extension.ExtensionEventService extensionEventService;
     private final TerminologyConfigService      terminologyConfigService;
+    private final OrganizationRepository        organizationRepository;
+    private final EntityFieldConfigRepository   entityFieldConfigRepository;
 
     /**
      * The order findings appear in a report: the assessment's display order, exactly as the
@@ -419,7 +421,27 @@ public class DocxReportGenerationService implements ReportGenerationService {
                         + " " + (remediationManager.getLastName() == null ? "" : remediationManager.getLastName())).trim()
                 : "";
 
+        // The client: the organization the assessment belongs to, with its organization-scoped
+        // custom fields flattened to variableName → value exactly like the assessment's own. An
+        // assessment with no organization, or one whose organization is gone, simply has no client.
+        String clientName = null;
+        Map<String, String>    clientFieldValues = new HashMap<>();
+        Map<String, FieldType> clientFieldTypes  = new HashMap<>();
+        Organization client = assessment.getOrganizationId() == null ? null
+                : organizationRepository.findById(assessment.getOrganizationId()).orElse(null);
+        if (client != null) {
+            clientName = client.getName();
+            List<UserDefinedField> clientFieldDefinitions = entityFieldConfigRepository
+                    .findByScope(FieldScope.ORGANIZATION)
+                    .map(EntityFieldConfig::getFieldDefinitions)
+                    .orElse(List.of());
+            buildFieldMaps(clientFieldDefinitions, client.getFieldValues(), clientFieldValues, clientFieldTypes);
+        }
+
         return ReportData.builder()
+                .clientName(clientName)
+                .clientFieldValues(clientFieldValues)
+                .clientFieldTypes(clientFieldTypes)
                 .assessmentId(assessment.getId())
                 .assessmentName(assessment.getName())
                 .applicationId(assessment.getApplicationId())

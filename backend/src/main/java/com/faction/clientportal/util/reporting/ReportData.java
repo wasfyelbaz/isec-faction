@@ -56,6 +56,29 @@ public class ReportData {
      */
     private List<String> sections;
 
+    // ── the client (organization) the assessment belongs to ────────────────
+
+    /** Client name, rendered by {@code ${asmtClient}}. Null when the assessment has no organization. */
+    private String clientName;
+
+    /**
+     * Client-level custom field values (organization-scoped user defined fields), keyed by the
+     * field's variableName. Rendered as {@code ${asmtClient_<variableName>}}.
+     */
+    private Map<String, String> clientFieldValues;
+
+    /** Types of {@link #clientFieldValues}, keyed by variableName. */
+    private Map<String, FieldType> clientFieldTypes;
+
+    /** The client's distribution list, in the order it was entered. */
+    private List<ReportContact> clientContacts;
+
+    /** Client image bytes keyed by the image's name (for example {@code logo}). */
+    private Map<String, byte[]> clientImageBytes;
+
+    /** Content types of {@link #clientImageBytes}, keyed by image name. */
+    private Map<String, String> clientImageContentTypes;
+
     /**
      * Inline image bytes keyed by image ID.
      * Used to embed images found in rich-text field content.
@@ -82,6 +105,24 @@ public class ReportData {
 
     public boolean isCvss31() {
         return "CVSS_31".equals(scoringType);
+    }
+
+    public String getClientFieldValue(String variableName) {
+        if (clientFieldValues == null || variableName == null) return "";
+        return clientFieldValues.getOrDefault(variableName, "");
+    }
+
+    // ── inner types ────────────────────────────────────────────────────────
+
+    /** One row of the client's distribution list. */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ReportContact {
+        private String name;
+        private String title;
+        private String email;
     }
 
     // ── inner types ────────────────────────────────────────────────────────

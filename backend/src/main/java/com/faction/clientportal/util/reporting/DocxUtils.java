@@ -729,7 +729,15 @@ public class DocxUtils {
                 wrapHTML(data.getFieldValue("summary2"), customCSS, "summary2"));
         replaceHTML(mlp.getMainDocumentPart(), summaryMap, false);
 
+        // The client's distribution list expands before the assessment pass, so a cloned row
+        // may still carry ${asmtClient} or a date and have it resolved like any other text.
+        checkContactTables();
+
         replaceAssessment(customCSS);
+
+        // Client images last among the built-ins: a slot the client has no image for is removed
+        // here rather than offered to an extension as an unknown placeholder.
+        replaceClientImages(customCSS);
 
         // After findings and tables have expanded: a ${pageBreak} inside a repeated
         // findings block is duplicated with it, and each copy becomes its own break.
@@ -1078,6 +1086,17 @@ public class DocxUtils {
         map.put(getKey("totalclosedvulns"),     getTotalClosedVulns());
         map.putAll(getVulnMap());
 
+        // the client (organization): its name, and its plain-text custom fields as
+        // ${asmtClient_<variableName>} — the prefix keeps them apart from assessment fields
+        map.put(getKey("asmtclient"), data.getClientName() == null ? "" : data.getClientName());
+        if (data.getClientFieldTypes() != null) {
+            for (Map.Entry<String, FieldType> entry : data.getClientFieldTypes().entrySet()) {
+                if (entry.getValue() != FieldType.RICH_TEXT) {
+                    map.put(CLIENT_FIELD_PREFIX + entry.getKey(), data.getClientFieldValue(entry.getKey()));
+                }
+            }
+        }
+
         // assessment-level plain-text UDFs
         if (data.getFieldTypes() != null) {
             for (Map.Entry<String, FieldType> entry : data.getFieldTypes().entrySet()) {
@@ -1105,13 +1124,186 @@ public class DocxUtils {
             }
         }
 
+        // client-level rich-text fields
+        if (data.getClientFieldTypes() != null) {
+            for (Map.Entry<String, FieldType> entry : data.getClientFieldTypes().entrySet()) {
+                if (entry.getValue() == FieldType.RICH_TEXT) {
+                    String varName = entry.getKey();
+                    cfMap.put("${" + CLIENT_FIELD_PREFIX + varName + "}",
+                            wrapHTML(data.getClientFieldValue(varName), customCSS, CLIENT_FIELD_PREFIX + varName));
+                }
+            }
+        }
+
         Map<String, List<Object>> map2 = new HashMap<>();
         map2.put("${asmtAssessors_Lines}",  wrapHTML(assessorsNl,      customCSS, ""));
         map2.put("${asmtAssessors_Bullets}", wrapHTML(assessorsBullets, customCSS, ""));
         map2.put("${asmtAssessors_Comma}",  wrapHTML(assessorsComma,    customCSS, ""));
+        map2.put("${clientContacts_Lines}",   wrapHTML(contactsLines(),   customCSS, ""));
+        map2.put("${clientContacts_Bullets}", wrapHTML(contactsBullets(), customCSS, ""));
+        map2.put("${clientContacts_Comma}",   wrapHTML(contactsComma(),   customCSS, ""));
         replaceHTML(mlp.getMainDocumentPart(), map2);
         replaceHTML(mlp.getMainDocumentPart(), cfMap, false);
         replaceHeaderAndFooter(map);
+    }
+
+    // ── the client package: name, custom fields, distribution list, images ───
+
+    /**
+     * Prefix of a client custom field in a template: {@code ${asmtClient_<variableName>}}.
+     * Kept apart from assessment fields so a client field and an assessment field may share a
+     * variable name without one shadowing the other.
+     */
+    public static final String CLIENT_FIELD_PREFIX = "asmtClient_";
+
+    /** {@code ${clientImage <name>}}, optionally {@code ${clientImage <name> width=<px>}}. */
+    private static final Pattern CLIENT_IMAGE =
+            Pattern.compile("^\\$\\{clientImage\\s+([A-Za-z0-9_-]+)(?:\\s+width=(\\d{1,4}))?\\s*\\}$");
+
+    private static final String NO_CONTACTS_TEXT = "No contacts recorded for this client.";
+
+    private List<ReportData.ReportContact> contacts() {
+        return data.getClientContacts() != null ? data.getClientContacts() : List.of();
+    }
+
+    private static String nz(String s) {
+        return s == null ? "" : s;
+    }
+
+    /** "Name – Title – email", the parts the contact actually has. */
+    private static String contactLine(ReportData.ReportContact c) {
+        StringBuilder sb = new StringBuilder(nz(c.getName()));
+        if (!nz(c.getTitle()).isBlank()) sb.append(" – ").append(c.getTitle());
+        if (!nz(c.getEmail()).isBlank()) sb.append(" – ").append(c.getEmail());
+        return sb.toString();
+    }
+
+    private String contactsLines() {
+        StringBuilder sb = new StringBuilder();
+        for (ReportData.ReportContact c : contacts()) sb.append(contactLine(c)).append("<br/>");
+        return sb.toString();
+    }
+
+    private String contactsComma() {
+        return contacts().stream().map(c -> nz(c.getName())).collect(Collectors.joining(", "));
+    }
+
+    private String contactsBullets() {
+        StringBuilder sb = new StringBuilder("<ul>");
+        for (ReportData.ReportContact c : contacts()) {
+            sb.append("<li class='bullets'>").append(contactLine(c)).append("</li>");
+        }
+        return sb.append("</ul>").toString();
+    }
+
+    /**
+     * Expands every table marked {@code ${clientContactTable}}: its {@code ${loop}} row is
+     * repeated once per contact of the client's distribution list, with {@code ${contactName}},
+     * {@code ${contactTitle}}, {@code ${contactEmail}} ({@code ${contactEmail link}} inside a
+     * hyperlink gives a mailto link) and {@code ${count}} filled in.
+     *
+     * <p>Every row of the template table whose text starts with {@code ${} — the marker row, the
+     * {@code ${loop}} row and any {@code ${noIssuesText …}} row — is removed before the contact
+     * rows are appended, so the cleanup can never mistake a generated row for configuration.
+     * An empty list writes one single-cell row with the {@code ${noIssuesText}} wording, or
+     * {@value #NO_CONTACTS_TEXT} when the template gives none.
+     */
+    private void checkContactTables() throws JAXBException, Docx4JException {
+        for (Object table : getAllElementFromObject(mlp.getMainDocumentPart(), Tbl.class)) {
+            Tbl tbl = (Tbl) table;
+            List<Object> paragraphs = getAllElementFromObject(tbl, P.class);
+            if (getMatchingText(paragraphs, "${clientContactTable}") == null) continue;
+
+            String noIssuesText = NO_CONTACTS_TEXT;
+            String nit = getMatchingText(paragraphs, "${noIssuesText");
+            if (nit != null) noIssuesText = nit.replace("${noIssuesText ", "").replace("}", "");
+
+            int index = indexOfRow(tbl, paragraphs, "${loop");
+            if (index == -1) continue;
+            String xml = XmlUtils.marshaltoString(tbl.getContent().get(index), false, false);
+
+            // every configuration row goes, the ${loop} row included
+            for (int i = tbl.getContent().size() - 1; i >= 0; i--) {
+                Object row = XmlUtils.unwrap(tbl.getContent().get(i));
+                if (!(row instanceof Tr)) continue;
+                boolean config = false;
+                for (Object p : getAllElementFromObject(row, P.class)) {
+                    if (matchText((P) p, "${")) { config = true; break; }
+                }
+                if (config) tbl.getContent().remove(i);
+            }
+
+            int count = 1;
+            for (ReportData.ReportContact c : contacts()) {
+                String nxml = xml.replaceAll("\\$\\{contactName\\}",  Matcher.quoteReplacement(CData(nz(c.getName()))));
+                nxml = nxml.replaceAll("\\$\\{contactTitle\\}", Matcher.quoteReplacement(CData(nz(c.getTitle()))));
+                nxml = nxml.replaceAll("\\$\\{contactEmail\\}", Matcher.quoteReplacement(CData(nz(c.getEmail()))));
+                nxml = nxml.replaceAll("\\$\\{count\\}", "" + count);
+                nxml = nxml.replaceAll("\\$\\{loop\\}", "");
+                Tr newrow = (Tr) XmlUtils.unmarshalString(nxml);
+                replaceHyperlink(newrow, "${contactEmail link}", nz(c.getEmail()));
+                tbl.getContent().add(newrow);
+                count++;
+            }
+
+            if (contacts().isEmpty()) {
+                ObjectFactory factory = Context.getWmlObjectFactory();
+                Tr newrow = factory.createTr();
+                Tc td     = factory.createTc();
+                P  p      = factory.createP();
+                R  r      = factory.createR();
+                Text text = factory.createText();
+                text.setValue(noIssuesText);
+                r.getContent().add(text);
+                p.getContent().add(r);
+                td.getContent().add(p);
+                newrow.getContent().add(td);
+                tbl.getContent().add(newrow);
+            }
+        }
+    }
+
+    /**
+     * Replaces every paragraph that is nothing but {@code ${clientImage <name>}} with the client's
+     * image of that name, embedded like a pasted screenshot (natural size, capped at the page
+     * width; {@code width=<px>} fixes it). A name the client has no image for leaves nothing
+     * behind, so a template may carry a logo slot that some clients never fill.
+     */
+    private void replaceClientImages(String customCSS) throws Docx4JException {
+        Map<String, byte[]> bytes = data.getClientImageBytes();
+        Map<String, List<Object>> replacements = new HashMap<>();
+        for (P paragraph : getParagraphs(mlp.getMainDocumentPart())) {
+            StringWriter paragraphText = new StringWriter();
+            try {
+                TextUtils.extractText(paragraph, paragraphText);
+            } catch (Exception ignored) {
+                continue;
+            }
+            String token = paragraphText.toString().trim();
+            if (replacements.containsKey(token)) continue;
+            Matcher m = CLIENT_IMAGE.matcher(token);
+            if (!m.matches()) continue;
+
+            String name = m.group(1);
+            byte[] image = bytes == null ? null : bytes.get(name);
+            if (image == null) {
+                replacements.put(token, new ArrayList<>());
+                continue;
+            }
+            String contentType = data.getClientImageContentTypes() != null
+                    ? data.getClientImageContentTypes().getOrDefault(name, "image/png")
+                    : "image/png";
+            String html = "<p><img src=\"data:" + contentType + ";base64,"
+                    + Base64.getEncoder().encodeToString(image) + "\""
+                    + (m.group(2) != null ? " width=\"" + m.group(2) + "\"" : "")
+                    + " alt=\"" + name + "\"/></p>";
+            replacements.put(token, wrapHTML(html, customCSS, "clientImage"));
+        }
+        // once=false: the same slot may legitimately appear more than once, say on the cover
+        // and in a header table.
+        if (!replacements.isEmpty()) {
+            replaceHTML(mlp.getMainDocumentPart(), replacements, false);
+        }
     }
 
     // ── vuln count helpers ───────────────────────────────────────────────────
@@ -1754,6 +1946,17 @@ public class DocxUtils {
         content = content.replaceAll("\\$\\{asmtTeam\\}", "");
         content = content.replaceAll("\\$\\{asmtType\\}",
                 data.getAssessmentTypeName() == null ? "" : data.getAssessmentTypeName());
+        content = content.replaceAll("\\$\\{asmtClient\\}",
+                Matcher.quoteReplacement(data.getClientName() == null ? "" : data.getClientName()));
+        if (data.getClientFieldTypes() != null) {
+            for (Map.Entry<String, FieldType> entry : data.getClientFieldTypes().entrySet()) {
+                if (entry.getValue() != FieldType.RICH_TEXT) {
+                    content = content.replaceAll(
+                            "\\$\\{" + Pattern.quote(CLIENT_FIELD_PREFIX + entry.getKey()) + "\\}",
+                            Matcher.quoteReplacement(data.getClientFieldValue(entry.getKey())));
+                }
+            }
+        }
         content = replaceDateVariable(content, "today",     new Date());
         content = replaceDateVariable(content, "asmtStart", toDate(data.getStartDate()));
         content = replaceDateVariable(content, "asmtEnd",   toDate(data.getEndDate()));
@@ -2058,7 +2261,7 @@ public class DocxUtils {
             "asmtAssessor_Lines", "asmtAssessor_Comma", "asmtAssessor_Bullets",
             "remediation", "asmtTeam", "asmtType",
             "today", "asmtStart", "asmtEnd", "asmtAccessKey",
-            "totalOpenVulns", "totalClosedVulns"
+            "totalOpenVulns", "totalClosedVulns", "asmtClient"
     };
 
     private String getKey(String key) {

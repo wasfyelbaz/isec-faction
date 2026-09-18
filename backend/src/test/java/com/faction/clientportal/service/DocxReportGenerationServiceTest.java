@@ -46,6 +46,8 @@ class DocxReportGenerationServiceTest {
     @Mock private ReportDocumentService           reportDocumentService;
     @Mock private com.faction.clientportal.util.LibreOfficeConverter libreOfficeConverter;
     @Mock private ReportEncryptor         reportEncryptor;
+    @Mock private com.faction.clientportal.repository.OrganizationRepository      organizationRepository;
+    @Mock private com.faction.clientportal.repository.EntityFieldConfigRepository entityFieldConfigRepository;
 
     // These suites describe enterprise behaviour, so they run under the real
     // enterprise policy rather than a mock — a bare mock reports every feature as
@@ -207,6 +209,66 @@ class DocxReportGenerationServiceTest {
                 (com.faction.clientportal.util.reporting.ReportData) m.invoke(service, baseAssessment,
                         List.of(), null, "Pentest", List.of(), java.util.Map.of(), java.util.Map.of(), java.util.Map.of());
         org.assertj.core.api.Assertions.assertThat(community.getSections()).isEmpty();
+    }
+
+    /**
+     * The client package: the assessment's organization is loaded and its organization-scoped
+     * custom fields are flattened to variableName → value, defaults included, so a template can
+     * print {@code ${asmtClient}} and {@code ${asmtClient_<field>}} without the assessor typing
+     * the client's details into every assessment.
+     */
+    @Test
+    void buildReportData_carriesTheClientNameAndItsCustomFields() throws Exception {
+        when(organizationRepository.findById("org-1")).thenReturn(Optional.of(
+                com.faction.clientportal.model.Organization.builder()
+                        .id("org-1").name("BDC")
+                        .fieldValues(new java.util.HashMap<>(java.util.Map.of("f-legal", "Banque du Caire")))
+                        .build()));
+        when(entityFieldConfigRepository.findByScope(com.faction.clientportal.model.FieldScope.ORGANIZATION))
+                .thenReturn(Optional.of(com.faction.clientportal.model.EntityFieldConfig.builder()
+                        .scope(com.faction.clientportal.model.FieldScope.ORGANIZATION)
+                        .fieldDefinitions(new java.util.ArrayList<>(List.of(
+                                com.faction.clientportal.model.UserDefinedField.builder()
+                                        .id("f-legal").variableName("legal_name")
+                                        .fieldType(com.faction.clientportal.model.FieldType.STRING).build(),
+                                com.faction.clientportal.model.UserDefinedField.builder()
+                                        .id("f-profile").variableName("profile")
+                                        .fieldType(com.faction.clientportal.model.FieldType.RICH_TEXT)
+                                        .defaultValue("<p>default profile</p>").build())))
+                        .build()));
+
+        java.lang.reflect.Method m = DocxReportGenerationService.class.getDeclaredMethod(
+                "buildReportData", com.faction.clientportal.model.Assessment.class, List.class,
+                com.faction.clientportal.model.User.class, String.class, List.class,
+                java.util.Map.class, java.util.Map.class, java.util.Map.class);
+        m.setAccessible(true);
+        com.faction.clientportal.util.reporting.ReportData data =
+                (com.faction.clientportal.util.reporting.ReportData) m.invoke(service, baseAssessment,
+                        List.of(), null, "Pentest", List.of(), java.util.Map.of(), java.util.Map.of(), java.util.Map.of());
+
+        org.assertj.core.api.Assertions.assertThat(data.getClientName()).isEqualTo("BDC");
+        org.assertj.core.api.Assertions.assertThat(data.getClientFieldValues())
+                .containsEntry("legal_name", "Banque du Caire")
+                .containsEntry("profile", "<p>default profile</p>");
+        org.assertj.core.api.Assertions.assertThat(data.getClientFieldTypes())
+                .containsEntry("profile", com.faction.clientportal.model.FieldType.RICH_TEXT);
+    }
+
+    @Test
+    void buildReportData_hasNoClientWhenTheAssessmentHasNoOrganization() throws Exception {
+        baseAssessment.setOrganizationId(null);
+        java.lang.reflect.Method m = DocxReportGenerationService.class.getDeclaredMethod(
+                "buildReportData", com.faction.clientportal.model.Assessment.class, List.class,
+                com.faction.clientportal.model.User.class, String.class, List.class,
+                java.util.Map.class, java.util.Map.class, java.util.Map.class);
+        m.setAccessible(true);
+        com.faction.clientportal.util.reporting.ReportData data =
+                (com.faction.clientportal.util.reporting.ReportData) m.invoke(service, baseAssessment,
+                        List.of(), null, "Pentest", List.of(), java.util.Map.of(), java.util.Map.of(), java.util.Map.of());
+
+        org.assertj.core.api.Assertions.assertThat(data.getClientName()).isNull();
+        org.assertj.core.api.Assertions.assertThat(data.getClientFieldValues()).isEmpty();
+        org.mockito.Mockito.verifyNoInteractions(organizationRepository);
     }
 
     @Test
