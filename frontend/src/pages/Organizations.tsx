@@ -18,6 +18,7 @@ import {
   Select,
   Textarea,
   ErrorMessage,
+  ConfirmDialog,
 } from '../components';
 import './Organizations.css';
 import { useTerminology } from '../context/TerminologyContext';
@@ -32,6 +33,9 @@ export default function Organizations() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Organization | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   const [pagination, setPagination] = usePersistedState<PaginationInfo>(TABLE_KEY, 'pagination', {
     page: 0,
@@ -112,14 +116,20 @@ export default function Organizations() {
     navigate(`/organizations/${organization.id}/edit`);
   };
 
-  const handleDelete = async (organizationId: string) => {
-    if (!confirm(`Are you sure you want to delete this ${organizationLower}?`)) return;
-
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setDeleteError('');
     try {
-      await organizationsApi.delete(organizationId);
+      await organizationsApi.delete(pendingDelete.id);
+      setPendingDelete(null);
       await loadOrganizations();
     } catch (err: any) {
-      alert(err.response?.data?.message || `Failed to delete ${organizationLower}`);
+      // The server refuses while applications or member users still belong here, and says why.
+      setDeleteError(err.response?.data?.message || `Failed to delete ${organizationLower}`);
+      setPendingDelete(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -202,7 +212,7 @@ export default function Organizations() {
           {canDelete && (
             <IconButton
               icon={Trash2}
-              onClick={() => handleDelete(organization.id)}
+              onClick={() => { setDeleteError(''); setPendingDelete(organization); }}
               title="Delete"
               variant="delete"
             />
@@ -222,6 +232,8 @@ export default function Organizations() {
           </Button>
         )}
       </div>
+
+      {deleteError && <ErrorMessage>{deleteError}</ErrorMessage>}
 
       <DataTable
         columns={columns}
@@ -342,6 +354,17 @@ export default function Organizations() {
             </div>
           </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={handleDelete}
+        title={`Delete ${organizationSingular}`}
+        message={`Delete "${pendingDelete?.name}"? This cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+        isLoading={deleting}
+      />
     </Page>
   );
 }
