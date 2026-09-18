@@ -250,7 +250,6 @@ function RemediationAlerts({ kind }: { kind: RemediationAlertKind }) {
       .catch(() => setOrgOptions([]));
 
     searchApps('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Filter option lists (server-searched, latest-request-wins) ─────────────

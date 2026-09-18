@@ -186,6 +186,7 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
     hasCustomMenuLogoLarge, hasCustomMenuLogoSmall,
   } = useBranding();
   const { hasFeature } = useEdition();
+  const { organizationPlural, organizationSingular } = useTerminology();
   const [sidebarOpen, setSidebarOpen] = useState(
     () => localStorage.getItem('sidebarOpen') !== 'false'
   );
@@ -366,9 +367,6 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
     !authorities.some((a: string) => a.endsWith(':all')) &&
     authorities.some((a: string) => a.endsWith(':org') || a.endsWith(':owned'));
 
-  // Check if user has permission to view a menu item
-  const { organizationPlural, organizationSingular } = useTerminology();
-
   /**
    * The wording shown for a menu entry. Deliberately separate from `name`, which is the entry's
    * identity — hasPermission and the external-user gate both key off it, so renaming the field
@@ -382,6 +380,7 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
     return name;
   };
 
+  // Check if user has permission to view a menu item
   const hasPermission = (menuName: string): boolean => {
     // Super admin can see everything
     if (authorities.includes('super_admin')) {

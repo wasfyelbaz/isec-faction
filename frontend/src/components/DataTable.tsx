@@ -258,7 +258,7 @@ export default function DataTable<T>({
 
     // Show max 5 page numbers
     let startPage = Math.max(0, page - 2);
-    let endPage = Math.min(totalPages - 1, startPage + 4);
+    const endPage = Math.min(totalPages - 1, startPage + 4);
 
     // Adjust start if we're near the end
     if (endPage - startPage < 4) {

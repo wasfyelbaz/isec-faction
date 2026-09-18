@@ -3,7 +3,6 @@ import {
   loginAsSuperAdmin,
   navigateToPage,
   waitForModal,
-  closeModal,
   generateTestUser,
   waitForTableToLoad,
   searchInTable,
@@ -107,11 +106,7 @@ test.describe('User Management', () => {
       await page.fill('input[type="text"][placeholder*="username"]', testUser.username);
       await page.fill('input[type="email"]', testUser.email);
 
-      // Find and fill first name and last name
-      const firstNameInput = page.locator('input[type="text"]').filter({ hasText: '' }).nth(1);
-      const lastNameInput = page.locator('input[type="text"]').filter({ hasText: '' }).nth(2);
-
-      // Alternative: use labels to find inputs
+      // Find first name and last name inputs by their labels
       await page.locator('label:has-text("First Name")').locator('~ input, + input').fill(testUser.firstName);
       await page.locator('label:has-text("Last Name")').locator('~ input, + input').fill(testUser.lastName);
 
@@ -514,14 +509,14 @@ test.describe('User Management', () => {
       const isVisible = await pageSizeSelect.isVisible().catch(() => false);
 
       if (isVisible) {
-        // Get initial row count
+        // The first page never holds more rows than its page size
         const initialCount = await page.locator('table tbody tr').count();
-
-        // Get current page size
         const currentPageSize = await pageSizeSelect.inputValue();
+        expect(initialCount).toBeLessThanOrEqual(Number(currentPageSize));
 
-        // Change to 25 per page
-        await pageSizeSelect.selectOption('25');
+        // Pick a size that differs from the current one so the change is observable
+        const targetPageSize = currentPageSize === '25' ? '10' : '25';
+        await pageSizeSelect.selectOption(targetPageSize);
 
         // Wait for reload
         await page.waitForTimeout(1000);
@@ -532,10 +527,11 @@ test.describe('User Management', () => {
 
         // Verify page size changed
         const newPageSize = await pageSizeSelect.inputValue();
-        expect(newPageSize).toBe('25');
+        expect(newPageSize).toBe(targetPageSize);
+        expect(newPageSize).not.toBe(currentPageSize);
 
         // Row count should be appropriate for page size
-        expect(newCount).toBeLessThanOrEqual(25);
+        expect(newCount).toBeLessThanOrEqual(Number(targetPageSize));
       }
     });
   });

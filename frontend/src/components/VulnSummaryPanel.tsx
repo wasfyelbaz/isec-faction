@@ -58,7 +58,6 @@ export default function VulnSummaryPanel({
       .then(r => { if (reqId === reqRef.current) setSummary(r.data); })
       .catch(() => { if (reqId === reqRef.current) setSummary(undefined); })
       .finally(() => { if (reqId === reqRef.current) setLoading(false); });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgKey, subOrganizationId, applicationId, assessmentId, severityKey, statusKey, search,
       openedFrom, openedTo]);
 

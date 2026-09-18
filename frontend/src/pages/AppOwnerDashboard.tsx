@@ -103,7 +103,6 @@ export default function AppOwnerDashboard() {
       .catch(() => setConfiguredStatuses(DEFAULT_VULN_STATUSES));
 
     searchApps('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // The severity bars and MTTR re-aggregate with the table's filters, so the figures always

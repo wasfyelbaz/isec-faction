@@ -3840,7 +3840,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
             const sepPattern = /^\s*\|[\s\-:|]+\|\s*$/;
             if (sepPattern.test(blkText)) {
               // Look for header row as previous sibling
-              let prevSibling = blk.previousElementSibling;
+              const prevSibling = blk.previousElementSibling;
               const headerPattern = /^\s*\|.+\|\s*$/;
               if (prevSibling && headerPattern.test(prevSibling.textContent ?? '')) {
                 e.preventDefault();

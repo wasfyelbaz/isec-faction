@@ -121,7 +121,6 @@ export default function Users() {
         });
     }, 300);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.email, azureLookupEnabled, modalMode]);
 
   const applyAzureSuggestion = (u: AzureDirectoryUser) => {

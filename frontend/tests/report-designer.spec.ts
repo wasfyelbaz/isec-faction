@@ -2,10 +2,8 @@ import { test, expect } from '@playwright/test';
 import {
   loginAsSuperAdmin,
   navigateToPage,
-  waitForTableToLoad,
   generateTestReportTemplate,
   waitForAutoSave,
-  TEST_CONFIG,
 } from './helpers';
 
 test.describe('Report Designer', () => {
@@ -475,7 +473,6 @@ test.describe('Report Designer', () => {
 
     test('should debounce rapid changes', async ({ page }) => {
       // Create a template
-      const testTemplate = generateTestReportTemplate();
       await page.click('button:has-text("New Template")');
       await page.waitForTimeout(1000);
 
