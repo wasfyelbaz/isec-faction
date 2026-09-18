@@ -77,6 +77,7 @@ public class DocxReportGenerationService implements ReportGenerationService {
     private final TerminologyConfigService      terminologyConfigService;
     private final OrganizationRepository        organizationRepository;
     private final EntityFieldConfigRepository   entityFieldConfigRepository;
+    private final ClientImageRepository         clientImageRepository;
 
     /**
      * The order findings appear in a report: the assessment's display order, exactly as the
@@ -427,6 +428,9 @@ public class DocxReportGenerationService implements ReportGenerationService {
         String clientName = null;
         Map<String, String>    clientFieldValues = new HashMap<>();
         Map<String, FieldType> clientFieldTypes  = new HashMap<>();
+        List<ReportData.ReportContact> clientContacts = new ArrayList<>();
+        Map<String, byte[]>  clientImageBytes        = new HashMap<>();
+        Map<String, String>  clientImageContentTypes = new HashMap<>();
         Organization client = assessment.getOrganizationId() == null ? null
                 : organizationRepository.findById(assessment.getOrganizationId()).orElse(null);
         if (client != null) {
@@ -436,12 +440,34 @@ public class DocxReportGenerationService implements ReportGenerationService {
                     .map(EntityFieldConfig::getFieldDefinitions)
                     .orElse(List.of());
             buildFieldMaps(clientFieldDefinitions, client.getFieldValues(), clientFieldValues, clientFieldTypes);
+            if (client.getDistributionList() != null) {
+                for (ClientContact contact : client.getDistributionList()) {
+                    clientContacts.add(ReportData.ReportContact.builder()
+                            .name(contact.getName()).title(contact.getTitle()).email(contact.getEmail())
+                            .build());
+                }
+            }
+            // Every image the client has, keyed by its slot name, so ${clientImage logo} can be
+            // resolved without a second round trip. One unreadable object costs that image only.
+            for (ClientImage image : clientImageRepository.findByOrganizationIdOrderByNameAsc(client.getId())) {
+                try {
+                    clientImageBytes.put(image.getName(), storageService.downloadBytes(image.getStorageKey()));
+                    clientImageContentTypes.put(image.getName(),
+                            image.getContentType() != null ? image.getContentType() : "image/png");
+                } catch (Exception e) {
+                    log.warn("Could not download client image '{}' for organization {}: {}",
+                            image.getName(), client.getId(), e.getMessage());
+                }
+            }
         }
 
         return ReportData.builder()
                 .clientName(clientName)
                 .clientFieldValues(clientFieldValues)
                 .clientFieldTypes(clientFieldTypes)
+                .clientContacts(clientContacts)
+                .clientImageBytes(clientImageBytes)
+                .clientImageContentTypes(clientImageContentTypes)
                 .assessmentId(assessment.getId())
                 .assessmentName(assessment.getName())
                 .applicationId(assessment.getApplicationId())

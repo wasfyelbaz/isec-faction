@@ -48,6 +48,7 @@ class DocxReportGenerationServiceTest {
     @Mock private ReportEncryptor         reportEncryptor;
     @Mock private com.faction.clientportal.repository.OrganizationRepository      organizationRepository;
     @Mock private com.faction.clientportal.repository.EntityFieldConfigRepository entityFieldConfigRepository;
+    @Mock private com.faction.clientportal.repository.ClientImageRepository       clientImageRepository;
 
     // These suites describe enterprise behaviour, so they run under the real
     // enterprise policy rather than a mock — a bare mock reports every feature as
@@ -223,7 +224,17 @@ class DocxReportGenerationServiceTest {
                 com.faction.clientportal.model.Organization.builder()
                         .id("org-1").name("BDC")
                         .fieldValues(new java.util.HashMap<>(java.util.Map.of("f-legal", "Banque du Caire")))
+                        .distributionList(new java.util.ArrayList<>(List.of(
+                                com.faction.clientportal.model.ClientContact.builder()
+                                        .name("Ahmed Ali").title("CISO").email("a.ali@bdc.example").build())))
                         .build()));
+        when(clientImageRepository.findByOrganizationIdOrderByNameAsc("org-1")).thenReturn(List.of(
+                com.faction.clientportal.model.ClientImage.builder()
+                        .name("logo").storageKey("organizations/org-1/images/i1/logo.png").contentType("image/png").build(),
+                com.faction.clientportal.model.ClientImage.builder()
+                        .name("broken").storageKey("organizations/org-1/images/i2/x.png").contentType("image/png").build()));
+        when(storageService.downloadBytes("organizations/org-1/images/i1/logo.png")).thenReturn(new byte[]{1, 2, 3});
+        when(storageService.downloadBytes("organizations/org-1/images/i2/x.png")).thenThrow(new RuntimeException("gone"));
         when(entityFieldConfigRepository.findByScope(com.faction.clientportal.model.FieldScope.ORGANIZATION))
                 .thenReturn(Optional.of(com.faction.clientportal.model.EntityFieldConfig.builder()
                         .scope(com.faction.clientportal.model.FieldScope.ORGANIZATION)
@@ -252,6 +263,12 @@ class DocxReportGenerationServiceTest {
                 .containsEntry("profile", "<p>default profile</p>");
         org.assertj.core.api.Assertions.assertThat(data.getClientFieldTypes())
                 .containsEntry("profile", com.faction.clientportal.model.FieldType.RICH_TEXT);
+        // distribution list and images travel with the client; an unreadable image costs that image only
+        org.assertj.core.api.Assertions.assertThat(data.getClientContacts()).hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(data.getClientContacts().get(0).getEmail()).isEqualTo("a.ali@bdc.example");
+        org.assertj.core.api.Assertions.assertThat(data.getClientImageBytes()).containsOnlyKeys("logo");
+        org.assertj.core.api.Assertions.assertThat(data.getClientImageBytes().get("logo")).containsExactly(1, 2, 3);
+        org.assertj.core.api.Assertions.assertThat(data.getClientImageContentTypes()).containsEntry("logo", "image/png");
     }
 
     @Test
