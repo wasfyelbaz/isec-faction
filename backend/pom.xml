@@ -343,6 +343,14 @@
                         <!-- docker-java defaults to Docker API v1.32, which Docker Engine 29+
                              rejects (minimum 1.40); pin a supported version for Testcontainers -->
                         <api.version>1.44</api.version>
+                        <!-- Fork-local: CommunityEditionPolicy.enabled() returns true here, so
+                             this build has every feature on and the @EnterpriseOnly tests are
+                             the ones that describe it. Without this they are skipped and the
+                             newly unlocked code paths — custom roles, external owners, AI usage,
+                             encrypted PDF — are the only ones in the suite with no coverage.
+                             This selects which tests run; it does not claim the paid overlay is
+                             present. Upstream leaves it unset. -->
+                        <faction.edition.build>enterprise</faction.edition.build>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

@@ -71,18 +71,21 @@ class EndpointAuthorizationArchitectureTest {
      */
     private static final Set<String> KNOWN_UNENFORCED = Set.of();
 
-    /** True when the paid overlay is on the classpath (set by the {@code enterprise} profile). */
-    private static final boolean ENTERPRISE_BUILD =
-            "enterprise".equals(System.getProperty("faction.edition.build"));
-
     /**
      * Permissions whose only endpoints live in the overlay.
      *
      * <p>In the open source build those controllers do not exist, so the permissions are
      * enforced nowhere — correctly. They stay in the enum because {@code Permission} is
      * core and shared by both editions; what changes is whether anything answers to them.
-     * Expected-unenforced rather than skipped, so the open source build still fails if a
-     * genuinely dead permission appears.
+     * Expected-unenforced rather than skipped, so the build still fails if a genuinely dead
+     * permission appears.
+     *
+     * <p>Fork-local: upstream excuses these only when {@code !ENTERPRISE_BUILD}, on the
+     * reasoning that an enterprise build ships the controllers that enforce them. This fork
+     * sets {@code faction.edition.build=enterprise} to run the paid-behaviour tests against
+     * the features it unlocked, but it has no overlay — there is no SSO controller or service
+     * in this repository, only a DTO. So the excuse is unconditional here: the flag says
+     * which tests to run, not which code is present.
      */
     private static final Set<String> ENTERPRISE_ONLY_PERMISSIONS = Set.of(
             "sso:config:read",
@@ -125,7 +128,7 @@ class EndpointAuthorizationArchitectureTest {
         for (Permission permission : Permission.values()) {
             boolean used = enforced.contains(permission.getPermission());
             boolean debt = KNOWN_UNENFORCED.contains(permission.getPermission())
-                    || (!ENTERPRISE_BUILD && ENTERPRISE_ONLY_PERMISSIONS.contains(permission.getPermission()));
+                    || ENTERPRISE_ONLY_PERMISSIONS.contains(permission.getPermission());
             if (!used && !debt) dead.add(permission.getPermission());
             if (used && debt) wiredButListedAsDebt.add(permission.getPermission());
         }
