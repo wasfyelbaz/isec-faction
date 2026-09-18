@@ -235,10 +235,10 @@
   color: #fff;
 }
 
-.vuln-critical { background-color: #ef4444; }
-.vuln-high     { background-color: #f97316; }
-.vuln-medium   { background-color: #eab308; color: #1a1a1a; }
-.vuln-low      { background-color: #22c55e; }
+.vuln-critical { background-color: var(--sev-critical); }
+.vuln-high     { background-color: var(--sev-high); }
+.vuln-medium   { background-color: var(--sev-medium); color: #1a1a1a; }
+.vuln-low      { background-color: var(--sev-low); }
 
 /* Human-readable application id shown ahead of the application name in the list. */
 .eng-app-id {

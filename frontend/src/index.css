@@ -5,6 +5,26 @@
   --clock-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E");
 
   /* Faction Security Dark Theme Colors */
+
+  /* Severity palette — the house colours, identical to the DOCX report so a
+     finding reads the same on screen and on the page. Used as fills, dots and
+     borders; --sev-*-ink is the text that stays legible on top of each. */
+  --sev-critical: #c00000;
+  --sev-high: #ffc000;
+  --sev-medium: #ffff00;
+  --sev-low: #00b050;
+  --sev-info: #00b0f0;
+  --sev-critical-rgb: 192,0,0;
+  --sev-high-rgb: 255,192,0;
+  --sev-medium-rgb: 255,255,0;
+  --sev-low-rgb: 0,176,80;
+  --sev-info-rgb: 0,176,240;
+  --sev-critical-ink: #ffffff;
+  --sev-high-ink: #1f2937;
+  --sev-medium-ink: #1f2937;
+  --sev-low-ink: #ffffff;
+  --sev-info-ink: #1f2937;
+
   --primary-bg: #0a0e1a;
   --secondary-bg: #111827;
   --tertiary-bg: #1f2937;

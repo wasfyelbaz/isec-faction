@@ -46,28 +46,28 @@
   flex-shrink: 0;
 }
 
-.vuln-stat.critical { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
-.vuln-stat.critical .vuln-dot { background: #ef4444; }
+.vuln-stat.critical { color: var(--sev-critical); background: rgba(var(--sev-critical-rgb), 0.1); }
+.vuln-stat.critical .vuln-dot { background: var(--sev-critical); }
 
-.vuln-stat.high { color: #f97316; background: rgba(249, 115, 22, 0.1); }
-.vuln-stat.high .vuln-dot { background: #f97316; }
+.vuln-stat.high { color: var(--sev-high); background: rgba(var(--sev-high-rgb), 0.1); }
+.vuln-stat.high .vuln-dot { background: var(--sev-high); }
 
-.vuln-stat.medium { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
-.vuln-stat.medium .vuln-dot { background: #f59e0b; }
+.vuln-stat.medium { color: var(--sev-medium); background: rgba(var(--sev-medium-rgb), 0.1); }
+.vuln-stat.medium .vuln-dot { background: var(--sev-medium); }
 
-.vuln-stat.low { color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
-.vuln-stat.low .vuln-dot { background: #3b82f6; }
+.vuln-stat.low { color: var(--sev-low); background: rgba(var(--sev-low-rgb), 0.1); }
+.vuln-stat.low .vuln-dot { background: var(--sev-low); }
 
-.vuln-stat.info { color: #9ca3af; background: rgba(156, 163, 175, 0.1); }
-.vuln-stat.info .vuln-dot { background: #9ca3af; }
+.vuln-stat.info { color: var(--sev-info); background: rgba(var(--sev-info-rgb), 0.1); }
+.vuln-stat.info .vuln-dot { background: var(--sev-info); }
 
 /* Light mode badge overrides */
 [data-theme="light"] .vuln-stat { font-weight: 700; }
-[data-theme="light"] .vuln-stat.critical { color: #b91c1c; background: rgba(239, 68, 68, 0.16); }
-[data-theme="light"] .vuln-stat.high { color: #c2410c; background: rgba(249, 115, 22, 0.16); }
-[data-theme="light"] .vuln-stat.medium { color: #b45309; background: rgba(245, 158, 11, 0.16); }
-[data-theme="light"] .vuln-stat.low { color: #1d4ed8; background: rgba(59, 130, 246, 0.16); }
-[data-theme="light"] .vuln-stat.info { color: #334155; background: rgba(156, 163, 175, 0.16); }
+[data-theme="light"] .vuln-stat.critical { color: var(--sev-critical); background: rgba(var(--sev-critical-rgb), 0.16); }
+[data-theme="light"] .vuln-stat.high { color: var(--sev-high); background: rgba(var(--sev-high-rgb), 0.16); }
+[data-theme="light"] .vuln-stat.medium { color: var(--sev-medium); background: rgba(var(--sev-medium-rgb), 0.16); }
+[data-theme="light"] .vuln-stat.low { color: var(--sev-low); background: rgba(var(--sev-low-rgb), 0.16); }
+[data-theme="light"] .vuln-stat.info { color: var(--sev-info); background: rgba(var(--sev-info-rgb), 0.16); }
 
 /* ── Workspace (two-column flex) ───────────────── */
 .assessment-workspace {
