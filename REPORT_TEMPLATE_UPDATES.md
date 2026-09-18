@@ -1,6 +1,6 @@
 # iSec MAPT Report Template — Faction 2 Conversion Spec
 
-Changes required to make `1._iSec_MAPT_Template.docx` render correctly when uploaded to
+Changes required to make the iSec MAPT template render correctly when uploaded to
 Faction 2 as a DOCX report template.
 
 **Source of truth:** every variable below was verified against this repository's renderer,
@@ -8,8 +8,8 @@ Faction 2 as a DOCX report template.
 against <https://docs.factionsecurity.com/reporting/docx-templates/>. Where the docs and the
 code disagree, the code wins — it is what runs.
 
-- **Input:** `1._iSec_MAPT_Template.docx` (unmodified, keep as reference)
-- **Output:** `2._iSec_MAPT_Template_Faction.docx`
+- **Input:** `report-templates/Original/1._iSec_MAPT_Template.docx` (unmodified, keep as reference)
+- **Output:** `report-templates/Faction Tuned/1._iSec_MAPT_Template_Faction.docx`
 
 ---
 
@@ -376,7 +376,7 @@ diverging from the upstream this fork tracks.
 
 ## G. Verifying a render
 
-1. Upload `2._iSec_MAPT_Template_Faction.docx` as a report template.
+1. Upload `report-templates/Faction Tuned/1._iSec_MAPT_Template_Faction.docx` as a report template.
 2. Create the sections from §A.1 and the fields from §B.
 3. Create an assessment with at least one finding in **each** of the three sections, and at
    least one section left empty, to exercise both the repeat and the `${if-section}` removal.

@@ -16,7 +16,7 @@ the quoted code, not by trusting the number.
 
 The Report Designer's **Sections** tab shows "Not included in this edition" and refuses to
 create sections. We need report sections working in this fork, because
-`2._iSec_MAPT_Template_Faction.docx` files its findings into three of them
+`report-templates/Faction Tuned/1._iSec_MAPT_Template_Faction.docx` files its findings into three of them
 (`Android Application`, `iOS Application`, `API`) and will not render findings without them.
 See `REPORT_TEMPLATE_UPDATES.md` §A.1.
 
@@ -397,7 +397,7 @@ tests never prove a migration exists.
 3. Report Designer → Sections tab no longer shows "Not included in this edition".
 4. Create the three sections **named exactly** `Android Application`, `iOS Application`, `API`
    (§4 FM5 — case matters).
-5. Upload `2._iSec_MAPT_Template_Faction.docx`, create an assessment from that template.
+5. Upload `report-templates/Faction Tuned/1._iSec_MAPT_Template_Faction.docx`, create an assessment from that template.
 6. Add findings to each section, plus **one deliberately orphaned finding** (set its section
    via API to a name that does not exist).
 7. Generate → must **fail** with the Phase 2 message naming that finding. This is the test that
