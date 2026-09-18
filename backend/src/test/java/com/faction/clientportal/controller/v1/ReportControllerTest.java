@@ -263,14 +263,19 @@ class ReportControllerTest extends TestContainersConfig {
     // ── per-document tracking ────────────────────────────────────────────────
 
     /**
-     * The community counterpart, and a direct guard on a real regression: the panel treats
-     * any document still GENERATING as the whole run still going, so an encrypted variant
-     * marked generating and then never produced left the spinner running and Preview and
-     * Download disabled behind it.
+     * A direct guard on a real regression: the panel treats any document still GENERATING as
+     * the whole run still going, so a variant marked generating and then never produced left
+     * the spinner running and Preview and Download disabled behind it.
+     *
+     * <p>Upstream asserts two documents and no encrypted variant, because upstream gates
+     * {@code ENCRYPTED_PDF} off. This fork enables every feature, so the encrypted variant is
+     * one this build really can produce and must therefore be marked. Updated rather than
+     * skipped — the stuck-spinner regression is exactly what this test exists to catch, and it
+     * bites hardest when there are more document types, not fewer.
      */
     @Test
     @CommunityOnly
-    void generateReport_marksOnlyTheTypesThisBuildCanProduce() throws Exception {
+    void generateReport_marksEveryTypeIncludingTheEncryptedVariant() throws Exception {
         doNothing().when(reportGenerationTrigger).trigger(anyString(), anyString());
 
         mockMvc.perform(post("/api/v1/reports/{id}/generate", testAssessment.getId())
@@ -280,8 +285,8 @@ class ReportControllerTest extends TestContainersConfig {
         mockMvc.perform(get("/api/v1/reports/{id}/documents", testAssessment.getId())
                         .header("Authorization", "Bearer " + jwtToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.documents.length()").value(2))
-                .andExpect(jsonPath("$.data.documents[?(@.type == 'ENCRYPTED_PDF')]").isEmpty());
+                .andExpect(jsonPath("$.data.documents.length()").value(3))
+                .andExpect(jsonPath("$.data.documents[?(@.type == 'ENCRYPTED_PDF')]").isNotEmpty());
     }
 
     @Test

@@ -25,22 +25,43 @@ class EditionPolicyTest {
         assertThat(community.limit(Quota.EXTENSIONS)).isEqualTo(2);
     }
 
+    /**
+     * Fork-local: upstream asserts every feature is off here. This fork opens the gate, so
+     * the assertion is inverted rather than deleted — it still pins the behaviour, so an
+     * upstream rebase that quietly restores {@code return false} fails loudly instead of
+     * silently emptying the Sections tab again.
+     */
     @Test
-    void communityDisablesEveryPaidFeature() {
+    void everyFeatureIsEnabledInThisFork() {
         for (Feature feature : Feature.values()) {
             assertThat(community.enabled(feature))
-                    .as("%s must be off in the open source edition", feature)
-                    .isFalse();
+                    .as("%s must be on in this fork", feature)
+                    .isTrue();
         }
     }
 
     @Test
+    void requireAllowsEveryFeatureInThisFork() {
+        for (Feature feature : Feature.values()) {
+            assertThatCode(() -> community.require(feature))
+                    .as("%s must not be refused in this fork", feature)
+                    .doesNotThrowAnyException();
+        }
+    }
+
+    /**
+     * The refusal path still has to work: {@code require} is what the overlay seam and the
+     * {@code @RequiresFeature} interceptor rely on, and a fork that never refuses anything
+     * would otherwise leave it untested.
+     */
+    @Test
     void requireThrowsForAnUnlicensedFeatureAndNamesIt() {
-        assertThatThrownBy(() -> community.require(Feature.SSO))
+        EditionPolicy featuresOff = new FeaturesOffEditionPolicy();
+
+        assertThatThrownBy(() -> featuresOff.require(Feature.SSO))
                 .isInstanceOf(FeatureNotLicensedException.class)
                 .satisfies(ex -> assertThat(((FeatureNotLicensedException) ex).getFeature())
                         .isEqualTo(Feature.SSO));
-
     }
 
     /**

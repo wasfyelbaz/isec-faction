@@ -24,8 +24,12 @@ class EditionStatusServiceTest {
         return new EditionStatusService(policy, quotaUsageService, UPGRADE_URL);
     }
 
+    /**
+     * Fork-local: features are all on, but the quota caps are untouched — this fork opened
+     * the feature gate only, not the countable limits.
+     */
     @Test
-    void reportsEveryFeatureAsOffAndEveryCapForCommunity() {
+    void reportsEveryFeatureAsOnAndEveryCapForCommunity() {
         when(quotaUsageService.current(Quota.AI_PROVIDERS)).thenReturn(1L);
         when(quotaUsageService.current(Quota.AI_PROMPTS)).thenReturn(0L);
         when(quotaUsageService.current(Quota.EXTENSIONS)).thenReturn(2L);
@@ -33,8 +37,8 @@ class EditionStatusServiceTest {
         EditionStatusDto status = serviceFor(new CommunityEditionPolicy()).status();
 
         assertThat(status.getEdition()).isEqualTo("COMMUNITY");
-        assertThat(status.getFeatures()).hasSize(Feature.values().length).containsValue(false);
-        assertThat(status.getFeatures()).doesNotContainValue(true);
+        assertThat(status.getFeatures()).hasSize(Feature.values().length).containsValue(true);
+        assertThat(status.getFeatures()).doesNotContainValue(false);
         assertThat(status.getLimits())
                 .doesNotContainKey("users")
                 .containsEntry("ai_providers", 1)

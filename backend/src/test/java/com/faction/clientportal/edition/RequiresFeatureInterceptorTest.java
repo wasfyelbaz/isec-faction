@@ -81,8 +81,8 @@ class RequiresFeatureInterceptorTest {
     }
 
     @Test
-    void blocksAnAnnotatedMethodInTheCommunityEdition() {
-        Guarded guarded = proxy(new Guarded(), new CommunityEditionPolicy());
+    void blocksAnAnnotatedMethodWhenTheFeatureIsOff() {
+        Guarded guarded = proxy(new Guarded(), new FeaturesOffEditionPolicy());
 
         assertThatThrownBy(guarded::paid)
                 .isInstanceOf(FeatureNotLicensedException.class)
@@ -106,7 +106,7 @@ class RequiresFeatureInterceptorTest {
 
     @Test
     void honoursATypeLevelAnnotation() {
-        WhollyGuarded guarded = proxy(new WhollyGuarded(), new CommunityEditionPolicy());
+        WhollyGuarded guarded = proxy(new WhollyGuarded(), new FeaturesOffEditionPolicy());
 
         assertThatThrownBy(guarded::anything)
                 .isInstanceOf(FeatureNotLicensedException.class)

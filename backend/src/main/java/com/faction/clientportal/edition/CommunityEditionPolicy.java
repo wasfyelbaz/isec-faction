@@ -25,9 +25,20 @@ public class CommunityEditionPolicy implements EditionPolicy {
         return Edition.COMMUNITY;
     }
 
+    /**
+     * Fork-local divergence from upstream: every feature is on.
+     *
+     * <p>Upstream returns {@code false} here, because this is the seam the commercial overlay
+     * supersedes. This fork is self-hosted under the Apache 2.0 licence with no overlay to
+     * install, so the gate is simply open. Report sections are the reason — the iSec MAPT
+     * template files its findings into named sections and renders nothing without them — but
+     * the switch is deliberately blanket rather than per-feature.
+     *
+     * <p>Expect a merge conflict on this method when rebasing on upstream. Keep this version.
+     */
     @Override
     public boolean enabled(Feature feature) {
-        return false;
+        return true;
     }
 
     @Override

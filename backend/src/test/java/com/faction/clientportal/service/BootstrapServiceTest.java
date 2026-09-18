@@ -74,23 +74,27 @@ class BootstrapServiceTest extends TestContainersConfig {
 
 
     /**
-     * The open source edition's entire role model.
+     * This fork's role model.
      *
-     * <p>The enterprise version of this test asserts ten roles; skipping it in the open
-     * source build would leave that build asserting nothing at all about the two roles it
-     * actually ships — which is the whole of its access control.
+     * <p>Upstream asserts two roles here, because upstream's {@code CommunityEditionPolicy}
+     * gates {@code CUSTOM_ROLES} and {@code EXTERNAL_OWNERS} off and
+     * {@link com.faction.clientportal.service.BootstrapService} only seeds the extra roles
+     * when they are on. This fork opens every feature, so a fresh install seeds the full set
+     * of ten. The assertion is updated rather than skipped: role seeding is the whole of
+     * access control at first start, and a build that asserts nothing about it is worse than
+     * one that asserts the wrong number.
      */
     @CommunityOnly
     @Test
-    void run_communityEdition_seedsOnlySuperAdminAndPentester() {
+    void run_seedsTheFullRoleSetBecauseThisForkEnablesEveryFeature() {
         ApplicationArguments args = mock(ApplicationArguments.class);
 
         bootstrapService.run(args);
 
         assertThat(userRepository.count()).isEqualTo(2);
         assertThat(roleRepository.count())
-                .as("the open source edition ships Super Admin and Pentester, and nothing else")
-                .isEqualTo(2);
+                .as("CUSTOM_ROLES and EXTERNAL_OWNERS are on, so every seeder runs")
+                .isEqualTo(10);
 
         Optional<Role> superAdmin = roleRepository.findByName("SuperAdmin");
         assertThat(superAdmin).isPresent();
@@ -98,16 +102,16 @@ class BootstrapServiceTest extends TestContainersConfig {
 
         Optional<Role> pentester = roleRepository.findByName("Pentester");
         assertThat(pentester).isPresent();
-        // Same canonical permission set as the paid edition — the gate is on minting new
-        // roles, never on what the two built-in ones can do.
+        // The two built-in roles are unaffected by the gate — it only ever governed whether
+        // additional roles get minted, never what these can do.
         assertThat(pentester.get().getPermissions()).hasSize(27);
         assertThat(pentester.get().getPermissions())
                 .contains("assessments:read:assigned", "assessments:edit:assigned",
                           "report_templates:read:all", "organizations:read:all");
 
         assertThat(roleRepository.findByName("Organization Read"))
-                .as("external portal roles are an enterprise feature")
-                .isEmpty();
+                .as("external portal roles are seeded now that EXTERNAL_OWNERS is on")
+                .isPresent();
     }
 
     @EnterpriseOnly
