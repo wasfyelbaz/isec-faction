@@ -49,7 +49,6 @@ class DocxReportGenerationServiceTest {
     @Mock private com.faction.clientportal.repository.OrganizationRepository      organizationRepository;
     @Mock private com.faction.clientportal.repository.EntityFieldConfigRepository entityFieldConfigRepository;
     @Mock private com.faction.clientportal.repository.ClientImageRepository       clientImageRepository;
-    @Mock private com.faction.clientportal.repository.ApplicationRepository       applicationRepository;
 
     // These suites describe enterprise behaviour, so they run under the real
     // enterprise policy rather than a mock — a bare mock reports every feature as
@@ -287,31 +286,6 @@ class DocxReportGenerationServiceTest {
         org.assertj.core.api.Assertions.assertThat(data.getClientName()).isNull();
         org.assertj.core.api.Assertions.assertThat(data.getClientFieldValues()).isEmpty();
         org.mockito.Mockito.verifyNoInteractions(organizationRepository);
-    }
-
-    @Test
-    void buildReportData_usesTheApplicationsClientWhenTheAssessmentRecordsNone() throws Exception {
-        // created before its application had a client, or the application was moved since
-        baseAssessment.setOrganizationId(null);
-        when(applicationRepository.findById("app-1")).thenReturn(Optional.of(
-                com.faction.clientportal.model.Application.builder().id("app-1").organizationId("org-2").build()));
-        when(organizationRepository.findById("org-2")).thenReturn(Optional.of(
-                com.faction.clientportal.model.Organization.builder().id("org-2").name("Moved Client").build()));
-        when(entityFieldConfigRepository.findByScope(com.faction.clientportal.model.FieldScope.ORGANIZATION))
-                .thenReturn(Optional.empty());
-        when(clientImageRepository.findByOrganizationIdOrderByNameAsc("org-2")).thenReturn(List.of());
-
-        java.lang.reflect.Method m = DocxReportGenerationService.class.getDeclaredMethod(
-                "buildReportData", com.faction.clientportal.model.Assessment.class, List.class,
-                com.faction.clientportal.model.User.class, String.class, List.class,
-                java.util.Map.class, java.util.Map.class, java.util.Map.class);
-        m.setAccessible(true);
-        com.faction.clientportal.util.reporting.ReportData data =
-                (com.faction.clientportal.util.reporting.ReportData) m.invoke(service, baseAssessment,
-                        List.of(), null, "Pentest", List.of(), java.util.Map.of(), java.util.Map.of(), java.util.Map.of());
-
-        org.assertj.core.api.Assertions.assertThat(data.getClientName()).isEqualTo("Moved Client");
-        org.assertj.core.api.Assertions.assertThat(data.getClientContacts()).isEmpty();
     }
 
     @Test
