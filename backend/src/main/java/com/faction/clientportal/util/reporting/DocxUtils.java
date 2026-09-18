@@ -1029,7 +1029,12 @@ public class DocxUtils {
                 }
             }
 
+            // The rich-text paragraphs just inserted expand to as many blocks as their HTML has
+            // (steps, screenshots, code, tables), or to none. Advance the insertion point by that
+            // difference, or the next finding lands inside this one's Proof of Concept.
+            int sizeBefore = mlp.getMainDocumentPart().getContent().size();
             replaceHTML(mlp.getMainDocumentPart(), map2, true);
+            begin += mlp.getMainDocumentPart().getContent().size() - sizeBefore;
         }
     }
 
