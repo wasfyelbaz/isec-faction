@@ -152,3 +152,7 @@ libreoffice:
     managed: ${LIBREOFFICE_SERVER_MANAGED:true}
     port: ${LIBREOFFICE_SERVER_PORT:2002}
     startup-timeout-seconds: ${LIBREOFFICE_SERVER_STARTUP_TIMEOUT_SECONDS:90}
+    # The server's own user profile. LibreOffice is single-instance per profile, so on the default
+    # profile every `soffice --convert-to` (PDF preview) would hand its job to the server and take it
+    # down when done; a separate profile keeps the two apart.
+    profile-dir: ${LIBREOFFICE_SERVER_PROFILE_DIR:${java.io.tmpdir}/faction-libreoffice-server}

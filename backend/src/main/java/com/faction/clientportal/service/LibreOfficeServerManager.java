@@ -8,6 +8,9 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -20,6 +23,13 @@ import java.util.concurrent.TimeUnit;
  * in a substitute and gets every page number wrong, while the PDF — converted by a fresh process
  * that does see the font — paginates differently. {@link ReportFontInstaller} therefore starts the
  * server only once the uploaded fonts are on disk, and restarts it whenever they change.
+ *
+ * <p>The server runs on its own user profile ({@code libreoffice.server.profile-dir}). LibreOffice
+ * is single-instance per profile: a {@code soffice --convert-to} started for a PDF preview on the
+ * same profile hands its job to the running server and takes the server down with it when the job
+ * ends, which is what used to leave every later report on the CLI fallback with stale page numbers.
+ * On a profile of its own the server is untouched by conversions. {@link #ensureRunning()} is the
+ * safety net for anything else that kills it.
  *
  * <p>{@code libreoffice.server.managed=false} switches all of this off for installs that run
  * soffice some other way; every method is then a no-op and the pool connects to whatever listens
@@ -40,6 +50,9 @@ public class LibreOfficeServerManager {
 
     @Value("${libreoffice.server.startup-timeout-seconds:90}")
     private int startupTimeoutSeconds;
+
+    @Value("${libreoffice.server.profile-dir:${java.io.tmpdir}/faction-libreoffice-server}")
+    private String profileDir;
 
     /** The running server, or null. Guarded by {@code this}. */
     private Process process;
@@ -71,10 +84,7 @@ public class LibreOfficeServerManager {
             return;
         }
         try {
-            List<String> command = List.of(sofficePath,
-                    "--headless", "--norestore", "--nologo", "--nodefault", "--nofirststartwizard",
-                    "--accept=socket,host=localhost,port=" + port + ";urp;StarOffice.ServiceManager");
-            process = new ProcessBuilder(command)
+            process = new ProcessBuilder(buildCommand())
                     .redirectErrorStream(true)
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .start();
@@ -100,6 +110,37 @@ public class LibreOfficeServerManager {
             pause(500);
         }
         log.warn("LibreOffice did not open port {} within {}s", port, startupTimeoutSeconds);
+    }
+
+    /**
+     * Starts the server if the one this manager started is gone and nothing else answers on the
+     * port. Called before each use of the port, so a server that died (a crash, an OOM kill) comes
+     * back on the next report instead of every later report silently taking the CLI fallback.
+     */
+    public synchronized void ensureRunning() {
+        if (!managed || isRunning()) {
+            return;
+        }
+        if (process != null) {
+            log.warn("LibreOffice headless server (pid {}) is gone — starting a new one", process.pid());
+            process = null;
+            LibreOfficeConnectionPool.getInstance().clear();
+        }
+        start();
+    }
+
+    /**
+     * The command line, on its own profile. A stale lock in that profile (left by a server that
+     * was killed) would make the new one refuse to start, so it is cleared first.
+     */
+    List<String> buildCommand() throws IOException {
+        Path profile = Paths.get(profileDir).toAbsolutePath();
+        Files.createDirectories(profile);
+        Files.deleteIfExists(profile.resolve(".lock"));
+        return List.of(sofficePath,
+                "-env:UserInstallation=" + profile.toUri(),
+                "--headless", "--norestore", "--nologo", "--nodefault", "--nofirststartwizard",
+                "--accept=socket,host=localhost,port=" + port + ";urp;StarOffice.ServiceManager");
     }
 
     /**

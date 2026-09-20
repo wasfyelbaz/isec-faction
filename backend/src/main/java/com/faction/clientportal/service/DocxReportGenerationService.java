@@ -72,6 +72,7 @@ public class DocxReportGenerationService implements ReportGenerationService {
     private final StorageService                storageService;
     private final ReportDocumentService         reportDocumentService;
     private final LibreOfficeConverter          libreOfficeConverter;
+    private final LibreOfficeServerManager      libreOfficeServer;
     private final ReportEncryptor               reportEncryptor;
     private final com.faction.clientportal.service.extension.ExtensionEventService extensionEventService;
     private final TerminologyConfigService      terminologyConfigService;
@@ -664,6 +665,7 @@ public class DocxReportGenerationService implements ReportGenerationService {
         XComponent xDoc = null;
         LibreOfficeConnectionPool.PooledConnection pooledConn = null;
         LibreOfficeConnectionPool pool = LibreOfficeConnectionPool.getInstance();
+        libreOfficeServer.ensureRunning();
 
         try {
             tempFile = File.createTempFile("report-toc-", ".docx");
