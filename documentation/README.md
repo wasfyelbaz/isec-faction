@@ -7,6 +7,7 @@ Faction Client Portal is a Spring Boot REST API with a React frontend for managi
 ---
 
 ## Contents
+- [Report Fonts](report-fonts.md) — fonts for the PDF step, uploaded from the Report Designer
 
 | Document | Description |
 |----------|-------------|
