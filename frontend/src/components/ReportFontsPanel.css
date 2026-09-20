@@ -1,0 +1,135 @@
+.report-fonts-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  max-width: 640px;
+}
+
+.report-fonts-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+  font-size: 0.8125rem;
+}
+
+.report-fonts-warning svg {
+  flex: 0 0 auto;
+  margin-top: 0.125rem;
+}
+
+.report-fonts-error {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+  font-size: 0.8125rem;
+}
+
+.report-fonts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+/* family + style | file — the meta column takes the slack so the delete buttons line up. */
+.report-fonts-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--primary-bg);
+}
+
+.report-fonts-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.report-fonts-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.report-fonts-style {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.report-fonts-file {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-fonts-upload {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.report-fonts-file-input {
+  flex: 1;
+  min-width: 12rem;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+}
+
+.report-fonts-empty {
+  padding: 0.5rem 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.report-fonts-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.report-fonts-families-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8125rem;
+  color: var(--accent-color, #6366f1);
+  cursor: pointer;
+}
+
+.report-fonts-families-toggle:hover {
+  text-decoration: underline;
+}
+
+.report-fonts-family-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.report-fonts-family {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: var(--primary-bg);
+}

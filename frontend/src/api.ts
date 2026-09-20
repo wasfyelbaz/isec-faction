@@ -4,6 +4,7 @@ import type { MentionableUser, AssessorAvailability, RetestCompletionLog, Retest
   PasswordPolicy,
   TerminologyConfig,
   ClientImage,
+  ReportFont,
 } from './types';
 
 const api = axios.create({
@@ -652,6 +653,36 @@ export const clientImagesApi = {
   delete: async (orgId: string, name: string): Promise<ApiResponse<void>> => {
     const response = await api.delete<ApiResponse<void>>(
       `/organizations/${orgId}/images/${encodeURIComponent(name)}`);
+    return response.data;
+  },
+};
+
+/** Fonts installed on the server for the PDF step; see ReportFontsPanel. */
+export const reportFontsApi = {
+  list: async (): Promise<ApiResponse<ReportFont[]>> => {
+    const response = await api.get<ApiResponse<ReportFont[]>>('/report-fonts');
+    return response.data;
+  },
+
+  /** Every family LibreOffice can draw with on the server, bundled and uploaded alike. */
+  installedFamilies: async (): Promise<ApiResponse<string[]>> => {
+    const response = await api.get<ApiResponse<string[]>>('/report-fonts/installed');
+    return response.data;
+  },
+
+  /** One request for the whole selection, so the server installs once and restarts LibreOffice once. */
+  upload: async (files: File[]): Promise<ApiResponse<ReportFont[]>> => {
+    const form = new FormData();
+    files.forEach((file) => form.append('files', file));
+    const response = await api.post<ApiResponse<ReportFont[]>>(
+      '/report-fonts', form,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await api.delete<ApiResponse<void>>(`/report-fonts/${id}`);
     return response.data;
   },
 };

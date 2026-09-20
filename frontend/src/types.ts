@@ -303,6 +303,19 @@ export interface ClientImage {
   uploadedAt?: string;
 }
 
+/** A font file uploaded for the PDF step; see ReportFontsPanel. */
+export interface ReportFont {
+  id: string;
+  /** The family the font declares, e.g. "Calibri". */
+  family: string;
+  /** The style it declares: Regular, Bold, Italic, Bold Italic, Light… */
+  style: string;
+  fileName?: string;
+  fileSize?: number;
+  uploadedBy?: string;
+  uploadedAt?: string;
+}
+
 export interface OrganizationRemediationOwner {
   userId: string;
   username: string;

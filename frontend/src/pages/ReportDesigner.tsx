@@ -6,6 +6,7 @@ import RichTextEditor from '../components/RichTextEditor';
 import Page from '../components/Page';
 import Modal from '../components/Modal';
 import CssEditor from '../components/CssEditor';
+import ReportFontsPanel, { REPORT_FONT_FAMILIES_LIST_ID } from '../components/ReportFontsPanel';
 import './ReportDesigner.css';
 import { reportTemplatesApi, assessmentTypesApi } from '../api';
 import type { ReportTemplate, ReportTemplateSummary, UserDefinedField, FieldType, FieldScope, AssessmentType, ScoringType } from '../types';
@@ -70,6 +71,8 @@ export default function ReportDesigner() {
   const [toastVariant, setToastVariant] = useState<'success' | 'warning'>('success');
   const [error, setError] = useState<string | null>(null);
   const [cssExpanded, setCssExpanded] = useState(false);
+  /** What is typed in Report Font, per template: selectedTemplate is not refreshed on save, and the fonts panel must judge the live value. */
+  const [fontDraft, setFontDraft] = useState<{ id: string; value: string } | null>(null);
   // Clone dialog: the template being duplicated, plus the name to give the copy.
   const [cloneSource, setCloneSource] = useState<ReportTemplateSummary | null>(null);
   const [cloneName, setCloneName] = useState('');
@@ -915,10 +918,18 @@ export default function ReportDesigner() {
                       type="text"
                       key={`font-${selectedTemplate.id}`}
                       className="rd-input"
+                      list={REPORT_FONT_FAMILIES_LIST_ID}
+                      autoComplete="off"
                       defaultValue={selectedTemplate.font ?? ''}
-                      onChange={(e) => updateTemplate({ font: e.target.value })}
+                      onChange={(e) => { setFontDraft({ id: selectedTemplate.id, value: e.target.value }); updateTemplate({ font: e.target.value }); }}
                       placeholder="e.g. Arial"
                     />
+                  </div>
+                </div>
+                <div className="rd-row rd-row--top">
+                  <div className="rd-label">PDF Fonts</div>
+                  <div className="rd-value">
+                    <ReportFontsPanel reportFont={fontDraft?.id === selectedTemplate.id ? fontDraft.value : selectedTemplate.font} />
                   </div>
                 </div>
                 <div className="rd-row rd-row--top">
