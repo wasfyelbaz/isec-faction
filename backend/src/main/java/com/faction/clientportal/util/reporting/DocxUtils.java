@@ -1,6 +1,12 @@
 package com.faction.clientportal.util.reporting;
 
 import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.StringWriter;
 import java.math.BigInteger;
 import java.text.SimpleDateFormat;
@@ -18,19 +24,25 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import javax.imageio.ImageIO;
+
 import com.faction.clientportal.model.FieldType;
 import org.docx4j.TextUtils;
 import org.docx4j.TraversalUtil;
 import org.docx4j.XmlUtils;
 import org.docx4j.convert.in.xhtml.XHTMLImporterImpl;
+import org.docx4j.dml.wordprocessingDrawing.Inline;
 import org.docx4j.jaxb.Context;
 import org.docx4j.jaxb.XPathBinderAssociationIsPartialException;
 import org.docx4j.model.datastorage.migration.VariablePrepare;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
+import org.docx4j.openpackaging.parts.Part;
+import org.docx4j.openpackaging.parts.WordprocessingML.BinaryPartAbstractImage;
 import org.docx4j.openpackaging.parts.WordprocessingML.FooterPart;
 import org.docx4j.openpackaging.parts.WordprocessingML.HeaderPart;
 import org.docx4j.openpackaging.parts.WordprocessingML.MainDocumentPart;
+import org.docx4j.openpackaging.parts.relationships.Namespaces;
 import org.docx4j.openpackaging.parts.relationships.RelationshipsPart;
 import org.docx4j.toc.TocException;
 import org.docx4j.toc.TocGenerator;
@@ -38,6 +50,7 @@ import org.docx4j.wml.BooleanDefaultTrue;
 import org.docx4j.wml.Br;
 import org.docx4j.wml.CTShd;
 import org.docx4j.wml.ContentAccessor;
+import org.docx4j.wml.Drawing;
 import org.docx4j.wml.Ftr;
 import org.docx4j.wml.Hdr;
 import org.docx4j.wml.ObjectFactory;
@@ -1173,9 +1186,28 @@ public class DocxUtils {
      */
     public static final String CLIENT_FIELD_PREFIX = "asmtClient_";
 
-    /** {@code ${clientImage <name>}}, optionally {@code ${clientImage <name> width=<px>}}. */
-    private static final Pattern CLIENT_IMAGE =
-            Pattern.compile("^\\$\\{clientImage\\s+([A-Za-z0-9_-]+)(?:\\s+width=(\\d{1,4}))?\\s*\\}$");
+    /**
+     * {@code ${clientImage <name>}}, optionally followed by {@code width=<px>} and/or
+     * {@code height=<px>}, in either order.
+     */
+    private static final Pattern CLIENT_IMAGE = Pattern.compile(
+            "^\\$\\{clientImage\\s+([A-Za-z0-9_-]+)((?:\\s+(?:width|height)=\\d{1,4})*)\\s*\\}$");
+    private static final Pattern CLIENT_IMAGE_DIMENSION = Pattern.compile("(width|height)=(\\d{1,4})");
+
+    /** One CSS pixel at 96 dpi, in EMU. */
+    private static final long EMU_PER_PX = 9525L;
+
+    /** Widest a client image prints without an explicit size: the page width the HTML importer uses. */
+    private static final long CLIENT_IMAGE_MAX_CX = DocxUtils.IMAGE_MAX_WIDTH_TWIPS * 635L;
+
+    /** A logo fitted into a box is rasterised at this multiple of the printed size so it stays sharp. */
+    private static final int CLIENT_IMAGE_OVERSAMPLE = 4;
+
+    /** Drawing ids for the pictures this instance adds; Word wants them unique in the document. */
+    private int nextClientImageId = 500_000;
+
+    /** One image part per (part, slot, box), reused when a slot appears more than once in a part. */
+    private final Map<String, BinaryPartAbstractImage> clientImageParts = new HashMap<>();
 
     private static final String NO_CONTACTS_TEXT = "No contacts recorded for this client.";
 
@@ -1282,45 +1314,221 @@ public class DocxUtils {
 
     /**
      * Replaces every paragraph that is nothing but {@code ${clientImage <name>}} with the client's
-     * image of that name, embedded like a pasted screenshot (natural size, capped at the page
-     * width; {@code width=<px>} fixes it). A name the client has no image for leaves nothing
-     * behind, so a template may carry a logo slot that some clients never fill.
+     * image of that name, wherever the paragraph sits: body, table cell, text box, or the header
+     * or footer of any section. The paragraph keeps its own formatting (alignment, spacing), so
+     * the template decides where the picture sits.
+     *
+     * <p>Sizing: without a size the image prints at its natural size at 96 dpi, capped at the
+     * page width; {@code width=<px>} or {@code height=<px>} scales it keeping its proportions;
+     * both together define a box the logo is fitted into and centred on, so every client's logo
+     * occupies exactly the same space whatever its shape.
+     *
+     * <p>A name the client has no image for leaves nothing behind, so a template may carry a
+     * slot that some clients never fill. An image Java cannot rasterise (an SVG, say) still goes
+     * through the HTML importer in the body; in a header or footer the slot is left empty.
      */
     private void replaceClientImages(String customCSS) throws Docx4JException {
-        Map<String, byte[]> bytes = data.getClientImageBytes();
-        Map<String, List<Object>> replacements = new HashMap<>();
-        for (P paragraph : getParagraphs(mlp.getMainDocumentPart())) {
-            StringWriter paragraphText = new StringWriter();
-            try {
-                TextUtils.extractText(paragraph, paragraphText);
-            } catch (Exception ignored) {
-                continue;
+        Map<String, byte[]> images = data.getClientImageBytes() != null ? data.getClientImageBytes() : Map.of();
+        Map<String, List<Object>> htmlFallback = new HashMap<>();
+        List<Part> parts = new ArrayList<>();
+        parts.add(mlp.getMainDocumentPart());
+        parts.addAll(headerAndFooterParts());
+        for (Part part : parts) {
+            for (P paragraph : getParagraphs(part)) {
+                Matcher m = CLIENT_IMAGE.matcher(textOfParagraph(paragraph));
+                if (!m.matches()) continue;
+                String name = m.group(1);
+                byte[] image = images.get(name);
+                if (image == null) {
+                    removeParagraph(paragraph);
+                    continue;
+                }
+                Integer width = dimension(m.group(2), "width");
+                Integer height = dimension(m.group(2), "height");
+                R picture;
+                try {
+                    picture = clientImageRun(part, name, image, width, height);
+                } catch (Exception notARaster) {
+                    if (part instanceof MainDocumentPart) {
+                        if (!htmlFallback.containsKey(m.group(0))) {
+                            htmlFallback.put(m.group(0), clientImageHtml(name, image, width, customCSS));
+                        }
+                    } else {
+                        removeParagraph(paragraph);
+                    }
+                    continue;
+                }
+                paragraph.getContent().clear();
+                paragraph.getContent().add(picture);
             }
-            String token = paragraphText.toString().trim();
-            if (replacements.containsKey(token)) continue;
-            Matcher m = CLIENT_IMAGE.matcher(token);
-            if (!m.matches()) continue;
+        }
+        // once=false: the same slot may legitimately appear more than once.
+        if (!htmlFallback.isEmpty()) {
+            replaceHTML(mlp.getMainDocumentPart(), htmlFallback, false);
+        }
+    }
 
-            String name = m.group(1);
-            byte[] image = bytes == null ? null : bytes.get(name);
-            if (image == null) {
-                replacements.put(token, new ArrayList<>());
-                continue;
+    /** Every header and footer part the document references, whichever section uses it. */
+    private List<Part> headerAndFooterParts() {
+        List<Part> parts = new ArrayList<>();
+        RelationshipsPart rels = mlp.getMainDocumentPart().getRelationshipsPart();
+        if (rels == null) return parts;
+        for (org.docx4j.relationships.Relationship rel : rels.getRelationships().getRelationship()) {
+            if (!Namespaces.HEADER.equals(rel.getType()) && !Namespaces.FOOTER.equals(rel.getType())) continue;
+            Part part = rels.getPart(rel);
+            if ((part instanceof HeaderPart || part instanceof FooterPart) && !parts.contains(part)) {
+                parts.add(part);
             }
-            String contentType = data.getClientImageContentTypes() != null
-                    ? data.getClientImageContentTypes().getOrDefault(name, "image/png")
-                    : "image/png";
-            String html = "<p><img src=\"data:" + contentType + ";base64,"
-                    + Base64.getEncoder().encodeToString(image) + "\""
-                    + (m.group(2) != null ? " width=\"" + m.group(2) + "\"" : "")
-                    + " alt=\"" + name + "\"/></p>";
-            replacements.put(token, wrapHTML(html, customCSS, "clientImage"));
         }
-        // once=false: the same slot may legitimately appear more than once, say on the cover
-        // and in a header table.
-        if (!replacements.isEmpty()) {
-            replaceHTML(mlp.getMainDocumentPart(), replacements, false);
+        return parts;
+    }
+
+    private static String textOfParagraph(P paragraph) {
+        StringWriter sw = new StringWriter();
+        try {
+            TextUtils.extractText(paragraph, sw);
+        } catch (Exception ignored) {
+            return "";
         }
+        return sw.toString().trim();
+    }
+
+    private static Integer dimension(String options, String key) {
+        if (options == null) return null;
+        Matcher m = CLIENT_IMAGE_DIMENSION.matcher(options);
+        while (m.find()) {
+            if (key.equals(m.group(1))) {
+                int value = Integer.parseInt(m.group(2));
+                return value > 0 ? value : null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Drops the paragraph, or just empties it when it is all its container holds: a table cell
+     * or a text box must keep at least one paragraph to stay a valid document.
+     */
+    private static void removeParagraph(P paragraph) {
+        Object parent = paragraph.getParent();
+        List<Object> siblings = parent instanceof ContentAccessor ? ((ContentAccessor) parent).getContent() : null;
+        if (siblings != null && siblings.size() > 1 && siblings.remove(paragraph)) return;
+        paragraph.getContent().clear();
+    }
+
+    /** The picture as a run: an image part on {@code part} (so it renders there) and an inline drawing. */
+    private R clientImageRun(Part part, String name, byte[] image, Integer width, Integer height) throws Exception {
+        BufferedImage raster = ImageIO.read(new ByteArrayInputStream(image));
+        if (raster == null) throw new IllegalArgumentException("not a raster image: " + name);
+        byte[] payload = image;
+        long px = raster.getWidth();
+        long py = raster.getHeight();
+        if (width != null && height != null) {
+            payload = fitIntoBox(raster, width, height);
+            px = width;
+            py = height;
+        } else if (width != null) {
+            py = Math.max(1, Math.round(py * (width / (double) px)));
+            px = width;
+        } else if (height != null) {
+            px = Math.max(1, Math.round(px * (height / (double) py)));
+            py = height;
+        }
+        long cx = px * EMU_PER_PX;
+        long cy = py * EMU_PER_PX;
+        if (cx > CLIENT_IMAGE_MAX_CX) {
+            cy = Math.max(1, Math.round(cy * (CLIENT_IMAGE_MAX_CX / (double) cx)));
+            cx = CLIENT_IMAGE_MAX_CX;
+        }
+        String key = part.getPartName().getName() + "|" + name + "|" + width + "x" + height;
+        BinaryPartAbstractImage imagePart = clientImageParts.get(key);
+        if (imagePart == null) {
+            imagePart = BinaryPartAbstractImage.createImagePart(mlp, part, payload);
+            clientImageParts.put(key, imagePart);
+        }
+        Inline inline = imagePart.createImageInline(name, name, nextClientImageId++, nextClientImageId++, cx, cy, false);
+        ObjectFactory factory = Context.getWmlObjectFactory();
+        Drawing drawing = factory.createDrawing();
+        drawing.getAnchorOrInline().add(inline);
+        R run = factory.createR();
+        run.getContent().add(drawing);
+        return run;
+    }
+
+    /**
+     * The logo scaled to fit inside a {@code boxW x boxH} px box, keeping its proportions, centred
+     * on a transparent canvas of exactly that box, as PNG. Rasterised oversampled so it prints sharp.
+     */
+    private static byte[] fitIntoBox(BufferedImage source, int boxW, int boxH) throws IOException {
+        source = trimBorders(source);
+        int canvasW = boxW * CLIENT_IMAGE_OVERSAMPLE;
+        int canvasH = boxH * CLIENT_IMAGE_OVERSAMPLE;
+        double scale = Math.min(canvasW / (double) source.getWidth(), canvasH / (double) source.getHeight());
+        int w = Math.max(1, (int) Math.round(source.getWidth() * scale));
+        int h = Math.max(1, (int) Math.round(source.getHeight() * scale));
+        BufferedImage canvas = new BufferedImage(canvasW, canvasH, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = canvas.createGraphics();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.drawImage(source, (canvasW - w) / 2, (canvasH - h) / 2, w, h, null);
+        } finally {
+            g.dispose();
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(canvas, "png", out);
+        return out.toByteArray();
+    }
+
+    /**
+     * The image without its empty margins: transparent borders, and borders in the flat colour
+     * of the image's corners (a white or solid background). Logo files routinely carry generous
+     * padding, and fitting the padding into the box would print the mark smaller than the box
+     * suggests; trimming first makes "same box" mean the same visible size for every client.
+     */
+    static BufferedImage trimBorders(BufferedImage source) {
+        int w = source.getWidth();
+        int h = source.getHeight();
+        int corner = source.getRGB(0, 0);
+        int minX = w;
+        int minY = h;
+        int maxX = -1;
+        int maxY = -1;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int argb = source.getRGB(x, y);
+                if (((argb >>> 24) < 16) || nearlySameColour(argb, corner)) continue;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+        if (maxX < 0 || (minX == 0 && minY == 0 && maxX == w - 1 && maxY == h - 1)) return source;
+        return source.getSubimage(minX, minY, maxX - minX + 1, maxY - minY + 1);
+    }
+
+    private static boolean nearlySameColour(int a, int b) {
+        if ((a >>> 24) < 16 && (b >>> 24) < 16) return true;
+        if (((a >>> 24) < 16) != ((b >>> 24) < 16)) return false;
+        int dr = ((a >> 16) & 0xFF) - ((b >> 16) & 0xFF);
+        int dg = ((a >> 8) & 0xFF) - ((b >> 8) & 0xFF);
+        int db = (a & 0xFF) - (b & 0xFF);
+        return dr * dr + dg * dg + db * db <= 12 * 12 * 3;
+    }
+
+    /** The pre-existing HTML route, kept for images Java cannot rasterise. */
+    private List<Object> clientImageHtml(String name, byte[] image, Integer width, String customCSS)
+            throws Docx4JException {
+        String contentType = data.getClientImageContentTypes() != null
+                ? data.getClientImageContentTypes().getOrDefault(name, "image/png")
+                : "image/png";
+        String html = "<p><img src=\"data:" + contentType + ";base64,"
+                + Base64.getEncoder().encodeToString(image) + "\""
+                + (width != null ? " width=\"" + width + "\"" : "")
+                + " alt=\"" + name + "\"/></p>";
+        return wrapHTML(html, customCSS, "clientImage");
     }
 
     // ── vuln count helpers ───────────────────────────────────────────────────
