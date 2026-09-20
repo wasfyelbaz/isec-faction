@@ -24,10 +24,23 @@ ENV APP_VERSION=${APP_VERSION}
 
 WORKDIR /app
 
-# Install wget (health checks) and LibreOffice headless (TOC refresh via UNO)
+# Install wget (health checks), tini (reaps the LibreOffice processes the application spawns and
+# restarts; as PID 1 the JVM would leave them as zombies), LibreOffice headless (TOC refresh via
+# UNO, DOCX to PDF) and the fonts the PDF step draws with.
+#
+# --no-install-recommends leaves LibreOffice with DejaVu alone, and a report set in Calibri, Arial
+# or Times New Roman came out of the PDF in DejaVu Sans whatever the template said. Carlito and
+# Liberation are the free, metric-compatible stand-ins LibreOffice substitutes for Calibri, Arial,
+# Times New Roman and Courier New by itself; fonts/ carries the real Calibri family on top so PDFs
+# match Word exactly. Fonts uploaded from the Report Designer are installed at runtime into
+# REPORT_FONTS_DIR (see ReportFontInstaller); nothing here needs rebuilding to add one.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends wget libreoffice-writer && \
+    apt-get install -y --no-install-recommends wget tini libreoffice-writer \
+        fontconfig fonts-crosextra-carlito fonts-liberation && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY fonts/ /usr/share/fonts/truetype/faction-bundled/
+RUN fc-cache -f
 
 # Copy the built jar from build stage.
 #
@@ -36,7 +49,7 @@ RUN apt-get update && \
 # library jar and the container dies with "no main manifest attribute, in app.jar".
 COPY --from=build /app/target/*-boot.jar app.jar
 
-# Entrypoint script starts LibreOffice headless server, then the Spring app
+# Entrypoint script starts the Spring app; the app starts (and restarts) LibreOffice itself
 COPY entrypoint.sh entrypoint.sh
 RUN chmod +x entrypoint.sh
 
@@ -47,4 +60,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=5 \
   CMD wget --quiet --tries=1 --spider http://localhost:8080/actuator/health || exit 1
 
-ENTRYPOINT ["./entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--", "./entrypoint.sh"]

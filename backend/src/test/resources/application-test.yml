@@ -13,7 +13,16 @@ spring:
          jdbc:
            time_zone: UTC
 
+libreoffice:
+  server:
+    # Never spawn soffice from a test context.
+    managed: false
+
 faction:
+  report-fonts:
+    # A scratch directory: the suite must not write into the machine's font directories.
+    install-dir: ${java.io.tmpdir}/faction-report-fonts-test
+
   default-report-template:
     # Blank, so the suite never reaches out to GitHub. BootstrapService is an ApplicationRunner
     # and runs in every @SpringBootTest context, so inheriting the real URL would download the

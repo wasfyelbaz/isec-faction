@@ -99,6 +99,17 @@ public class LibreOfficeConnectionPool {
         }
     }
 
+    /**
+     * Drops every pooled connection. Called when the server is restarted: each one holds a socket
+     * to the old process, and handing it out would fail on first use.
+     */
+    public void clear() {
+        PooledConnection conn;
+        while ((conn = pool.poll()) != null) {
+            conn.invalidate();
+        }
+    }
+
     public String getPoolStats() {
         return String.format("pool=%d/%d", pool.size(), poolSize);
     }

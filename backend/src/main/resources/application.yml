@@ -84,6 +84,12 @@ sso:
   encryption-key: ${SSO_ENCRYPTION_KEY:}
 
 faction:
+  report-fonts:
+    # Where fonts uploaded from the Report Designer are written for LibreOffice to find. Under
+    # /usr/share/fonts so fontconfig scans it without any configuration; the bundled fonts live in
+    # the image beside it (see Dockerfile).
+    install-dir: ${REPORT_FONTS_DIR:/usr/share/fonts/truetype/faction-uploaded}
+
   security:
     # Failed password attempts before the account is disabled. A disabled user cannot log in and
     # their API keys go inert; an admin re-enables them from the Users page, which also clears the
@@ -134,3 +140,15 @@ management:
        show-details: always
        db:
          enabled: true
+
+libreoffice:
+  path: ${LIBREOFFICE_PATH:soffice}
+  timeout-seconds: ${LIBREOFFICE_TIMEOUT_SECONDS:60}
+  server:
+    # The headless server the TOC refresh talks to over UNO. The application starts it once the
+    # uploaded report fonts are installed and restarts it whenever they change, so the font list
+    # it laid the table of contents out with is the one the PDF is drawn with. false: something
+    # else starts soffice on the port and it is left alone.
+    managed: ${LIBREOFFICE_SERVER_MANAGED:true}
+    port: ${LIBREOFFICE_SERVER_PORT:2002}
+    startup-timeout-seconds: ${LIBREOFFICE_SERVER_STARTUP_TIMEOUT_SECONDS:90}

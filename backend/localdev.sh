@@ -1,14 +1,8 @@
 
-# Start LibreOffice headless server in the background so the Java UNO
-# connection pool can connect to it for TOC refresh on report generation.
-soffice --headless --norestore \
-  --accept="socket,host=localhost,port=2002;urp;StarOffice.ServiceManager" &
-
-LO_PID=$!
-echo "Started LibreOffice headless server (pid $LO_PID) on port 2002"
-
-# Give LO a moment to finish initializing before the app tries to connect
-sleep 3
+# LibreOffice is started by the application itself (LibreOfficeServerManager), so it can be
+# restarted when a report font is uploaded. Uploaded fonts are installed under REPORT_FONTS_DIR;
+# point it somewhere writable when not running as root.
+export REPORT_FONTS_DIR="${REPORT_FONTS_DIR:-$HOME/.local/share/fonts/faction-uploaded}"
 
 # SSO_ENCRYPTION_KEY encrypts SMTP/IMAP credentials and report passwords at rest.
 #
