@@ -69,3 +69,4 @@ Faction Client Portal is a Spring Boot REST API with a React frontend for managi
 | Real-time | Server-Sent Events (SSE) |
 | Frontend | React 18, TypeScript, Vite |
 | Rich Text | Toast UI Editor (Markdown/WYSIWYG) |
+- [Converting an iSec report template for Faction](../report-templates/AGENT.md): the agent guide (engine rules, variables, UDF conventions, images and client logo, headers/footers, findings layouts, fonts, Word vs LibreOffice, validation, workflow).
