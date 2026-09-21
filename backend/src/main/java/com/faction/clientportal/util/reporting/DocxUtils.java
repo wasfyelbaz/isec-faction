@@ -31,6 +31,11 @@ import org.docx4j.TextUtils;
 import org.docx4j.TraversalUtil;
 import org.docx4j.XmlUtils;
 import org.docx4j.convert.in.xhtml.XHTMLImporterImpl;
+import org.docx4j.dml.chart.CTBarChart;
+import org.docx4j.dml.chart.CTBarSer;
+import org.docx4j.dml.chart.CTChartSpace;
+import org.docx4j.dml.chart.CTNumVal;
+import org.docx4j.dml.chart.CTStrVal;
 import org.docx4j.dml.wordprocessingDrawing.Inline;
 import org.docx4j.jaxb.Context;
 import org.docx4j.jaxb.XPathBinderAssociationIsPartialException;
@@ -38,6 +43,8 @@ import org.docx4j.model.datastorage.migration.VariablePrepare;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.Part;
+import org.docx4j.openpackaging.parts.DrawingML.Chart;
+import org.docx4j.openpackaging.parts.WordprocessingML.EmbeddedPackagePart;
 import org.docx4j.openpackaging.parts.WordprocessingML.BinaryPartAbstractImage;
 import org.docx4j.openpackaging.parts.WordprocessingML.FooterPart;
 import org.docx4j.openpackaging.parts.WordprocessingML.HeaderPart;
@@ -617,6 +624,7 @@ public class DocxUtils {
                     }
                     replaceHyperlink(newrow, "${cvssString link}",
                             v.getCvssString() == null ? "" : v.getCvssString());
+                    replaceCvssLinks(newrow, v.getCvssString());
 
                     ((Tbl) table).getContent().add(newrow);
 
@@ -747,6 +755,10 @@ public class DocxUtils {
         checkContactTables();
 
         replaceAssessment(customCSS);
+
+        // Native charts named by a ${chartData ...} marker take their numbers from the report
+        // (severity counts, checklist outcomes): cached values and embedded workbook together.
+        replaceChartData();
 
         // Client images last among the built-ins: a slot the client has no image for is removed
         // here rather than offered to an extension as an unknown placeholder.
@@ -1031,6 +1043,7 @@ public class DocxUtils {
                         }
                         replaceHyperlink(paragraph, "${cvssString link}",
                                 v.getCvssString() == null ? "" : v.getCvssString());
+                        replaceCvssLinks(paragraph, v.getCvssString());
                         mlp.getMainDocumentPart().getContent().add(begin++, paragraph);
                     } catch (Exception ex) {
                         ex.printStackTrace();
@@ -2370,10 +2383,346 @@ public class DocxUtils {
                         throw new IllegalStateException("could not locate the paragraph in the specified list!");
                     listToModify.remove(index);
                     listToModify.addAll(index, replacements.get(identifier));
+                    keepCellClosed(paragraph, listToModify);
                     if (once) replacements.remove(identifier);
                 }
             }
         }
+    }
+
+    // ── CVSS calculator links ───────────────────────────────────────────────
+
+    /** {@code ${cvssLink}} or {@code ${cvssLink Some label}} inside a Word hyperlink. */
+    private static final Pattern CVSS_LINK = Pattern.compile("\\$\\{cvssLink(?:\\s+([^}]*?))?\\s*\\}");
+    private static final Pattern CVSS_VECTOR_PREFIX = Pattern.compile("^CVSS:(\\d\\.\\d)/");
+
+    /**
+     * Points every hyperlink whose text carries {@code ${cvssLink ...}} at the NVD calculator
+     * for this finding's vector, keeping the template's own link text and run formatting.
+     *
+     * <p>{@code ${cvssString link}} shows the vector itself as the link text. A report that
+     * wants the score followed by a label, as in {@code 8.1 (View CVSS Metrics)}, writes
+     * {@code ${cvssScore} (${cvssLink View CVSS Metrics})}: the label stays, linked to
+     * {@code https://nvd.nist.gov/vuln-metrics/cvss/v3-calculator?vector=...&version=3.1}
+     * (the v4 calculator for a CVSS 4.0 template). Without a label the vector is shown.
+     */
+    private void replaceCvssLinks(Object node, String vector) {
+        try {
+            for (P.Hyperlink hyperlink : getHyperLinks(node)) {
+                String text = getHyperlinkDisplayText(hyperlink);
+                if (text == null || !CVSS_LINK.matcher(text).find()) continue;
+                String v = vector == null ? "" : vector.trim();
+                RelationshipsPart relsPart = mlp.getMainDocumentPart().getRelationshipsPart();
+                org.docx4j.relationships.Relationship rel = new org.docx4j.relationships.Relationship();
+                rel.setId(relsPart.getNextId());
+                rel.setType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink");
+                rel.setTarget(nvdCalculatorUrl(v, data.isCvss31()));
+                rel.setTargetMode("External");
+                relsPart.getRelationships().getRelationship().add(rel);
+                hyperlink.setId(rel.getId());
+                if (!replaceCvssLinkInRuns(hyperlink, v)) {
+                    // the tag was split over runs: rebuild the text, as ${cvssString link} does
+                    Matcher m = CVSS_LINK.matcher(text);
+                    updateHyperlinkDisplayText(hyperlink, m.replaceAll(mr -> Matcher.quoteReplacement(cvssLinkLabel(mr, v))));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static String cvssLinkLabel(java.util.regex.MatchResult m, String vector) {
+        String label = m.group(1);
+        return label == null || label.isBlank() ? vector : label.trim();
+    }
+
+    /** Swaps the tag inside the run that holds it, so bold or colour set in the template survive. */
+    private static boolean replaceCvssLinkInRuns(P.Hyperlink hyperlink, String vector) {
+        boolean done = false;
+        for (Object obj : hyperlink.getContent()) {
+            if (!(XmlUtils.unwrap(obj) instanceof R run)) continue;
+            for (Object rc : run.getContent()) {
+                Object el = XmlUtils.unwrap(rc);
+                if (!(el instanceof Text t) || t.getValue() == null) continue;
+                Matcher m = CVSS_LINK.matcher(t.getValue());
+                if (!m.find()) continue;
+                t.setValue(m.replaceAll(mr -> Matcher.quoteReplacement(cvssLinkLabel(mr, vector))));
+                t.setSpace("preserve");
+                done = true;
+            }
+        }
+        return done;
+    }
+
+    /**
+     * The NVD calculator URL for a vector, in NVD's own form
+     * ({@code ?vector=AV:N%2FAC:L%2F...&version=3.1}): slashes encoded, colons kept. A
+     * {@code CVSS:3.1/} prefix on the vector selects the version and is stripped; otherwise the
+     * template's scoring type decides between the v3 and v4 calculators.
+     */
+    static String nvdCalculatorUrl(String vector, boolean cvss31) {
+        String v = vector == null ? "" : vector.trim();
+        String version = cvss31 ? "3.1" : "4.0";
+        Matcher prefix = CVSS_VECTOR_PREFIX.matcher(v);
+        if (prefix.find()) {
+            version = prefix.group(1);
+            v = v.substring(prefix.end());
+        }
+        String base = version.startsWith("4")
+                ? "https://nvd.nist.gov/vuln-metrics/cvss/v4-calculator"
+                : "https://nvd.nist.gov/vuln-metrics/cvss/v3-calculator";
+        if (v.isEmpty()) return base;
+        return base + "?vector=" + v.replace("/", "%2F") + "&version=" + version;
+    }
+
+    // ── cells stay well-formed after a block replacement ────────────────────
+
+    /**
+     * A table cell or text box must end with a paragraph. When rich text placed into a cell ends
+     * with a table (a scope list typed as a table with no line after it), Word and LibreOffice
+     * "repair" the cell by unwrapping the whole outer table, and its header rows turn into loose
+     * paragraphs. An empty paragraph after the table keeps the cell valid; the body needs none.
+     */
+    private static void keepCellClosed(P replaced, List<Object> container) {
+        Object parent = replaced.getParent();
+        if (!(parent instanceof Tc) && !(parent instanceof CTTxbxContent)) return;
+        if (container.isEmpty() || XmlUtils.unwrap(container.get(container.size() - 1)) instanceof Tbl) {
+            container.add(Context.getWmlObjectFactory().createP());
+        }
+    }
+
+    // ── native charts fed by report data ────────────────────────────────────
+
+    /**
+     * {@code ${chartData severity}} or {@code ${chartData checklist}}, alone in a paragraph
+     * placed right before the chart it feeds.
+     */
+    private static final Pattern CHART_DATA = Pattern.compile("^\\$\\{chartData\\s+(severity|checklist)\\s*\\}$");
+    private static final Pattern CHART_REF = Pattern.compile("<(?:\\w+:)?chart\\b[^>]*?\\b(?:\\w+:)?id=\"([^\"]+)\"");
+    private static final Pattern CELL_RANGE = Pattern.compile("^(?:'?([^'!]+)'?!)?\\$?([A-Z]+)\\$?(\\d+)(?::\\$?([A-Z]+)\\$?(\\d+))?$");
+
+    /**
+     * Rewrites the next native chart after each marker from the report's own numbers, and
+     * drops the marker. Both places a chart keeps its data are updated: the cached values in the
+     * chart part, which Word and LibreOffice draw from, and the embedded workbook Word opens on
+     * "Edit Data", so the two never disagree.
+     *
+     * <p>{@code severity} feeds a series per severity label (the 2.6 Findings Distribution
+     * chart: one series, one point per severity); {@code checklist} feeds series named after
+     * the checklist outcomes ("Vulnerable" = failed items, "Secure" = passed items, "N/A"). A
+     * point is looked up by its category label when the series has several points, else by the
+     * series name, so either layout works. Bar charts only; anything else is left as it is.
+     */
+    private void replaceChartData() {
+        List<Object> content = mlp.getMainDocumentPart().getContent();
+        for (int i = 0; i < content.size(); i++) {
+            Object el = XmlUtils.unwrap(content.get(i));
+            if (!(el instanceof P)) continue;
+            Matcher m = CHART_DATA.matcher(textOfParagraph((P) el));
+            if (!m.matches()) continue;
+            Chart chart = nextChart(content, i + 1);
+            if (chart != null) {
+                try {
+                    feedChart(chart, "severity".equals(m.group(1)) ? severityChartValues() : checklistChartValues());
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+            content.remove(i);
+            i--;
+        }
+    }
+
+    private Chart nextChart(List<Object> content, int from) {
+        for (int j = from; j < content.size(); j++) {
+            Object el = XmlUtils.unwrap(content.get(j));
+            if (el instanceof P && CHART_DATA.matcher(textOfParagraph((P) el)).matches()) return null;
+            String xml;
+            try {
+                xml = XmlUtils.marshaltoString(content.get(j), true, false);
+            } catch (Exception e) {
+                continue;
+            }
+            Matcher r = CHART_REF.matcher(xml);
+            if (!r.find()) continue;
+            Part part = mlp.getMainDocumentPart().getRelationshipsPart().getPart(r.group(1));
+            return part instanceof Chart ? (Chart) part : null;
+        }
+        return null;
+    }
+
+    private Map<String, Integer> severityChartValues() {
+        Map<String, Integer> values = new HashMap<>();
+        for (ReportData.ReportVulnerability v : getFilteredVulns()) {
+            // One bucket per finding: the key when it is set, the displayed label otherwise. Counting
+            // both would double every finding, since "HIGH" and "High" are the same bucket.
+            String key = v.getSeverityKey() != null && !v.getSeverityKey().isBlank()
+                    ? v.getSeverityKey() : v.getSeverity();
+            if (key != null && !key.isBlank()) values.merge(key.trim().toLowerCase(), 1, Integer::sum);
+        }
+        for (String key : new String[] {"critical", "high", "medium", "low", "informational"}) values.putIfAbsent(key, 0);
+        values.putIfAbsent("info", values.get("informational"));
+        return values;
+    }
+
+    private Map<String, Integer> checklistChartValues() {
+        int passed = data.getChecklistPassed() == null ? 0 : data.getChecklistPassed();
+        int failed = data.getChecklistFailed() == null ? 0 : data.getChecklistFailed();
+        int na = data.getChecklistNotApplicable() == null ? 0 : data.getChecklistNotApplicable();
+        Map<String, Integer> values = new HashMap<>();
+        values.put("vulnerable", failed);
+        values.put("failed", failed);
+        values.put("fail", failed);
+        values.put("secure", passed);
+        values.put("not vulnerable", passed);
+        values.put("passed", passed);
+        values.put("pass", passed);
+        values.put("n/a", na);
+        values.put("na", na);
+        values.put("not applicable", na);
+        return values;
+    }
+
+    private void feedChart(Chart chart, Map<String, Integer> values) throws Exception {
+        CTChartSpace space = chart.getContents();
+        if (space == null || space.getChart() == null || space.getChart().getPlotArea() == null) return;
+        Map<String, Integer> byCell = new HashMap<>();
+        for (Object o : space.getChart().getPlotArea().getAreaChartOrArea3DChartOrLineChart()) {
+            if (!(o instanceof CTBarChart bar)) continue;
+            for (CTBarSer ser : bar.getSer()) {
+                if (ser.getVal() == null || ser.getVal().getNumRef() == null
+                        || ser.getVal().getNumRef().getNumCache() == null) continue;
+                String name = seriesName(ser);
+                List<String> categories = categoryLabels(ser);
+                String formula = ser.getVal().getNumRef().getF();
+                for (CTNumVal pt : ser.getVal().getNumRef().getNumCache().getPt()) {
+                    int idx = (int) pt.getIdx();
+                    String key = categories.size() > 1 && idx < categories.size() ? categories.get(idx) : name;
+                    Integer value = key == null ? null : values.get(key.trim().toLowerCase());
+                    if (value == null) continue;
+                    pt.setV(String.valueOf(value));
+                    String cell = cellAt(formula, idx);
+                    if (cell != null) byCell.put(cell, value);
+                }
+            }
+        }
+        if (!byCell.isEmpty()) updateEmbeddedWorkbooks(chart, byCell);
+    }
+
+    private static String seriesName(CTBarSer ser) {
+        if (ser.getTx() == null) return null;
+        if (ser.getTx().getStrRef() != null && ser.getTx().getStrRef().getStrCache() != null
+                && !ser.getTx().getStrRef().getStrCache().getPt().isEmpty()) {
+            return ser.getTx().getStrRef().getStrCache().getPt().get(0).getV();
+        }
+        return ser.getTx().getV();
+    }
+
+    private static List<String> categoryLabels(CTBarSer ser) {
+        List<String> labels = new ArrayList<>();
+        if (ser.getCat() == null || ser.getCat().getStrRef() == null || ser.getCat().getStrRef().getStrCache() == null) return labels;
+        for (CTStrVal pt : ser.getCat().getStrRef().getStrCache().getPt()) {
+            while (labels.size() <= pt.getIdx()) labels.add(null);
+            labels.set((int) pt.getIdx(), pt.getV());
+        }
+        return labels;
+    }
+
+    /** {@code Sheet1!$B$2:$B$6} at index 2 is {@code Sheet1!B4}; a single cell only serves index 0. */
+    static String cellAt(String formula, int idx) {
+        if (formula == null) return null;
+        Matcher m = CELL_RANGE.matcher(formula.trim());
+        if (!m.matches()) return null;
+        String sheet = m.group(1) == null ? "" : m.group(1);
+        String col = m.group(2);
+        int row = Integer.parseInt(m.group(3));
+        if (m.group(4) == null) return idx == 0 ? sheet + "!" + col + row : null;
+        String endCol = m.group(4);
+        int endRow = Integer.parseInt(m.group(5));
+        if (col.equals(endCol)) {
+            return row + idx <= endRow ? sheet + "!" + col + (row + idx) : null;
+        }
+        if (row == endRow) {
+            int c = columnNumber(col) + idx;
+            return c <= columnNumber(endCol) ? sheet + "!" + columnName(c) + row : null;
+        }
+        return null;
+    }
+
+    private static int columnNumber(String col) {
+        int n = 0;
+        for (char ch : col.toCharArray()) n = n * 26 + (ch - 'A' + 1);
+        return n;
+    }
+
+    private static String columnName(int n) {
+        StringBuilder sb = new StringBuilder();
+        while (n > 0) {
+            int r = (n - 1) % 26;
+            sb.insert(0, (char) ('A' + r));
+            n = (n - 1) / 26;
+        }
+        return sb.toString();
+    }
+
+    private static void updateEmbeddedWorkbooks(Chart chart, Map<String, Integer> byCell) throws Exception {
+        RelationshipsPart rels = chart.getRelationshipsPart();
+        if (rels == null) return;
+        for (org.docx4j.relationships.Relationship rel : rels.getRelationships().getRelationship()) {
+            Part part = rels.getPart(rel);
+            if (!(part instanceof EmbeddedPackagePart workbook)) continue;
+            java.nio.ByteBuffer buffer = workbook.getBuffer().duplicate();
+            buffer.rewind();
+            byte[] bytes = new byte[buffer.remaining()];
+            buffer.get(bytes);
+            workbook.setBinaryData(rewriteWorkbook(bytes, byCell));
+        }
+    }
+
+    /**
+     * Rewrites cell values in an xlsx kept as bytes: the sheet named in each key is found
+     * through the workbook's own sheet list, the cell's {@code <v>} replaced, and any shared-string
+     * marker dropped so the cell reads as a number. Untouched entries are copied as they are.
+     */
+    static byte[] rewriteWorkbook(byte[] xlsx, Map<String, Integer> byCell) throws IOException {
+        Map<String, byte[]> entries = new java.util.LinkedHashMap<>();
+        try (java.util.zip.ZipInputStream in = new java.util.zip.ZipInputStream(new ByteArrayInputStream(xlsx))) {
+            java.util.zip.ZipEntry e;
+            while ((e = in.getNextEntry()) != null) entries.put(e.getName(), in.readAllBytes());
+        }
+        Map<String, String> sheetFiles = new HashMap<>();
+        String workbookXml = entries.containsKey("xl/workbook.xml") ? new String(entries.get("xl/workbook.xml"), java.nio.charset.StandardCharsets.UTF_8) : "";
+        String workbookRels = entries.containsKey("xl/_rels/workbook.xml.rels") ? new String(entries.get("xl/_rels/workbook.xml.rels"), java.nio.charset.StandardCharsets.UTF_8) : "";
+        Matcher sheet = Pattern.compile("<sheet\\b[^>]*\\bname=\"([^\"]+)\"[^>]*\\b(?:\\w+:)?id=\"([^\"]+)\"").matcher(workbookXml);
+        while (sheet.find()) {
+            Matcher target = Pattern.compile("<Relationship\\b[^>]*\\bId=\"" + Pattern.quote(sheet.group(2)) + "\"[^>]*\\bTarget=\"([^\"]+)\"").matcher(workbookRels);
+            Matcher target2 = Pattern.compile("<Relationship\\b[^>]*\\bTarget=\"([^\"]+)\"[^>]*\\bId=\"" + Pattern.quote(sheet.group(2)) + "\"").matcher(workbookRels);
+            String path = target.find() ? target.group(1) : target2.find() ? target2.group(1) : null;
+            if (path != null) sheetFiles.put(sheet.group(1), path.startsWith("/") ? path.substring(1) : "xl/" + path);
+        }
+        for (Map.Entry<String, Integer> cell : byCell.entrySet()) {
+            int bang = cell.getKey().indexOf('!');
+            String sheetName = cell.getKey().substring(0, bang);
+            String ref = cell.getKey().substring(bang + 1);
+            String file = sheetFiles.getOrDefault(sheetName, "xl/worksheets/sheet1.xml");
+            byte[] data = entries.get(file);
+            if (data == null) continue;
+            String xml = new String(data, java.nio.charset.StandardCharsets.UTF_8);
+            Matcher c = Pattern.compile("<c\\b([^>]*?\\br=\"" + Pattern.quote(ref) + "\"[^>]*?)(/>|>.*?</c>)", Pattern.DOTALL).matcher(xml);
+            if (!c.find()) continue;
+            String attrs = c.group(1).replaceAll("\\s+t=\"[^\"]*\"", "");
+            xml = xml.substring(0, c.start()) + "<c" + attrs + "><v>" + cell.getValue() + "</v></c>" + xml.substring(c.end());
+            entries.put(file, xml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(out)) {
+            for (Map.Entry<String, byte[]> e : entries.entrySet()) {
+                zip.putNextEntry(new java.util.zip.ZipEntry(e.getKey()));
+                zip.write(e.getValue());
+                zip.closeEntry();
+            }
+        }
+        return out.toByteArray();
     }
 
     // ── hyperlink replacement ────────────────────────────────────────────────

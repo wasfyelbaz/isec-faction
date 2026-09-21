@@ -79,6 +79,19 @@ public class ReportData {
     /** Content types of {@link #clientImageBytes}, keyed by image name. */
     private Map<String, String> clientImageContentTypes;
 
+    // ── the assessment's checklists, summed over every checklist attached to it ──────────
+
+    /**
+     * Items answered PASS ("Secure" / "Not Vulnerable" in the iSec charts). Zero when the assessment
+     * has no checklist attached, which draws an empty chart on purpose: a chart left showing the
+     * template's placeholder numbers would read as real results.
+     */
+    private Integer checklistPassed;
+    /** Items answered FAIL ("Vulnerable"); zero when no checklist is attached. */
+    private Integer checklistFailed;
+    /** Items answered N/A; zero when no checklist is attached. */
+    private Integer checklistNotApplicable;
+
     /**
      * Inline image bytes keyed by image ID.
      * Used to embed images found in rich-text field content.

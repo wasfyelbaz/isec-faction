@@ -79,6 +79,7 @@ public class DocxReportGenerationService implements ReportGenerationService {
     private final OrganizationRepository        organizationRepository;
     private final EntityFieldConfigRepository   entityFieldConfigRepository;
     private final ClientImageRepository         clientImageRepository;
+    private final AssessmentChecklistRepository assessmentChecklistRepository;
 
     /**
      * The order findings appear in a report: the assessment's display order, exactly as the
@@ -462,8 +463,26 @@ public class DocxReportGenerationService implements ReportGenerationService {
             }
         }
 
+        // Checklist outcomes for the ${chartData checklist} chart: every checklist attached to the
+        // assessment counts, PASS / FAIL / NA summed across them.
+        int checklistPassed = 0, checklistFailed = 0, checklistNotApplicable = 0;
+        for (AssessmentChecklist checklist : assessmentChecklistRepository.findByAssessmentId(assessment.getId())) {
+            if (checklist.getResponses() == null) continue;
+            for (ChecklistResponse response : checklist.getResponses()) {
+                if (response.getResult() == null) continue;
+                switch (response.getResult()) {
+                    case PASS -> checklistPassed++;
+                    case FAIL -> checklistFailed++;
+                    case NA -> checklistNotApplicable++;
+                }
+            }
+        }
+
         return ReportData.builder()
                 .clientName(clientName)
+                .checklistPassed(checklistPassed)
+                .checklistFailed(checklistFailed)
+                .checklistNotApplicable(checklistNotApplicable)
                 .clientFieldValues(clientFieldValues)
                 .clientFieldTypes(clientFieldTypes)
                 .clientContacts(clientContacts)

@@ -49,6 +49,7 @@ class DocxReportGenerationServiceTest {
     @Mock private com.faction.clientportal.repository.OrganizationRepository      organizationRepository;
     @Mock private com.faction.clientportal.repository.EntityFieldConfigRepository entityFieldConfigRepository;
     @Mock private com.faction.clientportal.repository.ClientImageRepository       clientImageRepository;
+    @Mock private com.faction.clientportal.repository.AssessmentChecklistRepository assessmentChecklistRepository;
 
     // These suites describe enterprise behaviour, so they run under the real
     // enterprise policy rather than a mock — a bare mock reports every feature as
@@ -286,6 +287,58 @@ class DocxReportGenerationServiceTest {
         org.assertj.core.api.Assertions.assertThat(data.getClientName()).isNull();
         org.assertj.core.api.Assertions.assertThat(data.getClientFieldValues()).isEmpty();
         org.mockito.Mockito.verifyNoInteractions(organizationRepository);
+    }
+
+    /** The counts behind the template's ${chartData checklist} marker. */
+    @Test
+    void buildReportData_countsTheAssessmentChecklistOutcomes() throws Exception {
+        java.util.function.BiFunction<String, com.faction.clientportal.model.ChecklistResult,
+                com.faction.clientportal.model.ChecklistResponse> answer =
+                (text, result) -> com.faction.clientportal.model.ChecklistResponse.builder()
+                        .questionId(text).questionText(text).result(result).build();
+        when(assessmentChecklistRepository.findByAssessmentId("asmt-1")).thenReturn(List.of(
+                com.faction.clientportal.model.AssessmentChecklist.builder()
+                        .responses(new java.util.ArrayList<>(List.of(
+                                answer.apply("Brute Force/Spraying", com.faction.clientportal.model.ChecklistResult.PASS),
+                                answer.apply("Lateral Movement", com.faction.clientportal.model.ChecklistResult.FAIL),
+                                answer.apply("Buffer Overflow", com.faction.clientportal.model.ChecklistResult.NA),
+                                answer.apply("Injections", com.faction.clientportal.model.ChecklistResult.PASS))))
+                        .build()));
+
+        java.lang.reflect.Method m = DocxReportGenerationService.class.getDeclaredMethod(
+                "buildReportData", com.faction.clientportal.model.Assessment.class, List.class,
+                com.faction.clientportal.model.User.class, String.class, List.class,
+                java.util.Map.class, java.util.Map.class, java.util.Map.class);
+        m.setAccessible(true);
+        com.faction.clientportal.util.reporting.ReportData data =
+                (com.faction.clientportal.util.reporting.ReportData) m.invoke(service, baseAssessment,
+                        List.of(), null, "Pentest", List.of(), java.util.Map.of(), java.util.Map.of(), java.util.Map.of());
+
+        org.assertj.core.api.Assertions.assertThat(data.getChecklistPassed()).isEqualTo(2);
+        org.assertj.core.api.Assertions.assertThat(data.getChecklistFailed()).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(data.getChecklistNotApplicable()).isEqualTo(1);
+    }
+
+    /**
+     * No checklist attached: the counts are zero, so the 2.4 chart draws empty rather than keeping
+     * the template's placeholder numbers, which would read as real results.
+     */
+    @Test
+    void buildReportData_countsZeroWhenNoChecklistIsAttached() throws Exception {
+        when(assessmentChecklistRepository.findByAssessmentId("asmt-1")).thenReturn(List.of());
+
+        java.lang.reflect.Method m = DocxReportGenerationService.class.getDeclaredMethod(
+                "buildReportData", com.faction.clientportal.model.Assessment.class, List.class,
+                com.faction.clientportal.model.User.class, String.class, List.class,
+                java.util.Map.class, java.util.Map.class, java.util.Map.class);
+        m.setAccessible(true);
+        com.faction.clientportal.util.reporting.ReportData data =
+                (com.faction.clientportal.util.reporting.ReportData) m.invoke(service, baseAssessment,
+                        List.of(), null, "Pentest", List.of(), java.util.Map.of(), java.util.Map.of(), java.util.Map.of());
+
+        org.assertj.core.api.Assertions.assertThat(data.getChecklistPassed()).isZero();
+        org.assertj.core.api.Assertions.assertThat(data.getChecklistFailed()).isZero();
+        org.assertj.core.api.Assertions.assertThat(data.getChecklistNotApplicable()).isZero();
     }
 
     @Test
