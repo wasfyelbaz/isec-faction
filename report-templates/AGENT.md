@@ -1,8 +1,10 @@
 # AGENT.md — Converting an iSec report template for OWASP Faction 2
 
 Read this before touching any report template. It is the record of everything learned while
-converting two templates (the Web Application Penetration Testing template, "WAPT", now at v9,
-and the Mobile Application template, "MAPT", in the fork) so that the next template
+converting three templates (the Web Application Penetration Testing template, "WAPT", now at v9,
+the Mobile Application template, "MAPT", in the fork, and the Internal/External Network template, "INT_EXTNWPT",
+now at v5, converted in one scripted pass with `tools/template-edits/build_network_v1.py` by following this guide
+and refined by `build_network_v2.py` … `build_network_v5.py`) so that the next template
 (Network, Wi-Fi, Internal, External, or any other assessment type) is converted the same way,
 without rediscovering the engine's behaviour.
 
@@ -10,8 +12,7 @@ Everything below was verified on the fork `wasfyelbaz/isec-faction` at commit `b
 later, on a real generation in the local Faction build, in both Microsoft Word and Faction's own
 PDF output. Where something was not verified, the text says so.
 
-Companion files (kept in the iSec "Reporting System" working folder next to the template sources; not in this
-repository yet, except the MAPT templates under `report-templates/`):
+Companion files in this folder:
 
 | File | Use it for |
 |---|---|
@@ -85,11 +86,17 @@ the user downloads is the LibreOffice-saved one, not the docx4j output.
    template CSS. Images inside it are capped at 600 px wide.
 9. An unresolved `${…}` alone in a paragraph is offered to App Store extensions; otherwise it
    stays in the report verbatim. Your validation must grep for `${` in the output.
-10. Word charts, SmartArt and embedded Excel are never touched.
+10. Word charts, SmartArt and embedded Excel pass through untouched, except a chart preceded by a
+    `${chartData …}` marker paragraph: that chart's cached values and its embedded workbook are
+    rewritten from report data (section 3).
 11. Word comments in the template are copied into every generated report.
 12. The template DOCX upload (`POST /api/v1/report-templates/{id}/file`) fails with 400 unless
     the multipart part carries the DOCX MIME type
     (`application/vnd.openxmlformats-officedocument.wordprocessingml.document`).
+13. The engine closes a cell itself: when rich text placed into a table cell ends with a table, it
+    appends an empty paragraph, because a `w:tc` whose last child is a `w:tbl` is invalid and makes
+    Word and LibreOffice unwrap the outer table. A value written through the API no longer has to
+    end with `<p></p>`.
 
 ---
 
@@ -108,12 +115,15 @@ Work on a copy of the original iSec template. In this order:
    (`w:highlight` in runs and paragraph-mark run properties). Placeholder highlights survive into
    the report otherwise. `tools/template-edits/cover_fix.py` strips every `w:highlight` in the
    package.
-5. **Restyle tables that use `TableGridLight` to `TableGrid` with explicit borders** on every
-   cell (single, 0.5 pt, `BFBFBF`), and complete the undeclared edges of partially bordered
-   merged cells. Reason: the LibreOffice round trip writes an empty `<w:tcBorders/>` on every
-   cell of a `TableGridLight` table, and Word then draws no grid at all. The PDF is unaffected,
-   the DOCX is broken. `tools/template-edits/table_fix.py` does this (it marks touched tables
-   with `data-was-light`). The MAPT template got the same cure (fork commit `643ec3e`).
+5. **Give tables that use `TableGridLight` explicit borders** (single, 0.5 pt, `BFBFBF`) written
+   directly into `tblPr`, and complete the undeclared edges of partially bordered merged cells.
+   Reason: the LibreOffice round trip writes an empty `<w:tcBorders/>` on every cell of a
+   `TableGridLight` table, and Word then draws no grid at all. The PDF is unaffected, the DOCX is
+   broken. **Keep the style name**: restyling to `TableGrid` also survives the round trip but
+   draws the lines black, which does not match the iSec reports (see lesson 7 and section 13).
+   `tools/template-edits/table_fix.py` does the border part (it marks touched tables with
+   `data-was-light`); `build_network_v5.py` is the worked example that keeps the light line. The
+   MAPT template got the earlier, black-lined cure (fork commit `643ec3e`).
 6. **Fix cover text boxes that clip**: the date box in the Web template clipped "September 18,"
    because its DrawingML extent was too narrow. Widen the box (`wp:extent` and the VML fallback
    `style` width), left-align the paragraph, and set the insets so text clears the decorative
@@ -149,21 +159,36 @@ iSec template uses:
 | Client | `${asmtClient}`, `${asmtClient_<field>}` | Inline. Client = the assessment's organization. |
 | Distribution list | `${clientContactTable}` + `${loop}` row with `${contactName}`, `${contactTitle}`, `${contactEmail}`; or `${clientContacts_Lines / _Bullets / _Comma}` | Table form: config tag in a merged row above the loop row. |
 | Client images | `${clientImage <slot> width=W height=H}` | Alone in its paragraph; body, cells, text boxes, headers, footers. Section 6. |
-| Per finding | `${vulnName}`, `${severity}`, `${cvssScore}`, `${cvssString link}` (inside a hyperlink), `${assetLocation}`, `${category}`, `${desc}`, `${rec}`, `${details}`, `${count}` (table rows only), `${likelihood}` / `${impact}` (ratings) | Only inside a `${vulnTable}` row or a `${fiBegin}` block. |
+| Per finding | `${vulnName}`, `${severity}`, `${cvssScore}`, `${cvssString link}` or `${cvssLink <label>}` (inside a hyperlink), `${assetLocation}`, `${category}`, `${desc}`, `${rec}`, `${details}`, `${count}` (table rows only), `${likelihood}` / `${impact}` (ratings) | Only inside a `${vulnTable}` row or a `${fiBegin}` block. |
 | Structure | `${pageBreak}`, `${if-section S}` … `${end-section S}` | Alone in top-level body paragraphs. |
+| Native charts | `${chartData severity}`, `${chartData checklist}` | Alone in the top-level body paragraph directly before the chart it feeds. The marker paragraph is deleted on generation. |
 
 Rules of thumb:
 
 - Prefer a built-in whenever the data exists on the assessment, the client or the finding. The
   report then needs no typing and cannot drift.
 - Do not use `${asmtTeam}` (always empty) or `${asmtAccessKey}` (legacy alias).
-- `${cvssString link}` replaces the hyperlink text with the vector; "View CVSS Metrics" as link
-  text cannot be kept (gap 5.10).
+- `${cvssString link}` replaces the hyperlink text with the vector. To keep a label instead, write
+  `${cvssScore} (${cvssLink View CVSS Metrics})`: the label stays as the link text and the link
+  target becomes the NVD calculator for that finding's own vector (v3 or v4 by the template's
+  scoring type; a `CVSS:3.1/` prefix on the vector wins). Each finding gets a fresh relationship,
+  so cloned blocks never share a URL. `${cvssLink}` without a label prints the vector, exactly as
+  `${cvssString link}` does. Closes the old gap 5.10.
 - `${assetLocation}` is one string; several URLs do not split into lines (gap 5.11).
 - `${count}` is not resolved inside `${fiBegin}` blocks; number finding headings with Word
   multilevel numbering instead (the Web template uses `5.1.%1`).
 - `${noIssuesText …}` belongs to the summary table only; inside a findings block it prints once
   per finding.
+
+**Native charts (`${chartData severity}`, `${chartData checklist}`)**: the marker must be the whole
+text of a top-level body paragraph placed directly before the chart it feeds, and it is deleted
+during generation, so it costs no space. The engine writes both the chart's cached values and the
+cells of its embedded workbook, so the picture and the data behind it stay in step. It only finds
+charts at body level; a chart inside a table cell is never reached. `severity` writes the
+per-severity finding counts. `checklist` writes the PASS / FAIL / NA totals summed across the
+checklists attached to the assessment (section 19 has the three API calls that attach one); with no
+checklist attached the counts are zero and the chart draws empty on purpose, rather than keeping the
+template's placeholder numbers, which would read as real results.
 
 ---
 
@@ -535,7 +560,9 @@ Web template's sections over it. The mechanics are the same; the content maps di
 6. **Yellow highlight in reports** → placeholder highlights on runs and paragraph marks → strip
    every `w:highlight`.
 7. **No table grid in the downloaded DOCX** → LibreOffice writes empty `tcBorders` for
-   `TableGridLight` → restyle with explicit borders (Word and PDF now agree).
+   `TableGridLight` → keep the style **and** write the same borders directly into `tblPr`
+   (`single`, `sz=4`, `color=BFBFBF`). Restyling to `TableGrid` also works but draws the lines
+   black, which does not match the iSec reports; direct borders keep the light grey line.
 8. **Client missing from the report although the application belonged to the client** → the
    assessment copies the client at creation and a later move does not update it (a fallback was
    built and reverted on request) → create the assessment after attaching the application, or
@@ -562,9 +589,40 @@ Web template's sections over it. The mechanics are the same; the content maps di
     (FortiClient, ExpressVPN) present; mirrored networking is refused on that machine → close the
     VPN clients, `wsl --shutdown; Restart-Service SharedAccess`; meanwhile an offline compile can
     be patched into the running jar to keep testing.
-19. **Browser pane cannot fetch files from a local server** → stage the file on the frontend
+19. **A table typed into a RICH_TEXT value that sits inside a Word table cell flattened the outer table**
+    (Network 3.1.1 / 3.1.2: the dark header rows became plain paragraphs, only the typed table kept a grid) →
+    the cell's last child was the typed `w:tbl`, which is invalid OOXML → tell testers to type one line per
+    item in those cells; keep tables in rich text only where the tag stands in a body paragraph (Proof Of
+    Concept). The engine now appends the closing paragraph itself (section 1 rule 13), but lesson 22 stands:
+    give each column its own cell rather than nesting.
+20. **Assessment creation failed with "Unknown field ID: report_version"** → `initialFieldValues` (assessments)
+    and `fieldValues` (vulnerabilities) are keyed by the UDF's **id**, not its `variableName` → read the
+    template's `userDefinedFields`, map name → id, then post.
+21. **Browser pane cannot fetch files from a local server** → stage the file on the frontend
     container's nginx root (same origin) and remove it afterwards, or run the API scripts with the
     session token file.
+22. **A table typed into a RICH_TEXT value looked wrong (doubled headers, a column one character
+    wide)** → the template had collapsed the original's real cells into one merged cell, so the
+    only way to get columns back was a table inside a table cell → give each column its own cell
+    and its own tag (`${in_scope_ips_1..4}`). Real iSec reports never nest; copy the original's
+    cells so widths, borders and shading come with them, and top-align them so a short column
+    starts level with a long one.
+23. **Columns stopped lining up under a merged header in the generated file** → the table sized
+    its rows in percentages and mixed 4-column header rows with 1- and 2-column data rows;
+    LibreOffice recomputes those percentages when it refreshes the TOC and lands on an extra
+    1-twip grid column → pin the table and every cell to fixed twips (`type="dxa"`) matching
+    `tblGrid`, so there is nothing left to round.
+24. **A test fixture DOCX would not open** → docx4j's `WordprocessingMLPackage.load` walks every
+    package relationship eagerly, and `_rels/.rels` still pointed at `docProps/app.xml` and
+    `docProps/core.xml`, which the fixture never carried. It fails with
+    `Docx4JException: Failed to getPart` caused by
+    `MalformedURLException: Cannot invoke "String.length()" because "spec" is null`, which reads
+    like bad XML but means a part is missing → drop the dangling relationships, or copy the parts in.
+25. **A column in a typed table collapsed to one character wide** → the stylesheet's
+    `div { word-break: break-all }` lets an IP address break between any two digits, and with no
+    explicit column width the importer auto-fits on content → stop typing tables into cells at all
+    (lesson 22); where a table is genuinely needed, set explicit column widths and reset
+    `word-break` for that field.
 
 ---
 
@@ -596,9 +654,23 @@ Checklist, in this order:
 10. **Both outputs**: the downloaded DOCX opened in Word (borders, boxes, numbering) and Faction's
     PDF (Preview / download). Compare side by side with the original template's render.
 
+**Never conclude something is fixed because the DOCX XML looks right; measure the rendered PDF.**
+Proven repeatedly on the Network template:
+
+- Hyperlink targets: read the PDF's link annotations (PyMuPDF `page.get_links()`), not the DOCX
+  relationships.
+- Column alignment: take the vertical rules out of `page.get_drawings()` and compare the widths.
+  That turned a table that "looked fine" into a measured 130.6 / 130.6 / 130.6 / 130.7 pt.
+- Border colour: the same drawings carry the stroke colour, so `(0.75, 0.75, 0.75)` confirms
+  `BFBFBF` rather than black.
+- Chart numbers: read the chart part's cached values **and** the cells of its embedded workbook out
+  of the generated file, and check they agree with each other and with the table beside them.
+
 Tools that do this mechanically: `tools/faction/e2e_client.py generate` (generate, download,
 grep tags, count occurrences), `tools/verify/inspect_placement.py` (where images landed),
 `tools/verify/verify_v9.py` (Word + LibreOffice render, measurements, comparison sheet),
+`tools/verify/verify_network_v3.py` and `verify_network_v5.py` (charts, CVSS links, scope tables
+read back out of a generated report),
 `tools/faction/minio_pull.sh` (copy the generated files straight out of the MinIO volume when the
 API session is not available).
 
@@ -630,6 +702,20 @@ API session is not available).
     (mapping document, backend-changes document, README rows).
 12. Record in the mapping document's history what changed and how it was verified.
 
+**Feeding the checklist chart.** `${chartData checklist}` counts the checklists attached to the
+assessment, so a test assessment needs one before the chart shows anything. Three API calls, all
+proven on the Network template:
+
+1. `POST /api/v1/checklist-templates` with
+   `{name, assessmentTypeId, questions: [{text, order}], preventClosure}`.
+2. `POST /api/v1/assessments/{id}/checklists` with `{templateId}`.
+3. `PUT /api/v1/assessments/{id}/checklists/{checklistId}` with
+   `{responses: [{questionId, questionText, result, comment, order}]}`, `result` being `PASS`,
+   `FAIL` or `NA`.
+
+The 13 iSec Network checklist rows were extracted from the template's own 4.1 table and are kept as
+`tools/faction/network_checklist_questions.json`.
+
 ---
 
 ## 20. Tools index (`tools/`)
@@ -645,38 +731,73 @@ OneBank ids). Copy, then edit the constants at the top before use.
 | `template-edits/build_v7.py` | Footer page number: frame → page-anchored text box at the tab position measured from a Word render. |
 | `template-edits/build_v8.py` | Restores the footer placeholder box (from the original template) holding a `${clientImage}` tag; cover tag gets `width= height=`. |
 | `template-edits/build_v9.py` | Resizes and repositions the footer logo box from band measurements (bar position, wordmark centre). |
+| `template-edits/build_network_v1.py` | The whole Network conversion in one pass: highlights, notes page, cover and footer boxes, every `{placeholder}` → tag, tables rebuilt, borders, the `5.1.%1` numbering, master + upload copy. |
+| `template-edits/build_network_v2.py` | v1→v2: blank page after the TOC removed, 1.3 Author inline, 2.3 SmartArt → `methodology.png` rendered from Word, 5.x affected assets centred. |
+| `template-edits/build_network_v3.py` | v2→v3: `${chartData checklist}` and `${chartData severity}` marker paragraphs before the two native charts; `${cvssString link}` → `${cvssLink View CVSS Metrics}`. |
+| `template-edits/build_network_v4.py` | v3→v4: the merged scope and credentials cells split back into the original's own cells, one RICH_TEXT tag each, so nothing is nested. |
+| `template-edits/build_network_v5.py` | v4→v5: the light `BFBFBF` line restored on the 12 tables the original draws that way (style plus direct `tblPr` borders); the 3.1.1 table pinned to fixed twips. |
 | `verify/build_placement_test.py` | Builds a probe template with the tag in every kind of place (cover box, cell, right-aligned, mixed, unknown slot, header) to learn what the engine honours. |
 | `verify/inspect_placement.py` | Reports where images landed in a generated DOCX (boxes, cells, body, header) with sizes. |
 | `verify/render_where.py` | Renders template and generated pages (Word COM + PyMuPDF), boxes the tag/image, side-by-side sheet. |
 | `verify/verify_v9.py` | Word and container-LibreOffice renders of an engine output, logo and page-number measurements, band crop, comparison sheet. |
+| `verify/verify_network_v3.py`, `verify/verify_network_v5.py` | Read a generated Network report back and assert it: both charts against the engagement's real data (cached values and embedded workbook), one NVD link per finding carrying that finding's vector, the scope and credentials cells, no surviving tag or marker. |
 | `faction/e2e_client.py` | `setup`: upload template file, import UDFs by variable name, create client + contacts + logo, attach the application. `generate`: generate, poll, download DOCX/PDF, grep unresolved tags. Needs a session token file. |
 | `faction/e2e_clone.py` | Clones an assessment (field values + findings) onto a client-owned application and generates. |
 | `faction/minio_pull.sh` | Copies the latest generated DOCX/PDF of an assessment out of the MinIO volume with a helper container. |
 | `faction/wsl_mvn_mergecheck.sh` | Runs Maven inside Docker (WSL) against a checkout, with the cached `.m2` volume; used for tests and offline compiles. |
 | `faction/rebuild_backend_clean.sh` | `docker compose build --no-cache backend` + restart + health wait + provenance check. |
+| `faction/kali_restore_stack.sh` | One-shot restore of the stack into the VM's Docker engine from `docker-migration/`: checksums, images, both data volumes, `compose up`, health wait. `--force` overwrites non-empty volumes. |
+| `faction/kali_stack.sh` | Day-to-day `start` / `stop` / `restart` / `status` / `logs` for the stack on the VM. |
+| `faction/kali_mvn_clientimage.sh` | Maven for the fork backend inside Docker on the VM, with the persistent `faction-m2` volume. |
+| `faction/kali_rebuild_backend.sh` | Rebuilds the backend image from the `isec-faction-clientimage` worktree and restarts the container (the Dockerfile packages with `-DskipTests`). |
+| `faction/kali_stage_files_network.sh` | Puts the template, UDF JSON, CSS and checklist JSON on the frontend nginx root so the signed-in page can upload them same-origin. |
+| `faction/kali_minio_pull_network.sh` | Copies an assessment's newest generated DOCX and PDF out of the MinIO volume on the VM. |
+| `faction/sync_to_kali.sh` | Copies the given project-relative paths from the Windows backup copy to the live Kali working directory and prints their checksums. |
+| `faction/Set-FactionKaliPortProxy.ps1` | Windows, elevated: repoints the `127.0.0.1:8080` portproxy rule at the VM's current IP (read from `vmrun`) and verifies `http://localhost:8080`. |
+| `faction/network_checklist_questions.json` | The 13 iSec Network checklist rows taken from the template's own 4.1 table, in the order the checklist template wants them. |
 
 Requirements on the workstation: Python 3 with `pywin32` (Word COM export), `PyMuPDF`, `Pillow`,
-`numpy`, `lxml`; Microsoft Word; WSL with Docker for the local Faction; `curl`.
+`numpy`, `lxml`; Microsoft Word; the Kali VM with Docker for the local Faction (section 21); `curl`.
+The `kali_*` scripts run on the VM over `ssh kali`, with the project at `/home/kali/Reporting System/`.
 
 ---
 
 ## 21. Environment notes for the local Faction
 
-- Compose project `owasp-faction-2` (backend, frontend on port 8080, db, minio), images
-  `isec-faction-backend:local` / `isec-faction-frontend:local` built from the fork checkout with
-  `docker-compose.yml` + `docker-compose.local.yml`; `.env` holds the secrets (never print them).
-- The WSL distro shuts down when no session is open: keep one alive
-  (`wsl -d kali-linux -- bash -c 'exec sleep infinity'` in the background) or Faction disappears.
-- API paths that matter: templates `/api/v1/report-templates/{id}` (`PUT` for UDFs, `POST …/file`
+- **Where it runs**: inside a Kali VM on VMware Workstation (`D:\exported vm\Kareem's vm.vmx`, NAT
+  on VMnet8, guest `192.168.159.128`, 8 GB RAM, 4 vCPU). The live working directory is
+  `/home/kali/Reporting System/`; the Windows folder `C:\Users\ISEC\Desktop\Reporting System` is now
+  the backup copy, and edits made there are pushed with
+  `tools/faction/sync_to_kali.sh <project-relative-path>...`. Shell access is `ssh kali` (key auth
+  already configured, passwordless sudo, the `kali` user in the `docker` group).
+- **Stack**: compose project `owasp-faction-2`, four containers (db, minio, backend, frontend on
+  port 8080), images `isec-faction-backend:local` / `isec-faction-frontend:local` built from the
+  fork checkout with `docker-compose.yml` + `docker-compose.local.yml`; `.env` holds the secrets
+  (never print them). All four carry `restart=unless-stopped` and `docker.service` is enabled, so
+  Faction returns by itself after a VM reboot; `tools/faction/kali_stack.sh` is the manual control.
+- **Reaching it from Windows**: `http://localhost:8080` goes through a netsh portproxy rule
+  `127.0.0.1:8080 -> 192.168.159.128:8080`. The rule needs an elevated shell;
+  `tools/faction/Set-FactionKaliPortProxy.ps1` reads the VM's current IP from `vmrun` and rewrites
+  it. Re-run it if the VM's DHCP lease ever changes.
+- **WSL is the backup, not the environment**: the `kali-linux` distro is kept untouched and is no
+  longer active. WSL2 itself currently cannot start on this machine
+  (`HCS_E_HYPERV_NOT_INSTALLED`, the Windows hypervisor is off), which is why VMware works: with
+  `hypervisorlaunchtype` off, VMware runs natively.
+- **Building the fork**: Maven for the backend runs in Docker on the VM,
+  `tools/faction/kali_mvn_clientimage.sh` (persistent `faction-m2` volume); the backend image is
+  rebuilt and restarted by `tools/faction/kali_rebuild_backend.sh`. That Dockerfile packages with
+  `-DskipTests`, so the test suite must be run separately.
+- **API paths that matter**: templates `/api/v1/report-templates/{id}` (`PUT` for UDFs, `POST …/file`
   multipart for the DOCX, `GET …/file` to download it), organizations `/api/v1/organizations/{id}`
   and `…/images`, assessments `/api/v1/assessments`, reports `/api/v1/reports/{id}/generate`,
   `…/documents`, `…/documents/DOCX/content`, terminology `/api/v1/config/terminology`.
-- Session token: the person signs in; scripts read the JWT from a local file that is never
+- **Session token**: the person signs in; scripts read the JWT from a local file that is never
   printed. From the signed-in browser page, API calls can be made with `fetch` and the token from
   `localStorage`; file transfer into that page needs the file served from the same origin.
-- Throwaway objects for tests: a template named "<Name> (test)" and an assessment named the same,
+- **Throwaway objects for tests**: a template named "<Name> (test)" and an assessment named the same,
   on an application attached to the test client. Delete them when done.
-- The encrypted PDF fails unless `SSO_ENCRYPTION_KEY` is configured; DOCX and PDF are unaffected.
+- **Known local gap**: the ENCRYPTED_PDF document always fails with "SSO_ENCRYPTION_KEY is not
+  configured", because that value is not set in `.env`. DOCX and PDF are unaffected.
 
 ---
 
@@ -693,7 +814,9 @@ Tags:            ${asmtName} ${asmtType} ${asmtAppid} ${asmtClient} ${asmtClient
 Table:           ${vulnTable [Section]} ${cells k=v,…} ${noIssuesText …} ${loop} ${count}
                  ${vulnName} ${severity}(FAC701) ${cvssScore} ${assetLocation} ${category} ${<udf>}
 Block:           ${fiBegin [Section]} ${fill k=v,…} ${vulnName} ${desc} ${rec} ${details}
-                 ${cvssString link} ${pageBreak} ${fiEnd}   ${if-section S} … ${end-section S}
+                 ${cvssString link} | ${cvssLink <label>}  ${pageBreak} ${fiEnd}
+                 ${if-section S} … ${end-section S}
+Charts:          ${chartData severity} ${chartData checklist}  (alone in the body paragraph before the chart)
 Sizes:           1 cm = 37.8 px = 360000 EMU;  1 px = 9525 EMU;  page width cap 15.9 cm
 Web v9 geometry: cover logo 139x54 px (3.67x1.44 cm), box 4.29 cm wide at 15.05 cm from column
                  footer logo 64x25 px (1.69x0.66 cm), box 2.26 cm at 2.90 cm from column, 0.12 cm below the footer paragraph
