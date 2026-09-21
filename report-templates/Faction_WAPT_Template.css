@@ -1,0 +1,126 @@
+body{
+    font-size: 15px;
+}
+figure{
+    text-align: center;
+    padding: 0px;
+    margin: 10px 0px;
+    display: inline-block;
+    border: none;
+}
+img{
+    max-width: 600px;
+    height: auto !important;
+    display: block;
+    margin: auto !important
+}
+p{
+    padding:0px !important;
+    margin:0px !important;
+    margin-bottom: 0px !important;
+}
+li{
+    margin-bottom: 10px !important;
+}
+code {
+    font-family: monospace!important;
+    color: #666;
+    background-color: #eeeeee !important;
+    border-radius: 6px !important;
+    padding-left: 100px !important;
+}
+code span{
+    font-family: monospace!important;
+    color: #666;
+    background-color: #eeeeee !important;
+    border-radius: 6px !important;
+}
+table {
+		border-collapse: collapse;
+	  width: 100%;
+	  font-family: Calibri, sans-serif;
+	  font-size: 11pt;
+}
+th {
+	  background-color: #600000;
+	  color: white;
+	  text-align: left;
+	  padding: 6px;
+}
+td {
+	  padding: 6px;
+	  border: 1px solid #ccc;
+}
+tr:nth-child(even) {
+	  background-color: #f5f5f5;
+}
+table td, table th {
+	  text-align: center !important;      /* horizontally center text */
+	  vertical-align: middle !important;   /* vertically center text */
+}
+table td:nth-child(1), table th:nth-child(1) {
+	  text-align: center !important;
+}
+div {
+		word-break: break-all !important;
+}
+pre{
+    background-color:#eeeeee !important;
+    border:1px solid #cccccc !important;
+    font-size:15px;
+    padding: 10px 15px;
+}
+
+/* ---------------------------------------------------------------------------
+   Additions required by the DOCX generator. The rules above are the supplied
+   stylesheet, unchanged. Everything below only restates supplied declarations
+   against the selectors the generator actually matches.
+   --------------------------------------------------------------------------- */
+
+/* The engine injects ".rte-table td,.rte-table th{border:1px solid #999999;
+   padding:4px}" ahead of this stylesheet. That selector (0,1,1) outranks the
+   bare "td"/"th" rules above (0,0,1), so tables built in the rich-text editor
+   would keep a #999999 border and 4px padding. Same declarations, restated at
+   matching specificity. */
+.rte-table td {
+	  padding: 6px;
+	  border: 1px solid #ccc;
+}
+.rte-table th {
+	  padding: 6px;
+}
+
+/* "width:100%" is resolved by the CSS engine against the page, not against the
+   cell a table sits in, and the generator's clamp only measures tables against
+   the page. A table inside the Description / Recommendation cell of a finding
+   therefore comes out 10340 twips wide in an 8408-twip cell and runs off the
+   right edge of the paper. The importer ignores max-width once a width is set,
+   so this has to be a width; it is scoped to the two in-cell wrappers and
+   leaves width:100% in force for every table that sits directly in the page
+   body. Table widths are measured at 20 twips per CSS px, so 400px = 8001
+   twips, inside the 8192 twips the Description cell has between its margins. */
+.desc table, .rec table {
+	  width: 400px;
+	  max-width: 400px;
+}
+
+/* 5.x finding table: rich-text cells (Description, Impact, Recommendation) keep the template's
+   paragraph rhythm, 4pt before and after, 1.15 line spacing, like every other cell of the table. */
+.desc p, .rec p, .impact_narrative p,
+.desc li, .rec li, .impact_narrative li { margin-top: 4pt; margin-bottom: 4pt; line-height: 1.15; }
+
+/* 3.1.1 / 3.1.2 scope and credential columns: each is an ordinary table cell holding a bulleted
+   list, the way the iSec reports write them, so no table is typed inside a table cell. The
+   "table td { text-align: center }" rule above would centre every bullet, which reads badly for a
+   host list, and "word-break: break-all" would split an address between two digits. */
+.in_scope_ips_1 li, .in_scope_ips_2 li, .in_scope_ips_3 li, .in_scope_ips_4 li,
+.out_of_scope_ips li, .out_of_scope_reason li,
+.credential_users li, .credential_descriptions li {
+	  text-align: left !important;
+	  word-break: normal !important;
+}
+.in_scope_ips_1 p, .in_scope_ips_2 p, .in_scope_ips_3 p, .in_scope_ips_4 p,
+.out_of_scope_ips p, .out_of_scope_reason p,
+.credential_users p, .credential_descriptions p {
+	  word-break: normal !important;
+}

@@ -1,0 +1,283 @@
+{
+ "userDefinedFields": [
+  {
+   "variableName": "summary1",
+   "displayName": "Executive Summary",
+   "helpText": "Faction default field. Not placed in the iSec template; add a ${summary1} paragraph to the DOCX if wanted.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 1,
+   "required": false
+  },
+  {
+   "variableName": "affected_user",
+   "displayName": "Affected User",
+   "helpText": "2.8 Summary of Findings, Affected User column (role, account or host owner; '-' if not applicable).",
+   "fieldType": "STRING",
+   "fieldScope": "VULNERABILITY",
+   "defaultValue": "-",
+   "displayOrder": 2,
+   "required": false
+  },
+  {
+   "variableName": "summary2",
+   "displayName": "Scope",
+   "helpText": "Faction default field. Not placed in the iSec template; add a ${summary2} paragraph to the DOCX if wanted.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 3,
+   "required": false
+  },
+  {
+   "variableName": "isec_checklist_ref",
+   "displayName": "iSec Check List Items",
+   "helpText": "5.x finding table, 'iSec Check List' row. Comma-separated names from the 4.1 checklist. Same variable as the Web and MAPT templates.",
+   "fieldType": "STRING",
+   "fieldScope": "VULNERABILITY",
+   "displayOrder": 4,
+   "required": false
+  },
+  {
+   "variableName": "report_version",
+   "displayName": "Report Version",
+   "helpText": "Printed as v${report_version} in the Document Title and in the Document History table.",
+   "fieldType": "STRING",
+   "fieldScope": "ASSESSMENT",
+   "defaultValue": "1.0",
+   "displayOrder": 5,
+   "required": true
+  },
+  {
+   "variableName": "impact_narrative",
+   "displayName": "Impact (narrative)",
+   "helpText": "5.x finding table, 'Impact' row. Do not confuse with Faction's Impact rating. Same variable as the Web and MAPT templates.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "VULNERABILITY",
+   "displayOrder": 6,
+   "required": true
+  },
+  {
+   "variableName": "document_id",
+   "displayName": "Document ID",
+   "helpText": "1.1 Document Details, 'Document ID' row (written by the reviewers). Leave empty to print an empty cell.",
+   "fieldType": "STRING",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 7,
+   "required": false
+  },
+  {
+   "variableName": "asmt_phase",
+   "displayName": "Assessment Phase",
+   "helpText": "Used in 2.1, 3.1, 3.2.1, the Document History description and every Status cell (2.8 and 5.x). This template is for initial tests only; the retest report uses a separate template. Same variable as the Web and MAPT templates.",
+   "fieldType": "DROPDOWN",
+   "fieldScope": "ASSESSMENT",
+   "dropdownOptions": [
+    "Initial Test"
+   ],
+   "defaultValue": "Initial Test",
+   "displayOrder": 8,
+   "required": true
+  },
+  {
+   "variableName": "test_type",
+   "displayName": "Test Type",
+   "helpText": "Rendered as '${test_type} box' in 2.1 and '${test_type} Box' in 3.1. Same variable as the Web and MAPT templates.",
+   "fieldType": "DROPDOWN",
+   "fieldScope": "ASSESSMENT",
+   "dropdownOptions": [
+    "Black",
+    "Grey",
+    "White"
+   ],
+   "defaultValue": "Grey",
+   "displayOrder": 9,
+   "required": true
+  },
+  {
+   "variableName": "network_type",
+   "displayName": "Network Type",
+   "helpText": "Internal or External. Printed on the cover and in the Document Title ('... ${network_type} Penetration Testing Report') and in 2.1 ('an ${network_type} network penetration testing').",
+   "fieldType": "DROPDOWN",
+   "fieldScope": "ASSESSMENT",
+   "dropdownOptions": [
+    "Internal",
+    "External",
+    "Internal and External"
+   ],
+   "defaultValue": "Internal",
+   "displayOrder": 10,
+   "required": true
+  },
+  {
+   "variableName": "testing_hours",
+   "displayName": "Testing Hours",
+   "helpText": "Completes the sentence 'the penetration testing engagement was initiated ${testing_hours}.' in 2.1.",
+   "fieldType": "DROPDOWN",
+   "fieldScope": "ASSESSMENT",
+   "dropdownOptions": [
+    "during working hours",
+    "after working hours, minimizing the impact on the server load, given the production environment's sensitivity"
+   ],
+   "defaultValue": "during working hours",
+   "displayOrder": 11,
+   "required": true
+  },
+  {
+   "variableName": "project_name",
+   "displayName": "Project Name",
+   "helpText": "Cover page, 1.1, 2.1, 3.1 and the 5.1 heading. Same variable as the Web and MAPT templates. The client name comes from the client record (${asmtClient}).",
+   "fieldType": "STRING",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 12,
+   "required": true
+  },
+  {
+   "variableName": "target_scope",
+   "displayName": "Target (5.1 heading)",
+   "helpText": "Short label of the tested target printed after the project name in the 5.1 heading, e.g. 'Internal Network' or '10.10.0.0/16'.",
+   "fieldType": "STRING",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 13,
+   "required": true
+  },
+  {
+   "variableName": "environment",
+   "displayName": "Environment Type",
+   "helpText": "3.1: 'This Penetration Testing on ... was done on a ${environment} Environment.'",
+   "fieldType": "DROPDOWN",
+   "fieldScope": "ASSESSMENT",
+   "dropdownOptions": [
+    "Production",
+    "Testing",
+    "UAT",
+    "Staging"
+   ],
+   "defaultValue": "Production",
+   "displayOrder": 14,
+   "required": true
+  },
+  {
+   "variableName": "first_reviewer",
+   "displayName": "First Reviewer",
+   "helpText": "1.3 Document History, row 2. Interim until ${asmtReviewers_Comma} exists.",
+   "fieldType": "STRING",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 15,
+   "required": false
+  },
+  {
+   "variableName": "second_reviewer",
+   "displayName": "Second Reviewer",
+   "helpText": "1.3 Document History, row 3.",
+   "fieldType": "STRING",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 16,
+   "required": false
+  },
+  {
+   "variableName": "approver",
+   "displayName": "Approver",
+   "helpText": "1.3 Document History, row 4.",
+   "fieldType": "STRING",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 17,
+   "required": false
+  },
+  {
+   "variableName": "in_scope_ips_1",
+   "displayName": "In-Scope IPs (column 1)",
+   "helpText": "3.1.1 Testing Scope, column 1 of the 'In Scope IPs' row. Type the hosts as a bulleted list (no table): the four columns print side by side under the one header, as in the iSec reports. Leave a column empty when fewer are needed.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 18,
+   "required": true
+  },
+  {
+   "variableName": "in_scope_ips_2",
+   "displayName": "In-Scope IPs (column 2)",
+   "helpText": "3.1.1 Testing Scope, column 2 of the 'In Scope IPs' row. Type the hosts as a bulleted list (no table): the four columns print side by side under the one header, as in the iSec reports. Leave a column empty when fewer are needed.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 19,
+   "required": false
+  },
+  {
+   "variableName": "in_scope_ips_3",
+   "displayName": "In-Scope IPs (column 3)",
+   "helpText": "3.1.1 Testing Scope, column 3 of the 'In Scope IPs' row. Type the hosts as a bulleted list (no table): the four columns print side by side under the one header, as in the iSec reports. Leave a column empty when fewer are needed.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 20,
+   "required": false
+  },
+  {
+   "variableName": "limitations",
+   "displayName": "Testing Constraints and Limitations",
+   "helpText": "3.2.1. Keep the default sentence when there were no limitations.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "defaultValue": "<p>During this engagement, we encountered no limitations. All functionalities were tested as intended, and we were able to thoroughly assess the security posture of the system without any restrictions or issues.</p>",
+   "displayOrder": 21,
+   "required": true
+  },
+  {
+   "variableName": "in_scope_ips_4",
+   "displayName": "In-Scope IPs (column 4)",
+   "helpText": "3.1.1 Testing Scope, column 4 of the 'In Scope IPs' row. Type the hosts as a bulleted list (no table): the four columns print side by side under the one header, as in the iSec reports. Leave a column empty when fewer are needed.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 22,
+   "required": false
+  },
+  {
+   "variableName": "out_of_scope_ips",
+   "displayName": "Out-of-Scope IPs and Ports",
+   "helpText": "3.1.1, the 'Functions Names' column under the Out Of Scope header. One line per excluded item; no table.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "defaultValue": "<p>N/A</p>",
+   "displayOrder": 23,
+   "required": false
+  },
+  {
+   "variableName": "recommendations",
+   "displayName": "Overall Recommendations",
+   "helpText": "6.0 Recommendation bullet list. Add report-specific items below the standard one. Same variable name as the Web and MAPT templates.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "defaultValue": "<ul><li>Cover all the findings stated in this report.</li><li>Unless a resource is intended to be publicly accessible, deny access by default.</li><li>Update the outdated services, versions and libraries.</li><li>Remove default credentials and harden every exposed service configuration.</li><li>Continue regular security assessments &ndash; Conduct periodic penetration tests (at least annually or after major changes) to ensure the security posture remains robust against evolving threats.</li><li>Maintain patch and update cycles &ndash; Keep all software, frameworks, and infrastructure components updated to mitigate any future vulnerabilities.</li><li>Implement continuous monitoring and logging &ndash; Ensure that active security monitoring solutions (e.g., SIEM, IDS/IPS) are in place to quickly detect and respond to suspicious activities.</li></ul>",
+   "displayOrder": 24,
+   "required": true
+  },
+  {
+   "variableName": "out_of_scope_reason",
+   "displayName": "Out-of-Scope Reason",
+   "helpText": "3.1.1, the 'Reason' column beside ${out_of_scope_ips}. One line per excluded item, in the same order.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 25,
+   "required": false,
+   "defaultValue": "<p>N/A</p>"
+  },
+  {
+   "variableName": "credential_users",
+   "displayName": "Credential Users",
+   "helpText": "3.1.2, the 'User' column. One line per credential; the descriptions opposite must be in the same order.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 26,
+   "required": false,
+   "defaultValue": "<p>N/A</p>"
+  },
+  {
+   "variableName": "credential_descriptions",
+   "displayName": "Credential Descriptions",
+   "helpText": "3.1.2, the 'Description' column. One line per credential, matching ${credential_users}.",
+   "fieldType": "RICH_TEXT",
+   "fieldScope": "ASSESSMENT",
+   "displayOrder": 27,
+   "required": false,
+   "defaultValue": "<p>N/A</p>"
+  }
+ ]
+}
