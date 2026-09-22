@@ -6,10 +6,8 @@ import com.faction.clientportal.model.AiPromptScope;
 import com.faction.clientportal.model.AiProviderType;
 import com.faction.clientportal.repository.AiPromptTemplateRepository;
 import com.faction.clientportal.repository.AiProviderConfigRepository;
-import com.faction.clientportal.repository.ExtensionRepository;
 import com.faction.clientportal.service.AiPromptTemplateService;
 import com.faction.clientportal.service.AiProviderConfigService;
-import com.faction.clientportal.service.extension.ExtensionService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -96,30 +94,4 @@ class QuotaGuardTest {
         verify(aiPromptTemplateRepository, never()).save(any());
     }
 
-    // ── Extensions ───────────────────────────────────────────────────────────
-
-    @Mock private ExtensionRepository extensionRepository;
-    @Mock private com.faction.clientportal.repository.ExtensionLogRepository extensionLogRepository;
-    @Mock private com.faction.clientportal.service.extension.ExtensionJarParser jarParser;
-    @Mock private com.faction.clientportal.service.extension.ExtensionConfigCodec configCodec;
-    @Mock private com.faction.clientportal.service.extension.ExtensionClassLoaderFactory classLoaderFactory;
-    @Mock private com.faction.clientportal.service.extension.ExtensionRegistry registry;
-    @Mock private com.faction.clientportal.service.StorageService storageService;
-    @InjectMocks private ExtensionService extensionService;
-
-    /**
-     * The guard runs before the JAR is even parsed, so a third install is refused without
-     * the bytes ever being unpacked or uploaded to object storage.
-     */
-    @Test
-    void refusesAThirdExtensionWithoutParsingTheJar() {
-        atCapacity(Quota.EXTENSIONS, 2L, 2);
-
-        assertThatThrownBy(() -> extensionService.install(new byte[]{1, 2, 3}, "user-1"))
-                .isInstanceOf(QuotaExceededException.class);
-
-        verify(jarParser, never()).parse(any());
-        verify(storageService, never()).uploadBytes(any(), any(), any());
-        verify(extensionRepository, never()).save(any());
-    }
 }

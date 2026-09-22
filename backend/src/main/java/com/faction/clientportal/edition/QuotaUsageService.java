@@ -2,7 +2,6 @@ package com.faction.clientportal.edition;
 
 import com.faction.clientportal.repository.AiProviderConfigRepository;
 import com.faction.clientportal.repository.AiPromptTemplateRepository;
-import com.faction.clientportal.repository.ExtensionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -22,13 +21,11 @@ public class QuotaUsageService {
 
     private final AiProviderConfigRepository aiProviderConfigRepository;
     private final AiPromptTemplateRepository aiPromptTemplateRepository;
-    private final ExtensionRepository extensionRepository;
 
     public long current(Quota quota) {
         return switch (quota) {
             case AI_PROVIDERS -> aiProviderConfigRepository.count();
             case AI_PROMPTS   -> aiPromptTemplateRepository.count();
-            case EXTENSIONS   -> extensionRepository.countByDeletedAtIsNull();
         };
     }
 

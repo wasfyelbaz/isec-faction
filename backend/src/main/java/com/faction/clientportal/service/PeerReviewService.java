@@ -50,7 +50,6 @@ public class PeerReviewService {
     private final UserRepository userRepository;
     private final AssessmentWorkflowConfigService workflowConfigService;
     private final PeerReviewLockService lockService;
-    private final com.faction.clientportal.service.extension.ExtensionEventService extensionEventService;
 
     // ── Team scoping ──────────────────────────────────────────────────────────
     //
@@ -249,8 +248,6 @@ public class PeerReviewService {
         assessmentRepository.save(assessment);
 
         log.info("Assessment {} submitted for peer review (reviewId={})", assessmentId, saved.getId());
-        extensionEventService.assessmentChanged(assessmentId,
-            com.faction.extender.AssessmentManager.Operation.PeerReviewCreated);
         return enrich(PeerReviewDto.fromEntity(saved));
     }
 
@@ -454,8 +451,6 @@ public class PeerReviewService {
         assessmentRepository.save(assessment);
 
         log.info("Peer review {} completed; assessment {} needs acceptance", reviewId, review.getAssessmentId());
-        extensionEventService.assessmentChanged(review.getAssessmentId(),
-            com.faction.extender.AssessmentManager.Operation.PeerReviewCompleted);
         return enrich(PeerReviewDto.fromEntity(saved));
     }
 
@@ -543,8 +538,6 @@ public class PeerReviewService {
         }
 
         log.info("Peer review {} changes accepted; assessment {} is COMPLETE", reviewId, review.getAssessmentId());
-        extensionEventService.assessmentChanged(review.getAssessmentId(),
-            com.faction.extender.AssessmentManager.Operation.PeerReviewAccepted);
         return enrich(PeerReviewDto.fromEntity(peerReviewRepository.findById(reviewId).orElse(review)));
     }
 

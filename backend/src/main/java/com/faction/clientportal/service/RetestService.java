@@ -47,7 +47,6 @@ public class RetestService {
     private final VulnerabilityService vulnerabilityService;
     private final AssessmentWorkflowConfigService workflowConfigService;
     private final VulnerabilityEventService vulnerabilityEventService;
-    private final com.faction.clientportal.service.extension.ExtensionEventService extensionEventService;
     private final com.faction.clientportal.service.email.EventNotificationEmailSender eventEmailSender;
 
     /** Retest status for an app-owner request awaiting scheduling by staff. */
@@ -166,8 +165,6 @@ public class RetestService {
             // Notify assigned assessors
             notifyRetestAssessors(saved.getAssignedAssessorIds(), vuln.getName(), saved.getAssessmentId(), "RETEST_ASSIGNED");
 
-            extensionEventService.verificationChanged(saved.getId(), userId,
-                    com.faction.extender.VerificationManager.Operation.Assigned);
 
             emailRetestEvent(EmailNotificationEvent.RETEST_SCHEDULED, assessment, vuln, saved);
         }
@@ -338,8 +335,6 @@ public class RetestService {
         // that puts new people on the retest is worth reporting — that is the one an
         // integration acts on.
         if (!newlyAssigned.isEmpty()) {
-            extensionEventService.verificationChanged(saved.getId(), userId,
-                    com.faction.extender.VerificationManager.Operation.Assigned);
         }
 
         // Only the transition into a scheduled state is worth an email. Editing the scope
@@ -423,9 +418,6 @@ public class RetestService {
 
         recordCompletionEvent(saved, result);
 
-        extensionEventService.verificationChanged(saved.getId(), userId,
-                result.equals("PASS") ? com.faction.extender.VerificationManager.Operation.PASS
-                                      : com.faction.extender.VerificationManager.Operation.FAIL);
 
         emailRetestEvent(EmailNotificationEvent.RETEST_COMPLETED, null, null, saved);
 
@@ -595,8 +587,6 @@ public class RetestService {
             return;
         }
 
-        extensionEventService.verificationChanged(retest.getId(), userId,
-                com.faction.extender.VerificationManager.Operation.Cancel);
 
         retest.setStatus(RETEST_CANCELLED);
         retest.setLastUpdatedBy(userId);

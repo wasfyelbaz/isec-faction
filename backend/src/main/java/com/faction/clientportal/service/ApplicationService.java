@@ -55,7 +55,6 @@ public class ApplicationService {
     private final com.faction.clientportal.service.email.ThreadCommentEmailSender threadCommentEmailSender;
     private final SubOrganizationService subOrganizationService;
     private final VulnerabilityRepository vulnerabilityRepository;
-    private final com.faction.clientportal.service.extension.ExtensionEventService extensionEventService;
 
     public ApplicationDto createApplication(CreateApplicationRequest request, String userId) {
         return createApplication(request, userId, null);
@@ -355,30 +354,6 @@ public class ApplicationService {
         return values == null || values.isEmpty() ? null : values;
     }
 
-    /**
-     * Asks every enabled {@code ApplicationInventory} extension for applications
-     * matching an id or name, so an external system of record can back Faction's
-     * application picker.
-     *
-     * <p>Kept out of {@link #searchApplications} on purpose. Those results are
-     * external records with no Faction id, and folding them into the paged
-     * applications listing would both break the page's total count and hand the UI
-     * rows whose every action would fail. Callers that want inventory lookup — the
-     * create-application flow — ask for it explicitly.
-     *
-     * <p>Returns an empty list when no inventory extension is installed.
-     */
-    public List<ExternalApplicationDto> searchExternalInventory(String applicationId, String name) {
-        return extensionEventService.searchInventory(applicationId, name).stream()
-                .map(result -> ExternalApplicationDto.builder()
-                        .applicationId(result.getApplicationId())
-                        .applicationName(result.getApplicationName())
-                        .distributionList(result.getDistributionList())
-                        .customFields(result.getCustomFields() == null
-                                ? Map.of() : new HashMap<>(result.getCustomFields()))
-                        .build())
-                .collect(Collectors.toList());
-    }
 
     /** Attaches the "Open Issues" count to a page of application DTOs via one batched query. */
     private void enrichOpenIssueCounts(List<ApplicationDto> apps) {

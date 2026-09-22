@@ -3,7 +3,6 @@ import { usePageTitle } from '../context/PageTitleContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Blocks,
   Building2,
   AppWindow,
   ShieldAlert,
@@ -137,7 +136,6 @@ const menuItems: MenuItem[] = [
       { name: 'System', icon: Sliders, heading: true },
       { name: 'Assessment Config', path: '/assessment-config', icon: Sliders },
       { name: 'Branding', path: '/branding', icon: Palette, feature: 'branding' },
-      { name: 'App Store', path: '/app-store', icon: Blocks },
       { name: 'Logs', path: '/logs', icon: ScrollText },
     ],
   },

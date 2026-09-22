@@ -18,7 +18,6 @@ public class CommunityEditionPolicy implements EditionPolicy {
 
     static final int MAX_AI_PROVIDERS = 1;
     static final int MAX_AI_PROMPTS   = 4;
-    static final int MAX_EXTENSIONS   = 2;
 
     @Override
     public Edition edition() {
@@ -46,7 +45,6 @@ public class CommunityEditionPolicy implements EditionPolicy {
         return switch (quota) {
             case AI_PROVIDERS -> MAX_AI_PROVIDERS;
             case AI_PROMPTS   -> MAX_AI_PROMPTS;
-            case EXTENSIONS   -> MAX_EXTENSIONS;
         };
     }
 }

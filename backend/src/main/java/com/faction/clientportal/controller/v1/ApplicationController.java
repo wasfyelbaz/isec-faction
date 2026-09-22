@@ -173,26 +173,6 @@ public class ApplicationController {
         return ResponseUtil.success("Applications synced successfully", result);
     }
 
-    @GetMapping("/inventory-search")
-    @RequiresPermission({Permission.APPLICATIONS_READ_ALL, Permission.APPLICATIONS_READ_OWNED, Permission.APPLICATIONS_READ_ORG})
-    @Operation(
-            summary = "Search external application inventory",
-            description = "Queries installed ApplicationInventory extensions for applications held "
-                    + "in an external system of record. Returns an empty list when no such "
-                    + "extension is installed. These are not Faction applications and have no "
-                    + "Faction id — use them to prefill a new application.",
-            responses = {
-                    @ApiResponse(responseCode = "200", description = "Inventory results (possibly empty)"),
-                    @ApiResponse(responseCode = "403", description = "Forbidden"),
-                    @ApiResponse(responseCode = "401", description = "Unauthorized")
-            }
-    )
-    public ResponseEntity<JsonApiResponse<List<ExternalApplicationDto>>> searchInventory(
-            @RequestParam(required = false) String applicationId,
-            @RequestParam(required = false) String name) {
-        return ResponseUtil.success("Inventory search complete",
-                applicationService.searchExternalInventory(applicationId, name));
-    }
 
     @GetMapping("/{id}")
     @RequiresPermission({Permission.APPLICATIONS_READ_ALL, Permission.APPLICATIONS_READ_OWNED, Permission.APPLICATIONS_READ_ORG})

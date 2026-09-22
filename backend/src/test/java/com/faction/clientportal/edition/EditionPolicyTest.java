@@ -22,7 +22,6 @@ class EditionPolicyTest {
         assertThat(community.edition()).isEqualTo(Edition.COMMUNITY);
         assertThat(community.limit(Quota.AI_PROVIDERS)).isEqualTo(1);
         assertThat(community.limit(Quota.AI_PROMPTS)).isEqualTo(4);
-        assertThat(community.limit(Quota.EXTENSIONS)).isEqualTo(2);
     }
 
     /**
@@ -93,7 +92,7 @@ class EditionPolicyTest {
     /** A count already past the cap — drifted data, or a race — must still be refused. */
     @Test
     void requireHeadroomRefusesWhenAlreadyOverTheLimit() {
-        assertThatThrownBy(() -> community.requireHeadroom(Quota.EXTENSIONS, 9))
+        assertThatThrownBy(() -> community.requireHeadroom(Quota.AI_PROMPTS, 9))
                 .isInstanceOf(QuotaExceededException.class);
     }
 

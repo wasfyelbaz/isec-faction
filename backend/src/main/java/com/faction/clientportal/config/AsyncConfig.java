@@ -63,28 +63,4 @@ public class AsyncConfig {
         return executor;
     }
 
-    /**
-     * Executor for App Store extension hooks.
-     *
-     * <p>Extension code is third-party and typically calls out over the network — the
-     * reference Jira extension opens an HTTP connection per finding when an assessment
-     * is finalized. None of that latency belongs to the user's save, and it must not
-     * run on a pool Faction depends on: a hung extension that saturated the mail or
-     * scheduling pool would take unrelated features down with it.
-     *
-     * <p>{@code CallerRunsPolicy} would defeat that isolation by pushing extension work
-     * back onto a Faction thread, so the queue is generous instead and saturation
-     * degrades to the default abort — logged and contained by
-     * {@link com.faction.clientportal.service.extension.ExtensionEventService}.
-     */
-    @Bean("extensionTaskExecutor")
-    public ThreadPoolTaskExecutor extensionTaskExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2);
-        executor.setMaxPoolSize(4);
-        executor.setQueueCapacity(500);
-        executor.setThreadNamePrefix("extension-");
-        executor.initialize();
-        return executor;
-    }
 }

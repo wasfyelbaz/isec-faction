@@ -62,7 +62,6 @@ public class AssessmentService {
     private final ApplicationIdConfigService applicationIdConfigService;
     private final ApplicationService applicationService;
     private final CampaignRepository campaignRepository;
-    private final com.faction.clientportal.service.extension.ExtensionEventService extensionEventService;
     private final com.faction.clientportal.service.email.EventNotificationEmailSender eventEmailSender;
     private final DefaultReportTemplateService defaultReportTemplateService;
 
@@ -246,8 +245,6 @@ public class AssessmentService {
             userId
         );
 
-        extensionEventService.assessmentChanged(
-            savedAssessment.getId(), com.faction.extender.AssessmentManager.Operation.Create);
 
         return migrateAndConvertToDto(savedAssessment);
     }
@@ -353,7 +350,7 @@ public class AssessmentService {
             }
         }
 
-        // Whether this update is the transition into a completed status. Extensions
+        // Whether this update is the transition into a completed status. Callers
         // distinguish Finalize from an ordinary Update — it is the point an
         // integration pushes findings out to an issue tracker — so the transition has
         // to be noticed here, while the previous status is still known.
@@ -560,9 +557,6 @@ public class AssessmentService {
         Assessment updatedAssessment = assessmentRepository.save(assessment);
         log.info("Updated assessment: {} (status: {})", updatedAssessment.getName(), updatedAssessment.getStatus());
 
-        extensionEventService.assessmentChanged(updatedAssessment.getId(),
-            finalizing ? com.faction.extender.AssessmentManager.Operation.Finalize
-                       : com.faction.extender.AssessmentManager.Operation.Update);
 
         // Completing an assessment is also a change, but only the completion email is
         // sent: two emails describing one save reads as a bug.
@@ -1114,8 +1108,6 @@ public class AssessmentService {
             .orElseThrow(() -> new ResourceNotFoundException("Assessment not found with id: " + id));
         accessScopeService.checkAssessmentDeleteAccess(authentication, assessment);
 
-        // Snapshot for extensions before the soft delete hides the row.
-        extensionEventService.assessmentDeleting(id);
 
         assessment.setDeletedAt(LocalDateTime.now());
         assessment.setLastUpdatedBy(userId);

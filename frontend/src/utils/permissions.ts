@@ -279,14 +279,6 @@ export const permissions = {
   canViewAuditLogs: (authorities: string[]): boolean =>
     isSuperAdmin(authorities) || hasAnyPermission(authorities, ['audit:logs:read']),
 
-  // App Store extensions. Installing one runs third-party code inside the Faction
-  // server, so 'extensions:write' is closer to server access than to ordinary admin.
-  canManageExtensions: (authorities: string[]): boolean =>
-    isSuperAdmin(authorities) || hasAnyPermission(authorities, ['extensions:write']),
-
-  canViewExtensions: (authorities: string[]): boolean =>
-    isSuperAdmin(authorities) || hasAnyPermission(authorities, ['extensions:read', 'extensions:write']),
-
   // Application ID Config (backend endpoints require super_admin)
   canManageApplicationIdConfig: (authorities: string[]): boolean =>
     isSuperAdmin(authorities),

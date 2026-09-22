@@ -45,7 +45,6 @@ import ScheduleRetestPage from './pages/ScheduleRetestPage';
 import RemediationPage from './pages/RemediationPage';
 import EmailConfigPage from './pages/EmailConfigPage';
 import EmailNotificationsPage from './pages/EmailNotificationsPage';
-import AppStore from './pages/AppStore';
 import UnsubscribePage from './pages/UnsubscribePage';
 import AiConfigPage from './pages/AiConfigPage';
 import ContentTemplates from './pages/ContentTemplates';
@@ -723,21 +722,6 @@ function App() {
                   >
                     <InboundEmailConfigPage />
                   </PaidFeature>
-                </ProtectedRoute>
-              </DashboardLayout>
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-
-        <Route
-          path="/app-store"
-          element={
-            isAuthenticated ? (
-              <DashboardLayout>
-                <ProtectedRoute requiredPermission="canViewExtensions">
-                  <AppStore />
                 </ProtectedRoute>
               </DashboardLayout>
             ) : (

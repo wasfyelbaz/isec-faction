@@ -41,9 +41,6 @@ class PeerReviewServiceTest {
     private com.faction.clientportal.service.AssessmentWorkflowConfigService workflowConfigService;
 
     @Mock
-    private com.faction.clientportal.service.extension.ExtensionEventService extensionEventService;
-
-    @Mock
     private PeerReviewLockService lockService;
 
     @InjectMocks

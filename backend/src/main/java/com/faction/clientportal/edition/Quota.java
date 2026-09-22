@@ -15,7 +15,7 @@ public enum Quota {
     AI_PROMPTS("ai_prompts", "AI prompts"),
 
     /** Installed App Store extensions. The extension SDK itself is open source. */
-    EXTENSIONS("extensions", "App Store integrations");
+    ;
 
     private final String key;
     private final String displayName;

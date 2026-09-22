@@ -92,9 +92,6 @@ class AssessmentServiceTest {
     private ObjectMapper objectMapper = new ObjectMapper();
 
     @Mock
-    private com.faction.clientportal.service.extension.ExtensionEventService extensionEventService;
-
-    @Mock
     private DefaultReportTemplateService defaultReportTemplateService;
 
     @InjectMocks

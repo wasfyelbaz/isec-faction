@@ -117,8 +117,6 @@ public enum Permission {
     AI_CONFIG_READ("ai:config:read", "Read AI provider configuration", PermissionResource.SYSTEM_CONFIG),
     AI_CONFIG_WRITE("ai:config:write", "Write AI provider configuration", PermissionResource.SYSTEM_CONFIG),
     AUDIT_LOGS_READ("audit:logs:read", "Read audit logs", PermissionResource.SYSTEM_CONFIG),
-    EXTENSIONS_READ("extensions:read", "Read installed extensions", PermissionResource.SYSTEM_CONFIG),
-    EXTENSIONS_WRITE("extensions:write", "Install and configure extensions", PermissionResource.SYSTEM_CONFIG),
 
     // Org-scoped permissions for external (portal) users
     ORGANIZATIONS_READ_ORG("organizations:read:org", "Read own organization", PermissionResource.ORGANIZATIONS),

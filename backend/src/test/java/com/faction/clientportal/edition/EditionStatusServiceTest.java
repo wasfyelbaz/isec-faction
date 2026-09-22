@@ -32,7 +32,6 @@ class EditionStatusServiceTest {
     void reportsEveryFeatureAsOnAndEveryCapForCommunity() {
         when(quotaUsageService.current(Quota.AI_PROVIDERS)).thenReturn(1L);
         when(quotaUsageService.current(Quota.AI_PROMPTS)).thenReturn(0L);
-        when(quotaUsageService.current(Quota.EXTENSIONS)).thenReturn(2L);
 
         EditionStatusDto status = serviceFor(new CommunityEditionPolicy()).status();
 
@@ -42,9 +41,8 @@ class EditionStatusServiceTest {
         assertThat(status.getLimits())
                 .doesNotContainKey("users")
                 .containsEntry("ai_providers", 1)
-                .containsEntry("ai_prompts", 4)
-                .containsEntry("extensions", 2);
-        assertThat(status.getUsage()).containsEntry("ai_providers", 1L).containsEntry("extensions", 2L);
+                .containsEntry("ai_prompts", 4);
+        assertThat(status.getUsage()).containsEntry("ai_providers", 1L);
         assertThat(status.getUpgradeUrl()).isEqualTo(UPGRADE_URL);
     }
 
@@ -55,15 +53,12 @@ class EditionStatusServiceTest {
      */
     @Test
     void omitsLimitsEntirelyForEnterpriseButStillReportsUsage() {
-        when(quotaUsageService.current(Quota.EXTENSIONS)).thenReturn(42L);
 
         EditionStatusDto status = serviceFor(new UnrestrictedEditionPolicy()).status();
 
         assertThat(status.getEdition()).isEqualTo("ENTERPRISE");
         assertThat(status.getLimits()).isEmpty();
         assertThat(status.getFeatures()).doesNotContainValue(false);
-        assertThat(status.getUsage())
-                .hasSize(Quota.values().length)
-                .containsEntry("extensions", 42L);
+        assertThat(status.getUsage()).hasSize(Quota.values().length);
     }
 }

@@ -238,15 +238,6 @@
             <version>20260313.1</version>
         </dependency>
 
-        <!-- Faction Extender API: the interfaces uploaded extension jars implement.
-             Kept at the published 2.x coordinates so extensions built for Faction 1
-             load here unmodified. -->
-        <dependency>
-            <groupId>com.factionsecurity</groupId>
-            <artifactId>faction-extender</artifactId>
-            <version>2.7</version>
-        </dependency>
-
         <!-- JFreeChart: draws the severity bar chart in-process. The App Store extension
              that used to render it drew with this same library, so the output matches. -->
         <dependency>

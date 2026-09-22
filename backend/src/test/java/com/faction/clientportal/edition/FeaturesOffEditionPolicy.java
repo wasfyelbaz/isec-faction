@@ -26,7 +26,6 @@ public class FeaturesOffEditionPolicy implements EditionPolicy {
         return switch (quota) {
             case AI_PROVIDERS -> 1;
             case AI_PROMPTS   -> 4;
-            case EXTENSIONS   -> 2;
         };
     }
 }
