@@ -11,15 +11,14 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Placeholders an App Store extension owns — {@code ${faction-bar-chart}} and the
- * like — put directly in the DOCX template.
+ * Placeholders resolved by a {@link DocxUtils.TokenResolver} — {@code ${faction-bar-chart}}
+ * and {@code ${checklist-<name>}} — put directly in the DOCX template.
  *
  * <p>This is where report variables naturally live in Faction 2: a template author
  * writing {@code ${asmtName}} and {@code ${summary1}} will reach for the same place
- * to put a chart. Without this path an installed, enabled ReportManager extension
- * simply never runs, with nothing in the output to say why.
+ * to put a chart. Without this path an renderer simply never runs, with nothing in the output to say why.
  */
-class DocxUtilsExtensionTokenTest {
+class DocxUtilsRenderedTokenTest {
 
     /** Builds a one-paragraph document and runs generateDocx over it. */
     private WordprocessingMLPackage generate(String paragraphText,

@@ -8,7 +8,9 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -37,6 +39,12 @@ public class ReportTemplateDto {
     private String scoringType;
 
     @Builder.Default
+    /** Labels and colours for the checklist tables this template renders. */
+    private Map<String, String> checklistConfig = new HashMap<>();
+
+    /** Colours, axis label and size for the severity bar chart. */
+    private Map<String, String> barChartConfig = new HashMap<>();
+
     private List<String> sections = new ArrayList<>();
 
     @Builder.Default
@@ -72,6 +80,10 @@ public class ReportTemplateDto {
             .version(entity.getVersion())
             .scoringType(entity.getScoringType())
             .sections(entity.getSections() != null ? new ArrayList<>(entity.getSections()) : new ArrayList<>())
+            .checklistConfig(entity.getChecklistConfig() != null
+                ? new HashMap<>(entity.getChecklistConfig()) : new HashMap<>())
+            .barChartConfig(entity.getBarChartConfig() != null
+                ? new HashMap<>(entity.getBarChartConfig()) : new HashMap<>())
             .userDefinedFields(entity.getUserDefinedFields() != null
                 ? entity.getUserDefinedFields().stream()
                     .map(UserDefinedFieldDto::fromEntity)

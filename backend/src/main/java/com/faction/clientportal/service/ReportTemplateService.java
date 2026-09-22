@@ -151,6 +151,8 @@ public class ReportTemplateService {
             .font(request.getFont())
             .scoringType(request.getScoringType())
             .sections(request.getSections() != null ? new ArrayList<>(request.getSections()) : new ArrayList<>())
+            .checklistConfig(request.getChecklistConfig() != null ? new HashMap<>(request.getChecklistConfig()) : new HashMap<>())
+            .barChartConfig(request.getBarChartConfig() != null ? new HashMap<>(request.getBarChartConfig()) : new HashMap<>())
             .version(1)
             .userDefinedFields(fields)
             .active(true)
@@ -200,6 +202,8 @@ public class ReportTemplateService {
             .font(source.getFont())
             .scoringType(source.getScoringType())
             .sections(source.getSections() != null ? new ArrayList<>(source.getSections()) : new ArrayList<>())
+            .checklistConfig(source.getChecklistConfig() != null ? new HashMap<>(source.getChecklistConfig()) : new HashMap<>())
+            .barChartConfig(source.getBarChartConfig() != null ? new HashMap<>(source.getBarChartConfig()) : new HashMap<>())
             .version(1)
             .userDefinedFields(fields)
             .active(true)
@@ -359,6 +363,12 @@ public class ReportTemplateService {
         }
 
         // Update sections
+        if (request.getChecklistConfig() != null) {
+            template.setChecklistConfig(new HashMap<>(request.getChecklistConfig()));
+        }
+        if (request.getBarChartConfig() != null) {
+            template.setBarChartConfig(new HashMap<>(request.getBarChartConfig()));
+        }
         if (request.getSections() != null) {
             requireSectionsAllowed(request.getSections());
             template.setSections(new ArrayList<>(request.getSections()));

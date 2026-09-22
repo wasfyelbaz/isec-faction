@@ -7,6 +7,8 @@ import com.faction.clientportal.edition.Feature;
 import com.faction.clientportal.exception.ResourceNotFoundException;
 import com.faction.clientportal.model.*;
 import com.faction.clientportal.repository.*;
+import com.faction.clientportal.service.reporting.ChecklistTableRenderer;
+import com.faction.clientportal.service.reporting.SeverityBarChartRenderer;
 import com.faction.clientportal.util.LibreOfficeConverter;
 import com.faction.clientportal.util.reporting.DocxUtils;
 import com.faction.clientportal.util.reporting.ReportData;
@@ -74,7 +76,8 @@ public class DocxReportGenerationService implements ReportGenerationService {
     private final LibreOfficeConverter          libreOfficeConverter;
     private final LibreOfficeServerManager      libreOfficeServer;
     private final ReportEncryptor               reportEncryptor;
-    private final com.faction.clientportal.service.extension.ExtensionEventService extensionEventService;
+    private final ChecklistTableRenderer        checklistTableRenderer;
+    private final SeverityBarChartRenderer      severityBarChartRenderer;
     private final TerminologyConfigService      terminologyConfigService;
     private final OrganizationRepository        organizationRepository;
     private final EntityFieldConfigRepository   entityFieldConfigRepository;
@@ -113,9 +116,10 @@ public class DocxReportGenerationService implements ReportGenerationService {
 
         // The snapshot on the assessment can be older than the template it came from, so
         // re-read the live styling before anything reads it — see applyLiveTemplateStyling.
-        applyLiveTemplateStyling(assessment, assessment.getReportTemplateId() != null
+        ReportTemplate reportTemplate = assessment.getReportTemplateId() != null
                 ? reportTemplateRepository.findById(assessment.getReportTemplateId()).orElse(null)
-                : null);
+                : null;
+        applyLiveTemplateStyling(assessment, reportTemplate);
 
         if (assessment.getTemplateFileId() == null) {
             throw new BusinessRuleException(
@@ -160,15 +164,15 @@ public class DocxReportGenerationService implements ReportGenerationService {
                 assessment, assessors, remediationManager, assessmentTypeName,
                 vulns, categoryNames, imageBytes, imageContentTypes);
 
-        // 9b. Let ReportManager extensions rewrite the report's rich text, and get a
-        //     resolver for the placeholders they own inside the DOCX template itself
-        DocxUtils.TokenResolver extensionTokens =
-                applyReportExtensions(assessment, vulns, reportData);
+        // 9b. A resolver for the placeholders rendered in-process — the checklist tables
+        //     and the severity bar chart
+        DocxUtils.TokenResolver renderedTokens =
+                reportTokenResolver(reportTemplate, assessment.getId(), vulns);
 
         // 10. Generate the populated DOCX
         byte[] reportBytes = generateDocxBytes(templateBytes, reportData,
                 assessment.getTemplateCss() == null ? "" : assessment.getTemplateCss(),
-                assessment.getTemplateFont(), extensionTokens);
+                assessment.getTemplateFont(), renderedTokens);
 
         // 11. Upload to MinIO
         long   runTimestamp = System.currentTimeMillis();
@@ -575,74 +579,34 @@ public class DocxReportGenerationService implements ReportGenerationService {
     }
 
     /**
-     * Runs the report's rich text through every enabled {@code ReportManager} extension,
-     * and returns a resolver that does the same for placeholders sitting in the DOCX
-     * template itself.
+     * Resolves the placeholders this application renders itself.
      *
-     * <p>Faction 1 handed extensions the whole report body as one HTML string, because the
-     * report <em>was</em> HTML. Faction 2 fills a DOCX template, and a placeholder can
-     * therefore live in two quite different places:
+     * <p>{@code ${checklist-<name>}} and {@code ${faction-bar-chart}} were both served by
+     * App Store extensions until that mechanism was removed: installing one meant
+     * uploading a JAR that the server then loaded and executed, which is remote code
+     * execution with an approval step in front of it. Both are ordinary parts of a report,
+     * so they are rendered in-process and configured per template instead.
      *
-     * <ul>
-     *   <li><b>In a rich-text field</b> — the assessment summary, a finding's description.
-     *       Handled below by rewriting the field value; it is still HTML on the way to the
-     *       XHTML importer, so an extension returning
-     *       {@code <img src="data:image/png;base64,…">} embeds correctly.</li>
-     *   <li><b>In the DOCX template</b> — alongside {@code ${asmtName}} and
-     *       {@code ${summary1}}. This is where a chart naturally goes, since that is where
-     *       every other report variable lives. Handled by the returned resolver, which
-     *       {@link DocxUtils} calls for each placeholder no built-in variable claimed.</li>
-     * </ul>
-     *
-     * <p>Only RICH_TEXT fields are offered in the first case. A plain STRING field lands in
-     * the DOCX as literal text, so returning markup for one would print the tags rather
-     * than render them.
-     *
-     * <p>The assessment and vulnerabilities are mapped once and shared across every field
-     * and every placeholder. Cloning them per call would be quadratic on a large report.
-     *
-     * @return a resolver for template placeholders, or null when no ReportManager is installed
+     * <p>Each renderer returns null for a token it does not own, so the first one that
+     * claims it wins and an unclaimed placeholder is left alone rather than blanked.
      */
-    private DocxUtils.TokenResolver applyReportExtensions(Assessment assessment,
-                                                          List<Vulnerability> vulns,
-                                                          ReportData reportData) {
-        if (!extensionEventService.hasReportManagers()) return null;
+    private DocxUtils.TokenResolver reportTokenResolver(ReportTemplate template,
+                                                        String assessmentId,
+                                                        List<Vulnerability> vulns) {
+        var checklistOptions = ChecklistTableRenderer.ChecklistRenderOptions.from(
+                template == null ? null : template.getChecklistConfig());
+        var chartOptions = SeverityBarChartRenderer.BarChartOptions.from(
+                template == null ? null : template.getBarChartConfig());
+        // Read once: a template may hold several checklist placeholders, and the resolver
+        // is called for each one.
+        List<AssessmentChecklist> checklists =
+                assessmentChecklistRepository.findByAssessmentId(assessmentId);
 
-        com.faction.elements.Assessment assessmentElement =
-                extensionEventService.buildAssessmentElement(assessment);
-        List<com.faction.elements.Vulnerability> vulnElements =
-                extensionEventService.buildVulnerabilityElements(vulns);
-
-        // Assessment-level rich-text fields
-        if (reportData.getFieldValues() != null) {
-            reportData.getFieldValues().replaceAll((variableName, value) ->
-                    reportData.getFieldType(variableName) == FieldType.RICH_TEXT
-                            ? extensionEventService.applyReportManagers(assessmentElement, vulnElements, value)
-                            : value);
-        }
-
-        // Per-vulnerability narrative and rich-text fields
-        if (reportData.getVulnerabilities() != null) {
-            for (ReportData.ReportVulnerability vuln : reportData.getVulnerabilities()) {
-                vuln.setDescription(extensionEventService.applyReportManagers(
-                        assessmentElement, vulnElements, vuln.getDescription()));
-                vuln.setRecommendation(extensionEventService.applyReportManagers(
-                        assessmentElement, vulnElements, vuln.getRecommendation()));
-                vuln.setDetails(extensionEventService.applyReportManagers(
-                        assessmentElement, vulnElements, vuln.getDetails()));
-
-                if (vuln.getFieldValues() != null) {
-                    vuln.getFieldValues().replaceAll((variableName, value) ->
-                            vuln.getFieldType(variableName) == FieldType.RICH_TEXT
-                                    ? extensionEventService.applyReportManagers(
-                                            assessmentElement, vulnElements, value)
-                                    : value);
-                }
-            }
-        }
-
-        return token -> extensionEventService.applyReportManagers(
-                assessmentElement, vulnElements, token);
+        return token -> {
+            String checklist = checklistTableRenderer.render(token, checklists, checklistOptions);
+            if (checklist != null) return checklist;
+            return severityBarChartRenderer.render(token, vulns, chartOptions);
+        };
     }
 
     /**

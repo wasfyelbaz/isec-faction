@@ -11,7 +11,9 @@ import jakarta.persistence.*;
 import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Report Template entity for defining reusable assessment report templates.
@@ -93,6 +95,29 @@ public class ReportTemplate {
      */
     @Builder.Default
     private Integer version = 1;
+
+    /**
+     * Rendering options for the checklist tables this template draws with
+     * {@code ${checklist-<name>}} — status labels and their colours.
+     *
+     * <p>Per template rather than global: two templates can disagree about whether a
+     * passing check reads "PASS" or "Not Vulnerable" without one of them being wrong.
+     * Keys are the option names; unset keys fall back to the renderer's defaults, so an
+     * existing template renders unchanged until someone edits it.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "checklist_config", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, String> checklistConfig = new HashMap<>();
+
+    /**
+     * Rendering options for the severity bar chart this template draws with
+     * {@code ${faction-bar-chart}} — colours, axis label, dimensions.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "bar_chart_config", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, String> barChartConfig = new HashMap<>();
 
     /**
      * Report sections (ordered list of section name strings).

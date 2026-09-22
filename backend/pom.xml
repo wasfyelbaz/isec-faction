@@ -247,6 +247,14 @@
             <version>2.7</version>
         </dependency>
 
+        <!-- JFreeChart: draws the severity bar chart in-process. The App Store extension
+             that used to render it drew with this same library, so the output matches. -->
+        <dependency>
+            <groupId>org.jfree</groupId>
+            <artifactId>jfreechart</artifactId>
+            <version>1.5.4</version>
+        </dependency>
+
         <!--
           LibreOffice UNO Java bindings, vendored from a local LO installation.
 
