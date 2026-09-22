@@ -58,6 +58,42 @@ function validateCSS(css: string): string | null {
   return null;
 }
 
+
+/**
+ * The checklist and bar-chart options a template author can set.
+ *
+ * Placeholders carry the value the renderer falls back to, so an empty box is not a
+ * mystery — it says what will happen if you leave it alone. Keys match the map the
+ * backend reads (ChecklistTableRenderer / SeverityBarChartRenderer).
+ */
+const CHECKLIST_FIELDS = [
+  { key: 'passText', label: 'Pass label', placeholder: 'Not Vulnerable' },
+  { key: 'passCellColour', label: 'Pass fill', placeholder: '#92D050' },
+  { key: 'passFontColour', label: 'Pass text colour', placeholder: '#FFFFFF' },
+  { key: 'failText', label: 'Fail label', placeholder: 'Vulnerable' },
+  { key: 'failCellColour', label: 'Fail fill', placeholder: '#C00000' },
+  { key: 'failFontColour', label: 'Fail text colour', placeholder: '#FFFFFF' },
+  { key: 'naText', label: 'N/A label', placeholder: 'N/A' },
+  { key: 'naCellColour', label: 'N/A fill', placeholder: '#D9D9D9' },
+  { key: 'naFontColour', label: 'N/A text colour', placeholder: '#000000' },
+  { key: 'questionHeader', label: 'Question column heading', placeholder: 'Attack Type' },
+  { key: 'statusHeader', label: 'Status column heading', placeholder: 'Status' },
+  { key: 'commentHeader', label: 'Comment column heading', placeholder: 'Comment' },
+] as const;
+
+const BAR_CHART_FIELDS = [
+  { key: 'yAxisLabel', label: 'Y axis label', placeholder: 'Number of Findings' },
+  { key: 'colour.critical', label: 'Critical', placeholder: '#C00000' },
+  { key: 'colour.high', label: 'High', placeholder: '#FFC000' },
+  { key: 'colour.medium', label: 'Medium', placeholder: '#FFFF00' },
+  { key: 'colour.low', label: 'Low', placeholder: '#00B050' },
+  { key: 'colour.informational', label: 'Informational', placeholder: '#00B0F0' },
+  { key: 'width', label: 'Width (px)', placeholder: '600' },
+  { key: 'height', label: 'Height (px)', placeholder: '400' },
+  { key: 'font', label: 'Font', placeholder: 'Arial' },
+] as const;
+
+
 export default function ReportDesigner() {
   const [templates, setTemplates] = useState<ReportTemplateSummary[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
@@ -894,6 +930,92 @@ export default function ReportDesigner() {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* ── Checklist Tables ──────────────────────────────────────── */}
+            <div className="rd-section">
+              <div className="rd-section-header">
+                <span>Checklist Tables{isDirty && <span className="unsaved-indicator"> *</span>}</span>
+              </div>
+              <div className="rd-body">
+                <p className="rd-hint">
+                  How the checklist tables look where the template writes a checklist
+                  placeholder. Leave a field blank to use the default shown in it.
+                </p>
+                {CHECKLIST_FIELDS.map(({ key, label, placeholder }) => (
+                  <div className="rd-row" key={key}>
+                    <div className="rd-label">{label}</div>
+                    <div className="rd-value">
+                      <Input
+                        key={`chk-${key}-${selectedTemplate.id}`}
+                        defaultValue={selectedTemplate.checklistConfig?.[key] ?? ''}
+                        onChange={(e) =>
+                          updateTemplate({
+                            checklistConfig: {
+                              ...(selectedTemplateRef.current?.checklistConfig ?? {}),
+                              [key]: e.target.value,
+                            },
+                          })
+                        }
+                        placeholder={placeholder}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <div className="rd-row">
+                  <div className="rd-label">Show comment column</div>
+                  <div className="rd-value">
+                    <select
+                      className="rd-select"
+                      value={selectedTemplate.checklistConfig?.showComments ?? 'true'}
+                      onChange={(e) =>
+                        updateTemplate({
+                          checklistConfig: {
+                            ...(selectedTemplateRef.current?.checklistConfig ?? {}),
+                            showComments: e.target.value,
+                          },
+                        })
+                      }
+                    >
+                      <option value="true">Yes</option>
+                      <option value="false">No</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Severity Bar Chart ────────────────────────────────────── */}
+            <div className="rd-section">
+              <div className="rd-section-header">
+                <span>Severity Bar Chart{isDirty && <span className="unsaved-indicator"> *</span>}</span>
+              </div>
+              <div className="rd-body">
+                <p className="rd-hint">
+                  How the severity chart looks where the template writes the bar chart
+                  placeholder. Colours take a hex value, with or without a leading #.
+                </p>
+                {BAR_CHART_FIELDS.map(({ key, label, placeholder }) => (
+                  <div className="rd-row" key={key}>
+                    <div className="rd-label">{label}</div>
+                    <div className="rd-value">
+                      <Input
+                        key={`bar-${key}-${selectedTemplate.id}`}
+                        defaultValue={selectedTemplate.barChartConfig?.[key] ?? ''}
+                        onChange={(e) =>
+                          updateTemplate({
+                            barChartConfig: {
+                              ...(selectedTemplateRef.current?.barChartConfig ?? {}),
+                              [key]: e.target.value,
+                            },
+                          })
+                        }
+                        placeholder={placeholder}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 

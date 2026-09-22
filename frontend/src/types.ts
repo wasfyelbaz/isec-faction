@@ -548,6 +548,10 @@ export interface ReportTemplate {
   version: number;
   scoringType?: ScoringType;
   sections: string[];
+  /** Labels and colours for the checklist tables this template renders. */
+  checklistConfig?: Record<string, string>;
+  /** Colours, axis label and size for the severity bar chart. */
+  barChartConfig?: Record<string, string>;
   userDefinedFields: UserDefinedField[];
   active: boolean;
   createdBy?: string;

@@ -661,3 +661,21 @@
   outline: none;
   border-color: var(--accent-color, #6366f1);
 }
+
+/* The checklist/bar-chart config dropdowns. Matches .rd-input so a select and a
+   text box on adjacent rows line up instead of sitting at two different heights. */
+.rd-select {
+  width: 100%;
+  max-width: 320px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 0.375rem);
+  background: var(--primary-bg);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+}
+
+.rd-select:focus {
+  outline: none;
+  border-color: var(--accent-color, #6366f1);
+}
