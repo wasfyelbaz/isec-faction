@@ -634,6 +634,13 @@ Web template's sections over it. The mechanics are the same; the content maps di
     had no image in the `logo` slot; `${clientImage logo …}` then leaves the box empty, with no
     warning and no leftover tag → check `GET /api/v1/organizations/{id}/images` and add the
     image on the client's Images page, named `logo`. Nothing in the template is involved.
+27. **A generated report copied off the MinIO volume would not open in Word ("The file appears to
+    be corrupted"), while the same report downloaded from Faction was fine** → MinIO stores every
+    object in its bitrot format: a 32-byte hash before each 1 MiB block of `part.1`. A raw copy
+    is a broken zip above 1 MiB and carries a 32-byte prefix below it (Python's zip reader
+    tolerates the prefix, Word does not) → never copy `part.1`; `kali_minio_pull_network.sh` now
+    fetches through the S3 API with `mc` inside the minio container, and the bytes match the
+    API download hash for hash. Every sample pulled the old way had to be replaced.
 
 ---
 
@@ -770,7 +777,7 @@ OneBank ids). Copy, then edit the constants at the top before use.
 | `faction/kali_mvn_clientimage.sh` | Maven for the fork backend inside Docker on the VM, with the persistent `faction-m2` volume. |
 | `faction/kali_rebuild_backend.sh` | Rebuilds the backend image from the `isec-faction-clientimage` worktree and restarts the container (the Dockerfile packages with `-DskipTests`). |
 | `faction/kali_stage_files_network.sh` | Puts the template, UDF JSON, CSS and checklist JSON on the frontend nginx root so the signed-in page can upload them same-origin. |
-| `faction/kali_minio_pull_network.sh` | Copies an assessment's newest generated DOCX and PDF out of the MinIO volume on the VM. |
+| `faction/kali_minio_pull_network.sh` | Copies an assessment's newest generated DOCX and PDF out of MinIO on the VM through the S3 API (`mc` inside the minio container), byte for byte what Faction serves; a raw copy of `part.1` is not (lesson 27). |
 | `verify/kali_lo_roundtrip.sh` | Runs a DOCX through the backend container's LibreOffice (docx and pdf out), the same converter Faction uses, so a template can be proven before a report is generated. |
 | `faction/sync_to_kali.sh` | Copies the given project-relative paths from the Windows backup copy to the live Kali working directory and prints their checksums. |
 | `faction/Set-FactionKaliPortProxy.ps1` | Windows, elevated: repoints the `127.0.0.1:8080` portproxy rule at the VM's current IP (read from `vmrun`) and verifies `http://localhost:8080`. |
