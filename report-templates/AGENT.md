@@ -3,8 +3,8 @@
 Read this before touching any report template. It is the record of everything learned while
 converting three templates (the Web Application Penetration Testing template, "WAPT", now at v9,
 the Mobile Application template, "MAPT", in the fork, and the Internal/External Network template, "INT_EXTNWPT",
-now at v5, converted in one scripted pass with `tools/template-edits/build_network_v1.py` by following this guide
-and refined by `build_network_v2.py` … `build_network_v5.py`) so that the next template
+now at v6, converted in one scripted pass with `tools/template-edits/build_network_v1.py` by following this guide
+and refined by `build_network_v2.py` … `build_network_v6.py`) so that the next template
 (Network, Wi-Fi, Internal, External, or any other assessment type) is converted the same way,
 without rediscovering the engine's behaviour.
 
@@ -115,15 +115,17 @@ Work on a copy of the original iSec template. In this order:
    (`w:highlight` in runs and paragraph-mark run properties). Placeholder highlights survive into
    the report otherwise. `tools/template-edits/cover_fix.py` strips every `w:highlight` in the
    package.
-5. **Give tables that use `TableGridLight` explicit borders** (single, 0.5 pt, `BFBFBF`) written
-   directly into `tblPr`, and complete the undeclared edges of partially bordered merged cells.
-   Reason: the LibreOffice round trip writes an empty `<w:tcBorders/>` on every cell of a
-   `TableGridLight` table, and Word then draws no grid at all. The PDF is unaffected, the DOCX is
-   broken. **Keep the style name**: restyling to `TableGrid` also survives the round trip but
-   draws the lines black, which does not match the iSec reports (see lesson 7 and section 13).
-   `tools/template-edits/table_fix.py` does the border part (it marks touched tables with
-   `data-was-light`); `build_network_v5.py` is the worked example that keeps the light line. The
-   MAPT template got the earlier, black-lined cure (fork commit `643ec3e`).
+5. **Restyle every `TableGridLight` table to `TableGrid` and give every cell its own light
+   border** (single, 0.5 pt, `BFBFBF`), completing the undeclared edges of partially bordered
+   merged cells. Reason: the LibreOffice round trip writes an empty `<w:tcBorders/>` on every
+   cell of a table whose style id is `TableGridLight`, whatever the cells declare, and drops
+   table-level `tblBorders`; Word then draws no grid at all. Under `TableGrid` the per-cell
+   borders survive with their colour, so the report keeps the light grey line of the iSec
+   originals. `tools/template-edits/table_fix.py` does this for a whole template (it marks
+   touched tables with `data-was-light`); `build_network_v6.py` is the same cure applied after
+   v5 had wrongly gone back to the style name. Cells copied in from the original template carry
+   no borders of their own and fall back to the style's black: give them borders too. The MAPT
+   template got the same cure (fork commit `643ec3e`).
 6. **Fix cover text boxes that clip**: the date box in the Web template clipped "September 18,"
    because its DrawingML extent was too narrow. Widen the box (`wp:extent` and the VML fallback
    `style` width), left-align the paragraph, and set the insets so text clears the decorative
@@ -559,10 +561,15 @@ Web template's sections over it. The mechanics are the same; the content maps di
    corner shape → widen, left-align, 15 pt inset.
 6. **Yellow highlight in reports** → placeholder highlights on runs and paragraph marks → strip
    every `w:highlight`.
-7. **No table grid in the downloaded DOCX** → LibreOffice writes empty `tcBorders` for
-   `TableGridLight` → keep the style **and** write the same borders directly into `tblPr`
-   (`single`, `sz=4`, `color=BFBFBF`). Restyling to `TableGrid` also works but draws the lines
-   black, which does not match the iSec reports; direct borders keep the light grey line.
+7. **No table grid in the downloaded DOCX** → LibreOffice writes an empty `<w:tcBorders/>` on
+   every cell of any table whose style id is `TableGridLight`, whatever borders those cells
+   declare, and drops table-level `tblBorders`; Word reads the empty element as "no border"
+   → restyle to `TableGrid` and give every cell its own border (`single`, `sz=4`,
+   `color=BFBFBF`). Per-cell borders under `TableGrid` come back from LibreOffice intact, colour
+   included, so the line stays light grey. Network v5 went back to the style name and shipped a
+   report with no table lines in Word while its PDF looked right; v6 (`build_network_v6.py`) is
+   the cure, and `tools/verify/kali_lo_roundtrip.sh` proves a template before anything is
+   generated.
 8. **Client missing from the report although the application belonged to the client** → the
    assessment copies the client at creation and a later move does not update it (a fallback was
    built and reverted on request) → create the assessment after attaching the application, or
@@ -623,6 +630,10 @@ Web template's sections over it. The mechanics are the same; the content maps di
     explicit column width the importer auto-fits on content → stop typing tables into cells at all
     (lesson 22); where a table is genuinely needed, set explicit column widths and reset
     `word-break` for that field.
+26. **Client logo missing from the cover and footers of a real engagement** → the client record
+    had no image in the `logo` slot; `${clientImage logo …}` then leaves the box empty, with no
+    warning and no leftover tag → check `GET /api/v1/organizations/{id}/images` and add the
+    image on the client's Images page, named `logo`. Nothing in the template is involved.
 
 ---
 
@@ -669,10 +680,17 @@ Proven repeatedly on the Network template:
 Tools that do this mechanically: `tools/faction/e2e_client.py generate` (generate, download,
 grep tags, count occurrences), `tools/verify/inspect_placement.py` (where images landed),
 `tools/verify/verify_v9.py` (Word + LibreOffice render, measurements, comparison sheet),
-`tools/verify/verify_network_v3.py` and `verify_network_v5.py` (charts, CVSS links, scope tables
-read back out of a generated report),
+`tools/verify/verify_network_v3.py`, `verify_network_v5.py` and `verify_network_v6.py` (charts,
+CVSS links, scope tables and, from v6, the cell borders read back out of a generated report),
+`tools/verify/kali_lo_roundtrip.sh` (run a template through the backend container's LibreOffice
+before generating anything: the DOCX it returns is what Faction hands out),
 `tools/faction/minio_pull.sh` (copy the generated files straight out of the MinIO volume when the
 API session is not available).
+
+The reverse also holds: a correct PDF does not prove the DOCX. The PDF is drawn from LibreOffice's
+own model, the DOCX is what LibreOffice writes back out, and the two disagree on table borders
+(lesson 7). Open the generated DOCX and check `tcBorders` on its cells, or run
+`verify_network_v6.py`, before calling table lines fixed.
 
 ---
 
@@ -735,12 +753,13 @@ OneBank ids). Copy, then edit the constants at the top before use.
 | `template-edits/build_network_v2.py` | v1→v2: blank page after the TOC removed, 1.3 Author inline, 2.3 SmartArt → `methodology.png` rendered from Word, 5.x affected assets centred. |
 | `template-edits/build_network_v3.py` | v2→v3: `${chartData checklist}` and `${chartData severity}` marker paragraphs before the two native charts; `${cvssString link}` → `${cvssLink View CVSS Metrics}`. |
 | `template-edits/build_network_v4.py` | v3→v4: the merged scope and credentials cells split back into the original's own cells, one RICH_TEXT tag each, so nothing is nested. |
-| `template-edits/build_network_v5.py` | v4→v5: the light `BFBFBF` line restored on the 12 tables the original draws that way (style plus direct `tblPr` borders); the 3.1.1 table pinned to fixed twips. |
+| `template-edits/build_network_v5.py` | v4→v5: the 3.1.1 table pinned to fixed twips; also put the 12 light tables back on the `TableGridLight` style, which v6 had to undo. |
+| `template-edits/build_network_v6.py` | v5→v6: the 12 tables back on `TableGrid` with a `BFBFBF` border on every cell, the only form LibreOffice returns intact in the DOCX (lesson 7). |
 | `verify/build_placement_test.py` | Builds a probe template with the tag in every kind of place (cover box, cell, right-aligned, mixed, unknown slot, header) to learn what the engine honours. |
 | `verify/inspect_placement.py` | Reports where images landed in a generated DOCX (boxes, cells, body, header) with sizes. |
 | `verify/render_where.py` | Renders template and generated pages (Word COM + PyMuPDF), boxes the tag/image, side-by-side sheet. |
 | `verify/verify_v9.py` | Word and container-LibreOffice renders of an engine output, logo and page-number measurements, band crop, comparison sheet. |
-| `verify/verify_network_v3.py`, `verify/verify_network_v5.py` | Read a generated Network report back and assert it: both charts against the engagement's real data (cached values and embedded workbook), one NVD link per finding carrying that finding's vector, the scope and credentials cells, no surviving tag or marker. |
+| `verify/verify_network_v3.py`, `verify_network_v5.py`, `verify_network_v6.py` | Read a generated Network report back and assert it (v6 adds: no cell with an empty `tcBorders`, light borders on the cells, no `TableGridLight` left): both charts against the engagement's real data (cached values and embedded workbook), one NVD link per finding carrying that finding's vector, the scope and credentials cells, no surviving tag or marker. |
 | `faction/e2e_client.py` | `setup`: upload template file, import UDFs by variable name, create client + contacts + logo, attach the application. `generate`: generate, poll, download DOCX/PDF, grep unresolved tags. Needs a session token file. |
 | `faction/e2e_clone.py` | Clones an assessment (field values + findings) onto a client-owned application and generates. |
 | `faction/minio_pull.sh` | Copies the latest generated DOCX/PDF of an assessment out of the MinIO volume with a helper container. |
@@ -752,6 +771,7 @@ OneBank ids). Copy, then edit the constants at the top before use.
 | `faction/kali_rebuild_backend.sh` | Rebuilds the backend image from the `isec-faction-clientimage` worktree and restarts the container (the Dockerfile packages with `-DskipTests`). |
 | `faction/kali_stage_files_network.sh` | Puts the template, UDF JSON, CSS and checklist JSON on the frontend nginx root so the signed-in page can upload them same-origin. |
 | `faction/kali_minio_pull_network.sh` | Copies an assessment's newest generated DOCX and PDF out of the MinIO volume on the VM. |
+| `verify/kali_lo_roundtrip.sh` | Runs a DOCX through the backend container's LibreOffice (docx and pdf out), the same converter Faction uses, so a template can be proven before a report is generated. |
 | `faction/sync_to_kali.sh` | Copies the given project-relative paths from the Windows backup copy to the live Kali working directory and prints their checksums. |
 | `faction/Set-FactionKaliPortProxy.ps1` | Windows, elevated: repoints the `127.0.0.1:8080` portproxy rule at the VM's current IP (read from `vmrun`) and verifies `http://localhost:8080`. |
 | `faction/network_checklist_questions.json` | The 13 iSec Network checklist rows taken from the template's own 4.1 table, in the order the checklist template wants them. |

@@ -219,3 +219,14 @@ History:
   the columns stopped lining up under the header. Measured in the generated PDF: columns 130.6 / 130.6 /
   130.6 / 130.7 pt, each column's first bullet exactly 130.6 pt from the previous, border colour
   (0.75, 0.75, 0.75) = `BFBFBF`.
+- v6 (2026-09-22, `tools/template-edits/build_network_v6.py`): v5's line fix was wrong for the DOCX. LibreOffice writes an
+  empty `<w:tcBorders/>` on every cell of any table whose style id is `TableGridLight`, whatever the cells declare, and
+  drops table-level `tblBorders`; the DOCX Faction hands out therefore had no table lines at all in Word while the PDF
+  (drawn from LibreOffice's own model) looked right. Found on the first real engagement generated from v5 ("External
+  Network", Klivvr). The twelve tables go back on `TableGrid` and every cell carries its own `single / 0.5 pt / BFBFBF`
+  border; eight cells copied from the original in v4 had none, which is why v4's scope table drew black. Proven before
+  generating: a LibreOffice round trip of the template itself (`tools/verify/kali_lo_roundtrip.sh`) returned 17 tables,
+  0 empty `tcBorders`, colours intact; the regenerated Klivvr report has 19 tables, 0 empty `tcBorders`, 1334 light edges.
+  `verify_network_v6.py` now reads the generated DOCX for empty `tcBorders`. Same run: a client whose record has no
+  image in the `logo` slot gets an empty logo box on the cover and in the footers, with no warning; the fix is the
+  client's Images page, not the template.
