@@ -2454,6 +2454,12 @@ export interface PasswordPolicy {
 export interface TerminologyConfig {
   organizationSingular: string;
   organizationPlural: string;
+  /**
+   * What this installation calls the thing an engagement runs against. Wording only: the API,
+   * the routes and every payload still say "application".
+   */
+  targetSingular: string;
+  targetPlural: string;
   subOrganizationSingular: string;
   subOrganizationPlural: string;
   /**

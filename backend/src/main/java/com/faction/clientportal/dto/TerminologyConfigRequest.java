@@ -22,6 +22,8 @@ import lombok.NoArgsConstructor;
 public class TerminologyConfigRequest {
     private String organizationSingular;
     private String organizationPlural;
+    private String targetSingular;
+    private String targetPlural;
     private String subOrganizationSingular;
     private String subOrganizationPlural;
     private String severityCritical;

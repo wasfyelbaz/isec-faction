@@ -34,6 +34,10 @@ public class TerminologyConfigService {
                 current.getOrganizationSingular()));
         current.setOrganizationPlural(orDefault(request.getOrganizationPlural(),
                 current.getOrganizationPlural()));
+        current.setTargetSingular(orDefault(request.getTargetSingular(),
+                current.getTargetSingular()));
+        current.setTargetPlural(orDefault(request.getTargetPlural(),
+                current.getTargetPlural()));
         current.setSubOrganizationSingular(orDefault(request.getSubOrganizationSingular(),
                 current.getSubOrganizationSingular()));
         current.setSubOrganizationPlural(orDefault(request.getSubOrganizationPlural(),

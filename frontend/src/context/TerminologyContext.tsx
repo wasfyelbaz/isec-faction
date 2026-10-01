@@ -15,6 +15,8 @@ import type { TerminologyConfig, VulnerabilitySeverity } from '../types';
 const DEFAULTS: TerminologyConfig = {
   organizationSingular: 'Client',
   organizationPlural: 'Clients',
+  targetSingular: 'Target',
+  targetPlural: 'Targets',
   subOrganizationSingular: 'Sub-organization',
   subOrganizationPlural: 'Sub-organizations',
   severityCritical: SEVERITY_LABELS.CRITICAL,
@@ -36,9 +38,11 @@ const SEVERITY_KEYS: Record<VulnerabilitySeverity, keyof TerminologyConfig> = {
 interface TerminologyContextValue extends TerminologyConfig {
   /** Lower-cased singular, for mid-sentence use ("no such value stream"). */
   organizationLower: string;
+  targetLower: string;
   subOrganizationLower: string;
   /** Lower-cased plural. */
   organizationsLower: string;
+  targetsLower: string;
   subOrganizationsLower: string;
   /**
    * "a" or "an" for the singular. "an organization" but "a value stream" — a renamed label that
@@ -72,6 +76,8 @@ const TerminologyContext = createContext<TerminologyContextValue>({
   ...DEFAULTS,
   organizationLower: 'client',
   organizationsLower: 'clients',
+  targetLower: 'target',
+  targetsLower: 'targets',
   subOrganizationLower: 'sub-organization',
   subOrganizationsLower: 'sub-organizations',
   organizationArticle: 'a',
@@ -100,6 +106,8 @@ export function TerminologyProvider({ children }: { children: ReactNode }) {
     ...config,
     organizationLower: config.organizationSingular.toLowerCase(),
     organizationsLower: config.organizationPlural.toLowerCase(),
+    targetLower: config.targetSingular.toLowerCase(),
+    targetsLower: config.targetPlural.toLowerCase(),
     subOrganizationLower: config.subOrganizationSingular.toLowerCase(),
     subOrganizationsLower: config.subOrganizationPlural.toLowerCase(),
     // Good enough for the handful of sentences that need it: the vowel test is wrong for a

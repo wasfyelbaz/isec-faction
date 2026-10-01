@@ -36,11 +36,33 @@ class TerminologyConfigTest extends TestContainersConfig {
         assertThat(defaults.getOrganizationPlural()).isEqualTo("Clients");
         assertThat(defaults.getSubOrganizationSingular()).isEqualTo("Sub-organization");
         assertThat(defaults.getSubOrganizationPlural()).isEqualTo("Sub-organizations");
+        // An engagement runs against a "target", not an "application": this fork tests networks,
+        // Active Directory and wireless estates as readily as software.
+        assertThat(defaults.getTargetSingular()).isEqualTo("Target");
+        assertThat(defaults.getTargetPlural()).isEqualTo("Targets");
         assertThat(defaults.getSeverityCritical()).isEqualTo("Critical");
         assertThat(defaults.getSeverityHigh()).isEqualTo("High");
         assertThat(defaults.getSeverityMedium()).isEqualTo("Medium");
         assertThat(defaults.getSeverityLow()).isEqualTo("Low");
         assertThat(defaults.getSeverityInformational()).isEqualTo("Informational");
+    }
+
+    /**
+     * The noun is configurable for the same reason the client noun is: another install may say
+     * "Asset", "Scope" or "System". Renaming it must not disturb the other labels.
+     */
+    @Test
+    void theTargetNounCanBeRenamedWithoutTouchingTheRest() {
+        service.updateConfig(TerminologyConfigRequest.builder()
+                .targetSingular("Asset").targetPlural("Assets").build());
+
+        TerminologyConfig saved = service.getConfig();
+
+        assertThat(saved.getTargetSingular()).isEqualTo("Asset");
+        assertThat(saved.getTargetPlural()).isEqualTo("Assets");
+        assertThat(saved.getOrganizationSingular()).isEqualTo("Client");
+        assertThat(saved.getOrganizationPlural()).isEqualTo("Clients");
+        assertThat(saved.getSeverityCritical()).isEqualTo("Critical");
     }
 
     @Test

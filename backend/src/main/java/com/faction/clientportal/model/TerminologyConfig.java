@@ -53,6 +53,23 @@ public class TerminologyConfig {
     @Column(nullable = false)
     private String organizationPlural = "Clients";
 
+    /**
+     * What this install calls the thing an engagement runs against. Faction's entity is an
+     * "application", which suits a software shop; a security consultancy tests networks, Active
+     * Directory forests, wireless estates and cloud tenants as readily as applications, and
+     * "target" covers all of them without lying about any.
+     *
+     * <p>Wording only, exactly as above: the entity, the table and every API payload still say
+     * "application".
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private String targetSingular = "Target";
+
+    @Builder.Default
+    @Column(nullable = false)
+    private String targetPlural = "Targets";
+
     @Builder.Default
     @Column(nullable = false)
     private String subOrganizationSingular = "Sub-organization";
