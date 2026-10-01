@@ -16,11 +16,13 @@ import { usePersistedState } from '../hooks/usePersistedState';
 import { useWorkflowsContext } from '../context/WorkflowsContext';
 import { colorFor, statusLabel, mergedStatusNames, workflowsForSelectedTypes } from '../utils/workflowLookup';
 import './Assessments.css';
+import { useTerminology } from '../context/TerminologyContext';
 
 // localStorage key for this table's saved search, filters, sort and paging.
 const TABLE_KEY = 'assessments';
 
 export default function Assessments() {
+  const { targetSingular } = useTerminology();
   const navigate = useNavigate();
   // Present when the sidebar's assessment type menu routed here: this page is then that one type.
   const { typeId } = useParams<{ typeId?: string }>();
@@ -310,7 +312,7 @@ export default function Assessments() {
       ),
     },
     {
-      header: 'Application',
+      header: targetSingular,
       sortKey: 'applicationName',
       render: (assessment) => assessment.applicationName || '-',
     },

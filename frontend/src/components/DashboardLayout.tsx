@@ -193,7 +193,7 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
     hasCustomMenuLogoLarge, hasCustomMenuLogoSmall,
   } = useBranding();
   const { hasFeature, assessmentTypeMenu } = useEdition();
-  const { organizationPlural, organizationSingular } = useTerminology();
+  const { organizationPlural, organizationSingular, targetPlural } = useTerminology();
   const [sidebarOpen, setSidebarOpen] = useState(
     () => localStorage.getItem('sidebarOpen') !== 'false'
   );
@@ -450,6 +450,9 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
     // The config page for those records follows the same noun, so the two menu entries never
     // disagree about what the thing is called.
     if (name === 'Organization Config') return `${organizationSingular} Config`;
+    // Faction's entity is an "application". This install tests networks, Active Directory and
+    // wireless estates too, so the menu says what the engagement actually runs against.
+    if (name === 'Applications') return targetPlural;
     return name;
   };
 

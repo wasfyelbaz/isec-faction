@@ -55,7 +55,7 @@ function formatTime(iso?: string): string {
  * on screen, so paging through the log never changes them.
  */
 export default function RetestActivityLog() {
-  const { organizationSingular } = useTerminology();
+  const { organizationSingular, targetSingular } = useTerminology();
   const navigate = useNavigate();
 
   const [range, setRange] = usePersistedState<DateRange>(TABLE_KEY, 'range', { days: 6, from: '', to: '' });
@@ -119,7 +119,7 @@ export default function RetestActivityLog() {
         </div>
       ),
     },
-    { header: 'Application', render: r => r.applicationName || '—' },
+    { header: targetSingular, render: r => r.applicationName || '—' },
     { header: organizationSingular, render: r => r.organizationName || '—' },
     { header: 'Verified by', render: r => r.completedByName || r.completedBy || '—' },
     {

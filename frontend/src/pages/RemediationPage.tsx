@@ -92,7 +92,7 @@ function RemediationAlerts({ kind }: { kind: RemediationAlertKind }) {
   const alertsCrumb = isRetest
     ? { label: 'Retest Alerts', to: '/remediation/retests' }
     : { label: 'Vuln Alerts', to: '/remediation/vulnerabilities' };
-  const { severityOptions, organizationPlural, organizationSingular } = useTerminology();
+  const { severityOptions, organizationPlural, organizationSingular, targetSingular } = useTerminology();
   const navigate = useNavigate();
 
   // The queue is reachable on a retest permission alone, which external users hold. Editing
@@ -488,7 +488,7 @@ function RemediationAlerts({ kind }: { kind: RemediationAlertKind }) {
       ),
     },
     {
-      header: 'Application',
+      header: targetSingular,
       sortKey: 'applicationName',
       render: r => r.applicationName || '—',
     },

@@ -31,6 +31,7 @@ import { usePermissions } from '../utils/permissions';
 import { useWorkflowsContext } from '../context/WorkflowsContext';
 import { colorFor, isAmbiguous, mergedStatusNames, statusLabel, workflowsForSelectedTypes } from '../utils/workflowLookup';
 import './Engagements.css';
+import { useTerminology } from '../context/TerminologyContext';
 
 /** A calendar Date as the zone-less ISO datetime the API uses for these date-only fields. */
 const toApiDate = (dt: Date): string => {
@@ -53,6 +54,7 @@ const defaultCalendarWindow = (): { start: string; end: string } => {
 const TABLE_KEY = 'scheduling';
 
 export default function Engagements() {
+  const { targetSingular } = useTerminology();
   const navigate = useNavigate();
   // The View action opens the assessment detail page, which sits behind its own permission —
   // scheduling access alone does not imply it.
@@ -606,7 +608,7 @@ export default function Engagements() {
       ),
     },
     {
-      header: 'Application',
+      header: targetSingular,
       sortKey: 'applicationName',
       render: (assessment) => (
         <span>

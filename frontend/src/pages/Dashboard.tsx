@@ -65,7 +65,7 @@ function SuperAdminDashboard() {
 }
 
 export default function Dashboard() {
-  const { organizationPlural } = useTerminology();
+  const { organizationPlural, targetPlural } = useTerminology();
   const [roles, setRoles] = useState<string[] | null>(() => getCurrentUser()?.roles ?? null);
 
   // Sessions created before role names were added to the login response have no
@@ -141,7 +141,7 @@ export default function Dashboard() {
             <AppWindow size={28} />
           </div>
           <div className="stat-info">
-            <p className="stat-label">Applications</p>
+            <p className="stat-label">{targetPlural}</p>
             <p className="stat-value">--</p>
           </div>
         </div>

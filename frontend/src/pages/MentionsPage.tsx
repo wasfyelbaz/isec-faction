@@ -36,6 +36,10 @@ interface Group {
  * target was captured and whose link shape no longer identifies one — without it they
  * would silently vanish from the feed.
  */
+/**
+ * Module scope, so the wording cannot come from the terminology hook here — the Applications
+ * group is relabelled at render time instead (see `groupLabel`).
+ */
 const GROUPS: Group[] = [
   {
     key: 'APPLICATION', label: 'Applications', Icon: AppWindow,

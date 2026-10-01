@@ -123,7 +123,7 @@ function originFrom(state: unknown): { label: string; to: string } | null {
 }
 
 export default function AssessmentDetail() {
-  const { organizationSingular } = useTerminology();
+  const { organizationSingular, targetSingular } = useTerminology();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { permissions } = usePermissions();
@@ -1015,7 +1015,7 @@ export default function AssessmentDetail() {
                   </td>
                 </tr>
                 <tr>
-                  <td className="info-label">Application</td>
+                  <td className="info-label">{targetSingular}</td>
                   <td>{assessment.applicationName || '-'}</td>
                 </tr>
                 <tr>

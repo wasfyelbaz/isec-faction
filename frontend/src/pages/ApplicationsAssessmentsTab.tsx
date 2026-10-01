@@ -11,6 +11,7 @@ import SurveyDrawer from '../components/SurveyDrawer';
 import { useWorkflowsContext } from '../context/WorkflowsContext';
 import { colorFor, statusLabel, mergedStatusNames } from '../utils/workflowLookup';
 import '../components/SearchableSelect.css';
+import { useTerminology } from '../context/TerminologyContext';
 
 const PAGE_SIZE = 10;
 // App-filter dropdown only shows a starter list; server-side search reaches the rest, so a
@@ -19,6 +20,7 @@ const APP_OPTION_LIMIT = 250;
 
 // ── Tab ───────────────────────────────────────────────────────────────────────
 export default function ApplicationsAssessmentsTab() {
+  const { targetSingular } = useTerminology();
   const { workflows } = useWorkflowsContext();
   const [allAssessments, setAllAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -149,7 +151,7 @@ export default function ApplicationsAssessmentsTab() {
       ),
     },
     {
-      header: 'Application',
+      header: targetSingular,
       sortKey: 'applicationName',
       render: (a) => <span>{a.applicationName || '-'}</span>,
     },

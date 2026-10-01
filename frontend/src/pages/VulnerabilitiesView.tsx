@@ -42,7 +42,7 @@ interface VulnerabilitiesViewProps {
 }
 
 export default function VulnerabilitiesView({ onFiltersChange }: VulnerabilitiesViewProps = {}) {
-  const { severityOptions, organizationPlural, organizationSingular } = useTerminology();
+  const { severityOptions, organizationPlural, organizationSingular, targetSingular } = useTerminology();
   const navigate = useNavigate();
 
   // External users (app owners, org users) reach this page on their read permission but
@@ -426,7 +426,7 @@ export default function VulnerabilitiesView({ onFiltersChange }: Vulnerabilities
         return <Badge variant={variant}>{v.exceptionState}</Badge>;
       },
     },
-    { header: 'Application', sortKey: 'applicationName', render: (v) => <span>{v.applicationName || '-'}</span> },
+    { header: targetSingular, sortKey: 'applicationName', render: (v) => <span>{v.applicationName || '-'}</span> },
     { header: 'Assessment', sortKey: 'assessmentName', render: (v) => <span>{v.assessmentName || '-'}</span> },
     { header: organizationSingular, sortKey: 'organizationName', render: (v) => <span>{v.organizationName || '-'}</span> },
     { header: 'Opened', sortKey: 'openedAt', render: (v) => v.openedAt ? new Date(v.openedAt).toLocaleDateString() : '-' },

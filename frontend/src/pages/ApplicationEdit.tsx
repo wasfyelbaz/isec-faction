@@ -210,7 +210,7 @@ interface AppFormSnapshot {
 }
 
 export default function ApplicationEdit() {
-  const { organizationArticle, organizationLower, organizationSingular, subOrganizationSingular, subOrganizationsLower } = useTerminology();
+  const { organizationArticle, organizationLower, organizationSingular, subOrganizationSingular, subOrganizationsLower, targetSingular, targetPlural } = useTerminology();
   const { id } = useParams<{ id: string }>();
   const { setBreadcrumbs } = usePageTitle();
   const { workflows } = useWorkflowsContext();
@@ -399,8 +399,8 @@ export default function ApplicationEdit() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: 'Applications', to: '/applications' },
-      { label: appId ? `${appId} ${formData.name}` : (formData.name || 'Application') },
+      { label: targetPlural, to: '/applications' },
+      { label: appId ? `${appId} ${formData.name}` : (formData.name || targetSingular) },
     ]);
     return () => setBreadcrumbs(null);
   }, [appId, formData.name]);
@@ -976,7 +976,7 @@ export default function ApplicationEdit() {
                   <FormGroup>
                     <FormLabel required>Name</FormLabel>
                     <Input
-                      placeholder="Application Name"
+                      placeholder={`${targetSingular} name`}
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required
