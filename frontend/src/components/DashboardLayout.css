@@ -46,15 +46,22 @@
   margin-bottom: -35px;
 }
 
-/* The OWASP lockup stacks a badge above the wordmark, so it stands ~18px taller than the
-   wordmark-only mark and pushes the header down with it. More height keeps the wordmark
-   itself the same size; the negative top margin gives back what the extra height took.
-   -14px is the floor — the header's 14.4px top padding is all the room there is, and the
-   sidebar clips anything above it. */
+/* Upstream ships the OWASP lockup here: a badge stacked above the wordmark, standing ~18px
+   taller than a wordmark-only mark, which is why this rule carried extra height and a
+   negative top margin to give that height back.
+
+   This fork ships the iSec mark, which is wordmark-only (2.14:1) and needs no badge
+   allowance — at 88px it drew ~188px wide in a 224px rail and the -40px let the nav ride up
+   into it. So it takes the same geometry as the base .sidebar-logo. The class is kept as the
+   seam the component already targets, for whenever a stacked mark comes back. */
 .sidebar-logo--lockup {
-  height: 88px;
-  margin-top: -12px;
-  margin-bottom: -40px;
+  height: 56px;
+  /* -21px, not the base -35px: the negative margin sets how much layout space the mark
+     gives back, so height + margin is what the header actually claims. Holding that sum at
+     35px keeps the header exactly as tall as it was at 70px, and shrinking the mark alone
+     also leaves less of it overhanging the nav below. */
+  margin-top: 0;
+  margin-bottom: -21px;
 }
 
 /* Collapsed: the square mark, in a 60px rail that leaves ~36px between the

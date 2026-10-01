@@ -43,7 +43,7 @@ const DEFAULTS = {
  */
 const DEFAULT_HEIGHTS = __FACTION_EDITION__ === 'enterprise'
   ? { loginLogo: 120, menuLogoLarge: 70, menuLogoSmall: 76 } as const
-  : { loginLogo: 150, menuLogoLarge: 88, menuLogoSmall: 76 } as const;
+  : { loginLogo: 150, menuLogoLarge: 56, menuLogoSmall: 76 } as const;
 
 interface BrandingContextValue {
   /** Raw config, or null until the first load resolves. */
