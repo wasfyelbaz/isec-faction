@@ -12,7 +12,9 @@ Everything below was verified on the fork `wasfyelbaz/isec-faction` at commit `b
 later, on a real generation in the local Faction build, in both Microsoft Word and Faction's own
 PDF output. Where something was not verified, the text says so.
 
-Companion files in this folder:
+Companion files (beside this file on the workstation; in the fork repository they sit under
+`report-templates/Web/` and `report-templates/Network/`, with the originals under `Original/` and the
+upload copies under `Faction Tuned/`):
 
 | File | Use it for |
 |---|---|

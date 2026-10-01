@@ -1,0 +1,229 @@
+{
+  "userDefinedFields": [
+    {
+      "variableName": "summary1",
+      "displayName": "Executive Summary",
+      "helpText": "Faction default field. Not placed in the iSec template; add a ${summary1} paragraph to the DOCX if wanted.",
+      "fieldType": "RICH_TEXT",
+      "fieldScope": "ASSESSMENT",
+      "displayOrder": 0,
+      "required": false
+    },
+    {
+      "variableName": "summary2",
+      "displayName": "Scope",
+      "helpText": "Faction default field. Not placed in the iSec template; add a ${summary2} paragraph to the DOCX if wanted.",
+      "fieldType": "RICH_TEXT",
+      "fieldScope": "ASSESSMENT",
+      "displayOrder": 1,
+      "required": false
+    },
+    {
+      "variableName": "report_version",
+      "displayName": "Report Version",
+      "helpText": "Printed as v${report_version} in the Document Title and in the Document History table.",
+      "fieldType": "STRING",
+      "fieldScope": "ASSESSMENT",
+      "defaultValue": "1.0",
+      "displayOrder": 2,
+      "required": true,
+      "maxLength": 10
+    },
+    {
+      "variableName": "asmt_phase",
+      "displayName": "Assessment Phase",
+      "helpText": "Used in 2.1, 3.1, 3.1.1, the Document History description and every Status cell (2.9 and 5.x). This template is for initial tests only; the retest report uses a separate template. Same variable as the MAPT template.",
+      "fieldType": "DROPDOWN",
+      "fieldScope": "ASSESSMENT",
+      "dropdownOptions": [
+        "Initial Test"
+      ],
+      "defaultValue": "Initial Test",
+      "displayOrder": 3,
+      "required": true
+    },
+    {
+      "variableName": "test_type",
+      "displayName": "Test Type",
+      "helpText": "Rendered as '${test_type} box' in 2.1 and '${test_type} Box' in 3.1. Same variable as the MAPT template.",
+      "fieldType": "DROPDOWN",
+      "fieldScope": "ASSESSMENT",
+      "dropdownOptions": [
+        "Black",
+        "Grey",
+        "White"
+      ],
+      "defaultValue": "Grey",
+      "displayOrder": 4,
+      "required": true
+    },
+    {
+      "variableName": "testing_hours",
+      "displayName": "Testing Hours",
+      "helpText": "Completes the sentence 'the penetration testing engagement was initiated ${testing_hours}.' in 2.1.",
+      "fieldType": "DROPDOWN",
+      "fieldScope": "ASSESSMENT",
+      "dropdownOptions": [
+        "during working hours",
+        "after working hours, minimizing the impact on the server load, given the production environment's sensitivity"
+      ],
+      "defaultValue": "during working hours",
+      "displayOrder": 5,
+      "required": true
+    },
+    {
+      "variableName": "project_name",
+      "displayName": "Project / Application Name",
+      "helpText": "Cover page, 1.1, 2.1, 3.1, 3.1.1 and the 5.1 heading. Same variable as the MAPT template. Interim until ${asmtAppName} exists. (The client name comes from the client record as ${asmtClient}.)",
+      "fieldType": "STRING",
+      "fieldScope": "ASSESSMENT",
+      "displayOrder": 6,
+      "required": true,
+      "maxLength": 120
+    },
+    {
+      "variableName": "app_url",
+      "displayName": "Application URL",
+      "helpText": "Full URL including https://. Rendered as a hyperlink in 3.1.1 and as text in the 5.1 heading.",
+      "fieldType": "STRING",
+      "fieldScope": "ASSESSMENT",
+      "displayOrder": 7,
+      "required": true,
+      "maxLength": 500
+    },
+    {
+      "variableName": "app_version",
+      "displayName": "Application Version",
+      "helpText": "3.1.1 Testing Scope, Version column.",
+      "fieldType": "STRING",
+      "fieldScope": "ASSESSMENT",
+      "displayOrder": 8,
+      "required": false,
+      "maxLength": 50
+    },
+    {
+      "variableName": "environment",
+      "displayName": "Environment Type",
+      "helpText": "3.1.1 Testing Scope, Environment Type column.",
+      "fieldType": "DROPDOWN",
+      "fieldScope": "ASSESSMENT",
+      "dropdownOptions": [
+        "Production",
+        "Testing",
+        "UAT",
+        "Staging"
+      ],
+      "defaultValue": "UAT",
+      "displayOrder": 9,
+      "required": true
+    },
+    {
+      "variableName": "first_reviewer",
+      "displayName": "First Reviewer",
+      "helpText": "1.3 Document History, row 2. Interim until ${asmtReviewers_Comma} exists.",
+      "fieldType": "STRING",
+      "fieldScope": "ASSESSMENT",
+      "displayOrder": 10,
+      "required": false,
+      "maxLength": 120
+    },
+    {
+      "variableName": "second_reviewer",
+      "displayName": "Second Reviewer",
+      "helpText": "1.3 Document History, row 3.",
+      "fieldType": "STRING",
+      "fieldScope": "ASSESSMENT",
+      "displayOrder": 11,
+      "required": false,
+      "maxLength": 120
+    },
+    {
+      "variableName": "approver",
+      "displayName": "Approver",
+      "helpText": "1.3 Document History, row 4.",
+      "fieldType": "STRING",
+      "fieldScope": "ASSESSMENT",
+      "displayOrder": 12,
+      "required": false,
+      "maxLength": 120
+    },
+    {
+      "variableName": "in_scope_functions",
+      "displayName": "In-Scope Functions",
+      "helpText": "3.1.2 Scope Functions, merged in-scope cell. Insert a table in the editor to keep a multi-column layout.",
+      "fieldType": "RICH_TEXT",
+      "fieldScope": "ASSESSMENT",
+      "displayOrder": 13,
+      "required": true
+    },
+    {
+      "variableName": "out_of_scope_functions",
+      "displayName": "Out-of-Scope Functions and Reasons",
+      "helpText": "3.1.2 Scope Functions, out-of-scope cell under the 'Functions Names | Reason' header. Insert a 2-column table in the editor.",
+      "fieldType": "RICH_TEXT",
+      "fieldScope": "ASSESSMENT",
+      "defaultValue": "<p>N/A</p>",
+      "displayOrder": 14,
+      "required": false
+    },
+    {
+      "variableName": "provided_credentials",
+      "displayName": "Provided Credentials",
+      "helpText": "3.1.3, merged cell under the 'User | Description' header. Insert a 2-column table in the editor.",
+      "fieldType": "RICH_TEXT",
+      "fieldScope": "ASSESSMENT",
+      "displayOrder": 15,
+      "required": false
+    },
+    {
+      "variableName": "limitations",
+      "displayName": "Testing Constraints and Limitations",
+      "helpText": "3.2. Keep the default sentence when there were no limitations.",
+      "fieldType": "RICH_TEXT",
+      "fieldScope": "ASSESSMENT",
+      "defaultValue": "<p>During this engagement, we encountered no limitations. All functionalities were tested as intended, and we were able to thoroughly assess the security posture of the system without any restrictions or issues.</p>",
+      "displayOrder": 16,
+      "required": true
+    },
+    {
+      "variableName": "recommendations",
+      "displayName": "Overall Recommendations",
+      "helpText": "6.0 Recommendation bullet list. Add report-specific items below the standard ones. Same variable name as the MAPT spec.",
+      "fieldType": "RICH_TEXT",
+      "fieldScope": "ASSESSMENT",
+      "defaultValue": "<ul><li>Cover all the findings stated in this report.</li><li>Unless a resource is intended to be publicly accessible, deny access by default.</li><li>Remove all files which can disclose any information regarding the application.</li><li>Update the outdated versions and libraries.</li><li>Continue regular security assessments &ndash; Conduct periodic penetration tests (at least annually or after major changes) to ensure the security posture remains robust against evolving threats.</li><li>Maintain patch and update cycles &ndash; Keep all software, frameworks, and infrastructure components updated to mitigate any future vulnerabilities.</li><li>Implement continuous monitoring and logging &ndash; Ensure that active security monitoring solutions (e.g., SIEM, IDS/IPS) are in place to quickly detect and respond to suspicious activities.</li><li>Provide ongoing security awareness training &ndash; Educate employees and developers on secure coding practices, phishing threats, and social engineering to minimize human-related risks.</li></ul>",
+      "displayOrder": 17,
+      "required": true
+    },
+    {
+      "variableName": "affected_user",
+      "displayName": "Affected User",
+      "helpText": "2.9 Summary of Findings, Affected User column (role or account, '-' if not applicable).",
+      "fieldType": "STRING",
+      "fieldScope": "VULNERABILITY",
+      "defaultValue": "-",
+      "displayOrder": 0,
+      "required": false,
+      "maxLength": 120
+    },
+    {
+      "variableName": "isec_checklist_ref",
+      "displayName": "iSec Check List Items",
+      "helpText": "5.x finding table, 'iSec Check List' row. Comma-separated names from the 4.1 checklist. Same variable as the MAPT template.",
+      "fieldType": "STRING",
+      "fieldScope": "VULNERABILITY",
+      "displayOrder": 1,
+      "required": false,
+      "maxLength": 500
+    },
+    {
+      "variableName": "impact_narrative",
+      "displayName": "Impact (narrative)",
+      "helpText": "5.x finding table, 'Impact' row. Do not confuse with Faction's Impact rating. Same variable as the MAPT template.",
+      "fieldType": "RICH_TEXT",
+      "fieldScope": "VULNERABILITY",
+      "displayOrder": 2,
+      "required": true
+    }
+  ]
+}
