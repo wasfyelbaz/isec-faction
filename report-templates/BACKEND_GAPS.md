@@ -1,12 +1,12 @@
 # Faction backend changes needed for the iSec WAPT template
 
-Companion to `iSec_WAPT_Template_Faction.docx`.
+Companion to `templates/web/isec-web-annotated.docx`.
 Every item in sections 3, 4 and 6 is something the tagged template cannot get from Faction 2.0 today. The same text sits in a Word comment at that spot in the DOCX. Section 5 compares UDF names with the fork's MAPT template.
 Nothing here can be built by misusing an existing variable.
 
 ## 1. Works now
 
-1. Built-in variables, and the template sections they fill: `Faction2_WAPT_Template_Mapping.md`, sections 2 and 3.
+1. Built-in variables, and the template sections they fill: `templates/web/MAPPING.md`, sections 2 and 3.
 2. Layout of the 2.9 table and the 5.x block: same file, section 6.
 
 ## 2. UDFs to create and Faction configuration
@@ -16,7 +16,7 @@ Faction configuration before generating (no code change):
 1. Terminology: keep the default severity labels `Critical`, `High`, `Medium`, `Low`, `Informational`. The template's `${cells}`/`${fill}` maps are keyed on these labels. "Info" is not used.
 2. Vulnerability categories: the bootstrap OWASP Top 10 list feeds `${category}` ("A01 - Broken Access Control"). Rename them to the `A01:2025 - …` wording in Admin if the report must show the 2025 names.
 3. Cover and Document Title print `${asmtClient} ${project_name} Penetration Testing Report`: the client name comes from the client record (organization), the project name from an assessment UDF. No assessment naming convention is needed.
-4. UDFs: create them in the Report Designer. Variable names must match exactly. `Faction_UDF_Definitions.json` holds the definitions; `Import-FactionUdfs.ps1` uploads them.
+4. UDFs: create them in the Report Designer. Variable names must match exactly. `templates/web/isec-web-udfs.json` holds the definitions; `Import-FactionUdfs.ps1` uploads them.
 
 | Scope | Variable | Type | Options / default |
 |---|---|---|---|
@@ -82,7 +82,7 @@ Rows 3.8 and 3.12, and the `open-closed` chart in 3.15, serve the retest templat
 | 4.6 | Report Sections were Enterprise-only. | Per-target grouping (5.1, 5.2 …) was unavailable. | Done in the fork: commit 2d62270 (2026-09-18) makes `CommunityEditionPolicy.enabled()` return `true` for every feature (sections, encrypted PDF, custom roles, external owners and more). Still open: a finding filed under a section the template has no block for is dropped silently; the fork's untracked `TO_DO_PLAN.md` (in git history at cf74795) describes the preflight validation to add. |
 | 4.7 | `replaceHeaderAndFooter` uses `getHeaderFooterPolicy()` of one section only. | Multi-section templates (cover / TOC / body) with different headers get partial replacement. | Iterate all sections' header/footer parts. |
 | 4.8 | Findings block insertion point ignores how many blocks a rich-text field expands to (`setFindings`, `begin++` per template paragraph, then `replaceHTML` swaps one paragraph for N). | A Proof of Concept with several steps, a code block or a table pushes the next finding inside the previous one. | Fixed on `main` (commit 6337a59): advance `begin` by the size change of the body after `replaceHTML`. Regression test `DocxUtilsFindingsBlockOrderTest`. |
-| 4.9 | `clampToPageWidth` measures imported tables against the page, never against the cell they land in. | A `width:100%` table typed into a finding's Description runs off the right edge of the page. | Clamp to the containing cell's width when the rich text is inserted into a `w:tc`. Interim: the template CSS sets `.desc table, .rec table {width:400px}` (`Faction_WAPT_Template.css`). |
+| 4.9 | `clampToPageWidth` measures imported tables against the page, never against the cell they land in. | A `width:100%` table typed into a finding's Description runs off the right edge of the page. | Clamp to the containing cell's width when the rich text is inserted into a `w:tc`. Interim: the template CSS sets `.desc table, .rec table {width:400px}` (`shared/isec-report.css`). |
 | 4.10 | The XHTML importer drops CSS3 structural pseudo-classes. | `tr:nth-child(even)` zebra striping never renders. | Post-import pass that shades alternate rows, or explicit row classes from the editor. |
 | 4.11 | `word-break` is not mapped to `w:wordWrap`. | `div{word-break:break-all}` in the template CSS does nothing. | Map `word-break`/`overflow-wrap` to run or paragraph properties, or document it as unsupported. |
 | 4.12 | The generated DOCX is round-tripped through LibreOffice (`DocxReportGenerationService.normalizeDocxViaCli` / UNO). LibreOffice writes an empty `<w:tcBorders/>` on every cell of a table styled `TableGridLight`, and Word reads that as "no border on any edge". | Every `TableGridLight` table (1.1, 1.2, 1.3, 2.9, 3.1.x, 4.x, the finding blocks, the appendix) showed no grid when the generated DOCX was opened in Word; the Faction PDF was unaffected. 448 of 589 cells came back empty. | Cured in the template, the same way as the MAPT template (fork commit 643ec3e): template v5 restyles all 14 `TableGridLight` tables to `TableGrid` and writes explicit top/left/bottom/right borders, single 0.5pt BFBFBF, on every cell that had none (364 cells) and completes the undeclared edges of 21 partially bordered cells (merged cells in 1.3, 2.8.1 and 3.3) that used to inherit them from the style; edges declared nil (the 2.8.3 axis labels) and the tables that were TableGrid all along are untouched. Verified in Word and LibreOffice: 4 empty cells remain, all created by the engine, not the template: the "no contacts" row `checkContactTables` builds without copying the cell borders, and 3 cells of an HTML table inside a rich-text field. |
@@ -91,7 +91,7 @@ Rows 3.8 and 3.12, and the `open-closed` chart in 3.15, serve the retest templat
 
 ## 5. UDF names: unified with the fork's MAPT template
 
-The fork ships `report-templates/Faction Tuned/1._iSec_MAPT_Template_Faction.docx` (commit 173bb9e). Its names are the reference. The Web template was renamed on 2026-09-18 so shared information uses the same variable in both.
+The fork ships `report-templates/templates/mobile/isec-mobile-upload.docx` (commit 173bb9e). Its names are the reference. The Web template was renamed on 2026-09-18 so shared information uses the same variable in both.
 
 Renamed in the Web template:
 

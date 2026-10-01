@@ -1,55 +1,33 @@
-# AGENT.md — Converting an iSec report template for OWASP Faction 2
+# AGENT.md — how Faction's DOCX engine behaves
 
-Read this before touching any report template. It is the record of everything learned while
-converting three templates (the Web Application Penetration Testing template, "WAPT", now at v9,
-the Mobile Application template, "MAPT", in the fork, and the Internal/External Network template, "INT_EXTNWPT",
-now at v6, converted in one scripted pass with `tools/template-edits/build_network_v1.py` by following this guide
-and refined by `build_network_v2.py` … `build_network_v6.py`) so that the next template
-(Network, Wi-Fi, Internal, External, or any other assessment type) is converted the same way,
-without rediscovering the engine's behaviour.
+**This file is the engine reference: what the variables are, where they may be placed, and how
+the renderer behaves.** It answers "what will Faction do with this tag?".
 
-Everything below was verified on the fork `wasfyelbaz/isec-faction` at commit `b77a81b` or
-later, on a real generation in the local Faction build, in both Microsoft Word and Faction's own
-PDF output. Where something was not verified, the text says so.
+**For how a conversion is actually run** — what you hand over, the phases, the standing rules,
+how a template is validated, the scripts and the local environment — see
+[`CONVERSION_WORKFLOW.md`](CONVERSION_WORKFLOW.md). That is the process; this is the reference it
+draws on.
 
-Companion files (beside this file on the workstation; in the fork repository they sit under
-`report-templates/Web/` and `report-templates/Network/`, with the originals under `Original/` and the
-upload copies under `Faction Tuned/`):
+Everything below was verified on the fork `wasfyelbaz/isec-faction`, on a real generation in the
+local Faction build, in both Microsoft Word and Faction's own PDF output. Where something was not
+verified, the text says so. The engine is
+`backend/src/main/java/com/faction/clientportal/util/reporting/DocxUtils.java`; where the
+[published docs](https://docs.factionsecurity.com/reporting/docx-templates/) and the code
+disagree, the code wins — it is what runs.
 
-| File | Use it for |
+Three templates have been through this and are the worked examples: **Web** (WAPT, v9), **Network**
+(INT_EXTNWPT, v6) and **Mobile** (MAPT).
+
+| Where | What |
 |---|---|
-| `Faction2_WAPT_Template_Mapping.md` | The full built-in variable reference (section 2) and the Web template's section-by-section mapping. Read section 1 (engine rules) and section 2 before anything else. |
-| `Faction_Backend_Changes_Needed.md` | What Faction cannot do yet (gaps), the UDF set with options and defaults (section 2), engine fixes made and pending (section 4), the unified UDF names (section 5). |
-| `Faction_UDF_Definitions.json`, `Import-FactionUdfs.ps1` | The Web template's 21 UDFs in the API's shape and the script that imports them. Copy and adapt for a new template. |
-| `Faction_WAPT_Template.css` | The template stylesheet with the engine-compatibility rules explained in comments. Reuse as the starting CSS. |
-| `iSec_WAPT_Template_Faction.docx` / `_UPLOAD.docx` | The finished Web template: annotated master with Word comments, and the comment-free copy that is uploaded. The reference implementation for every recipe in this file. |
-| `samples/` | Generated reports (DOCX + Faction PDF) at each template version, for visual comparison. |
-| `tools/` | The scripts used to edit, test and verify templates (section 20). |
-
----
-
-## 0. Standing rules
-
-1. **The template is the product.** Fix layout in the template whenever possible. A change to
-   the Faction source (`backend/src/main`, `frontend/src`) needs an explicit go from the
-   developer, every time, with what / why / blast radius / alternative stated first
-   (`CLAUDE.md` in the fork). Commits and pushes are separate permissions.
-2. **Two files per template.** An annotated master (`<Name>_Faction.docx`, Word comments by
-   "Faction Mapping" at every gap) and an upload copy (`<Name>_Faction_UPLOAD.docx`, no
-   comments). Faction copies Word comments into every generated report, so never upload the
-   master.
-3. **Never fake a mapping.** If Faction has no variable for something, leave it static or make it
-   a UDF and record the gap. Do not use a look-alike variable (`${impact}` is a rating, not the
-   impact narrative; `${asmtAppid}` is an ID, not the application name).
-4. **Every change is verified in both renderers**: the DOCX opened in Word, and the PDF that
-   Faction produces (LibreOffice in the backend container). They disagree in specific ways
-   (section 13). Something that looks right in Word is not done.
-5. **Keep the assessment-specific content.** Only the integration mechanics are copied from the
-   Web template; methodology, checklists, section wording and the findings layout belong to the
-   assessment type (section 16).
-6. **Version the template** (v1, v2 …), keep the previous upload copy in `samples/`, and write
-   what changed into the mapping document's history list. Scripts that transform a template go
-   into `tools/template-edits/` with the version they produce.
+| [`CONVERSION_WORKFLOW.md`](CONVERSION_WORKFLOW.md) | The process: standing rules, phases, preparation steps, validation, tools, environment. |
+| [`BACKEND_GAPS.md`](BACKEND_GAPS.md) | What Faction cannot do yet, the engine fixes made and pending, and the unified UDF names. |
+| `templates/<type>/MAPPING.md` | That template's section-by-section mapping, its gaps and its version history. |
+| `templates/<type>/isec-<type>-udfs.json` | Its user-defined fields, in the API's shape. |
+| `templates/<type>/isec-<type>-upload.docx` | **The file that gets uploaded.** No Word comments. |
+| `templates/<type>/isec-<type>-annotated.docx` | The same template carrying a comment at every decision. Documentation — never upload it. |
+| `shared/isec-report.css` | The Report Designer stylesheet, shared by every template, with the engine-compatibility rules explained in comments. |
+| `templates/<type>/samples/` | Generated reports (DOCX + PDF) at each version, for visual comparison. |
 
 ---
 
@@ -90,7 +68,7 @@ the user downloads is the LibreOffice-saved one, not the docx4j output.
    stays in the report verbatim. Your validation must grep for `${` in the output.
 10. Word charts, SmartArt and embedded Excel pass through untouched, except a chart preceded by a
     `${chartData …}` marker paragraph: that chart's cached values and its embedded workbook are
-    rewritten from report data (section 3).
+    rewritten from report data (section 2).
 11. Word comments in the template are copied into every generated report.
 12. The template DOCX upload (`POST /api/v1/report-templates/{id}/file`) fails with 400 unless
     the multipart part carries the DOCX MIME type
@@ -102,55 +80,9 @@ the user downloads is the LibreOffice-saved one, not the docx4j output.
 
 ---
 
-## 2. Preparing the Word template
+## 2. Built-in variables
 
-Work on a copy of the original iSec template. In this order:
-
-1. **Remove what Faction cannot condition away**: the "Notes For Penetration Testers" page (no
-   conditional page removal exists), the four duplicate placeholder rows in the findings summary
-   table, the duplicate "Finding 2…5" blocks. Keep exactly one of each repeating structure.
-2. **Replace `{…}` placeholders with `${…}` tags** (single braces are ignored). One run, one
-   formatting, spell-check off. Keep the placeholder's own paragraph formatting.
-3. **Keep the native Word TOC.** Do not add `${TOC}` (it would only give levels 1–3 and break the
-   template's level-4 "Proof Of Concept" entries). Faction's LibreOffice pass refreshes it.
-4. **Remove all yellow highlighting**, including on whitespace, tabs and paragraph marks
-   (`w:highlight` in runs and paragraph-mark run properties). Placeholder highlights survive into
-   the report otherwise. `tools/template-edits/cover_fix.py` strips every `w:highlight` in the
-   package.
-5. **Restyle every `TableGridLight` table to `TableGrid` and give every cell its own light
-   border** (single, 0.5 pt, `BFBFBF`), completing the undeclared edges of partially bordered
-   merged cells. Reason: the LibreOffice round trip writes an empty `<w:tcBorders/>` on every
-   cell of a table whose style id is `TableGridLight`, whatever the cells declare, and drops
-   table-level `tblBorders`; Word then draws no grid at all. Under `TableGrid` the per-cell
-   borders survive with their colour, so the report keeps the light grey line of the iSec
-   originals. `tools/template-edits/table_fix.py` does this for a whole template (it marks
-   touched tables with `data-was-light`); `build_network_v6.py` is the same cure applied after
-   v5 had wrongly gone back to the style name. Cells copied in from the original template carry
-   no borders of their own and fall back to the style's black: give them borders too. The MAPT
-   template got the same cure (fork commit `643ec3e`).
-6. **Fix cover text boxes that clip**: the date box in the Web template clipped "September 18,"
-   because its DrawingML extent was too narrow. Widen the box (`wp:extent` and the VML fallback
-   `style` width), left-align the paragraph, and set the insets so text clears the decorative
-   shapes. See `cover_fix.py` for the exact edits.
-7. **Set the template's Report Font** in the Report Designer to the family the template uses in
-   Word (Calibri for iSec). Section 12 explains why.
-8. **Upload the CSS** (`Faction_WAPT_Template.css`) in the Report Designer, then the UDFs
-   (section 4), then the DOCX.
-
-What stays unchanged: page size and margins, the section breaks, the header/footer structure,
-the Word numbering definitions (they number the findings), the styles, all static text.
-
-**Work on the XML, not only in Word.** Every structural change we made (text box geometry,
-borders, highlights, footer boxes) was scripted against the package XML with Python's
-`zipfile` + `re`/`lxml`, so it is repeatable and version-controlled. Word's UI is used to
-inspect and to type tags, scripts are used to transform. After a script, always open the result
-in Word once (a broken XML shows "unreadable content").
-
----
-
-## 3. Built-in variables
-
-The complete list with rules is `Faction2_WAPT_Template_Mapping.md`, section 2. The subset every
+The complete list with rules is `templates/web/MAPPING.md`, section 2. The subset every
 iSec template uses:
 
 | Need | Tag | Placement rule |
@@ -190,13 +122,13 @@ during generation, so it costs no space. The engine writes both the chart's cach
 cells of its embedded workbook, so the picture and the data behind it stay in step. It only finds
 charts at body level; a chart inside a table cell is never reached. `severity` writes the
 per-severity finding counts. `checklist` writes the PASS / FAIL / NA totals summed across the
-checklists attached to the assessment (section 19 has the three API calls that attach one); with no
+checklists attached to the assessment (`CONVERSION_WORKFLOW.md` has the three API calls that attach one); with no
 checklist attached the counts are zero and the chart draws empty on purpose, rather than keeping the
 template's placeholder numbers, which would read as real results.
 
 ---
 
-## 4. User-defined fields (UDFs)
+## 3. User-defined fields (UDFs)
 
 **When**: the value is typed per engagement or per finding and Faction has no built-in for it
 (project name, version, environment, test type, reviewers, narrative impact, in/out-of-scope
@@ -237,11 +169,11 @@ vulnerability UDFs on each finding's form. `defaultValue` pre-fills new assessme
 
 A new template reuses these names for the same information and adds only what is specific to
 its assessment type (for example MAPT's `app_variant`). Renaming a variable on a live template
-disconnects the values already entered. Keep one `Faction_UDF_Definitions.json` per template.
+disconnects the values already entered. Keep one `templates/web/isec-web-udfs.json` per template.
 
 ---
 
-## 5. Images
+## 4. Images
 
 **Kinds of image in an iSec template and where they live:**
 
@@ -257,7 +189,7 @@ disconnects the values already entered. Keep one `Faction_UDF_Definitions.json` 
 text boxes anchored to a paragraph or to the page (DrawingML `wps` with a VML fallback);
 page-anchored full-page pictures in headers. **What does not survive**: Word frames (`w:framePr`),
 which LibreOffice drops (the footer page number lived in one and vanished); Roman page-number
-format on the second section; `_Toc` bookmarks (section 13).
+format on the second section; `_Toc` bookmarks (section 12).
 
 **Sizing**: the engine works in CSS pixels at 96 dpi: `1 cm = 37.8 px`, `1 px = 9525 EMU`.
 Measure the placeholder in the template (either the picture's `wp:extent` in the XML or the
@@ -271,7 +203,7 @@ footprint pins the image where the placeholder was.
 
 ---
 
-## 6. Client logo
+## 5. Client logo
 
 **Source**: Clients → edit → Client images. Each image has a slot name (`logo` by convention;
 others such as `cover` or `signature` are possible). PNG, JPEG, GIF, WebP, SVG up to 5 MB. SVG
@@ -325,7 +257,7 @@ and must not be used for new templates.
 
 ---
 
-## 7. Header and footer structure
+## 6. Header and footer structure
 
 - **Header**: the full-page background picture (band with the iSec wordmark, shapes and rule at
   the page bottom is part of this picture), anchored to the page, behind text. Sections have
@@ -346,7 +278,7 @@ and must not be used for new templates.
 
 ---
 
-## 8. Cover page
+## 7. Cover page
 
 | Element | Treatment |
 |---|---|
@@ -354,7 +286,7 @@ and must not be used for new templates.
 | Title text box `{Client} {Project} Penetration Testing Report` | `${asmtClient} ${project_name} Penetration Testing Report` (inline in the text box; keep the box's formatting). |
 | Assessment type line | Static text or `${asmtType}`. |
 | Date text box | `${today MMMM d, yyyy}`. Widen the box so the longest month fits (Web: 2.5 in, left-aligned, 15 pt left inset so it clears the corner shape). |
-| Client logo | `${clientImage logo width=139 height=54}` in the narrowed placeholder box (section 6). |
+| Client logo | `${clientImage logo width=139 height=54}` in the narrowed placeholder box (section 5). |
 | Highlights | Remove all. |
 
 Dates are replaced only in the body; the cover is body, so they work there. Text boxes are
@@ -362,7 +294,7 @@ inside `mc:AlternateContent` with a DrawingML choice and a VML fallback: edit bo
 
 ---
 
-## 9. Table of findings (summary table)
+## 8. Table of findings (summary table)
 
 Layout that works (Web 2.9, MAPT the same):
 
@@ -390,7 +322,7 @@ Rules:
 
 ---
 
-## 10. Individual finding sections
+## 9. Individual finding sections
 
 The block, top-level paragraphs in order (Web 6.3, copy the shape):
 
@@ -425,7 +357,7 @@ ${fiEnd}
 
 ---
 
-## 11. Loops and conditional logic
+## 10. Loops and conditional logic
 
 | Construct | Where | Notes |
 |---|---|---|
@@ -451,7 +383,7 @@ There is no `if-eq` / `if-set` on values; alternative sentences live in DROPDOWN
 
 ---
 
-## 12. Report fonts
+## 11. Report fonts
 
 - The DOCX carries font **names**. The template's static text keeps the fonts set in Word. Text
   that Faction generates (findings, rich text, tables it builds) uses the template's **Report
@@ -472,13 +404,13 @@ There is no `if-eq` / `if-set` on values; alternative sentences live in DROPDOWN
 
 ---
 
-## 13. Word versus LibreOffice (Faction's renderer)
+## 12. Word versus LibreOffice (Faction's renderer)
 
 Verified differences; each has a template-side cure or is documented as accepted:
 
 | Area | What happens in Faction's output | Cure |
 |---|---|---|
-| Table borders | `TableGridLight` tables come back with empty `tcBorders` on every cell; Word shows no grid, the PDF is fine | Restyle to `TableGrid` with explicit cell borders (section 2). |
+| Table borders | `TableGridLight` tables come back with empty `tcBorders` on every cell; Word shows no grid, the PDF is fine | Restyle to `TableGrid` with explicit cell borders — see `CONVERSION_WORKFLOW.md`, "Convert the document". |
 | Word frames (`framePr`) | Dropped; the framed paragraph becomes a normal one (footer page number vanished) | Text box anchored to the page. |
 | TOC bookmarks | `_Toc` bookmarks are dropped; the DOCX opened in Word shows "Error! Bookmark not defined." until fields are updated (F9); the Faction PDF has a correct TOC | Accepted for now. |
 | Page number format | Roman numerals of the second section become decimal | Accepted for now. |
@@ -495,7 +427,7 @@ LibreOffice-saved DOCX's XML: the difference is always visible there.
 
 ---
 
-## 14. Page layout and page breaks
+## 13. Page layout and page breaks
 
 - A4 portrait, the template's margins (Web: 1.27 cm left), three sections. Do not change page
   setup; the background pictures are sized to it.
@@ -512,7 +444,7 @@ LibreOffice-saved DOCX's XML: the difference is always visible there.
 
 ---
 
-## 15. Static versus dynamic content
+## 14. Static versus dynamic content
 
 | Static in the DOCX | Dynamic through Faction |
 |---|---|
@@ -527,7 +459,7 @@ iSec changes its methodology, it is static.
 
 ---
 
-## 16. Template-specific content
+## 15. Template-specific content
 
 A Network, Wi-Fi, Internal, External or Mobile template keeps its own sections. Do not paste the
 Web template's sections over it. The mechanics are the same; the content maps differently:
@@ -543,15 +475,15 @@ Web template's sections over it. The mechanics are the same; the content maps di
   note it in the mapping document.
 - **Assessment type**: the template is bound to an assessment type in the Report Designer; create
   the type first (Admin → Assessment Config) so findings, sections and UDFs apply to it.
-- **Naming**: reuse the shared UDF names (section 4) for shared information; add
+- **Naming**: reuse the shared UDF names (section 3) for shared information; add
   type-specific names with the same style (`snake_case`, one concept per field).
-- Write a mapping document like `Faction2_WAPT_Template_Mapping.md` for the new template:
+- Write a mapping document like `templates/web/MAPPING.md` for the new template:
   sections 3 (built-ins), 4 (UDFs), 5 (gaps), 6 (layout of the dynamic blocks), 7 (changes and
   history). It is the deliverable that makes the template maintainable.
 
 ---
 
-## 17. Lessons learned (problem → cause → what worked)
+## 16. Lessons learned (problem → cause → what worked)
 
 1. **Findings table printed a config row** → the engine removes one `${…}` row only → one merged
    config row above the loop row.
@@ -646,191 +578,7 @@ Web template's sections over it. The mechanics are the same; the content maps di
 
 ---
 
-## 18. Validation process
-
-A template is complete only when a report generated by Faction from representative data has
-been checked in both outputs. Minimum data: a client with contacts and a logo, an assessment with
-all UDFs filled (long and short values), at least three findings across different severities with
-rich-text descriptions, tables and screenshots, and one finding with several assets.
-
-Checklist, in this order:
-
-1. **Unresolved tags**: unzip the generated DOCX and grep `document.xml`, headers and footers for
-   `${` (expect none; extension placeholders are the only allowed exception).
-2. **Cover**: title, date wording, client logo position and size (measure with PyMuPDF; compare
-   with the placeholder's position from the original render).
-3. **Headers and footers**: background band on every body page, page number in its tab, client
-   logo next to the wordmark on every page from page 2, first-page variants correct.
-4. **Front matter**: document control values, distribution list rows, document history, dates.
-5. **Summary table**: one row per finding, colours from the map, no config row, no leftover
-   placeholder rows, "no issues" row when zero findings.
-6. **Findings**: numbering 5.1.1…, severity fill, CVSS link, description/impact/recommendation in
-   their cells, proof of concept with figures, one finding per page, no finding swallowed by the
-   previous one (long content test).
-7. **Fonts**: PDF font list shows the template family (Calibri), not Carlito/DejaVu.
-8. **Layout**: page count plausible, no blank pages, tables not broken oddly, TOC correct in the
-   PDF.
-9. **Logo shapes**: repeat with a square and a very wide logo; both must stay inside their boxes.
-10. **Both outputs**: the downloaded DOCX opened in Word (borders, boxes, numbering) and Faction's
-    PDF (Preview / download). Compare side by side with the original template's render.
-
-**Never conclude something is fixed because the DOCX XML looks right; measure the rendered PDF.**
-Proven repeatedly on the Network template:
-
-- Hyperlink targets: read the PDF's link annotations (PyMuPDF `page.get_links()`), not the DOCX
-  relationships.
-- Column alignment: take the vertical rules out of `page.get_drawings()` and compare the widths.
-  That turned a table that "looked fine" into a measured 130.6 / 130.6 / 130.6 / 130.7 pt.
-- Border colour: the same drawings carry the stroke colour, so `(0.75, 0.75, 0.75)` confirms
-  `BFBFBF` rather than black.
-- Chart numbers: read the chart part's cached values **and** the cells of its embedded workbook out
-  of the generated file, and check they agree with each other and with the table beside them.
-
-Tools that do this mechanically: `tools/faction/e2e_client.py generate` (generate, download,
-grep tags, count occurrences), `tools/verify/inspect_placement.py` (where images landed),
-`tools/verify/verify_v9.py` (Word + LibreOffice render, measurements, comparison sheet),
-`tools/verify/verify_network_v3.py`, `verify_network_v5.py` and `verify_network_v6.py` (charts,
-CVSS links, scope tables and, from v6, the cell borders read back out of a generated report),
-`tools/verify/kali_lo_roundtrip.sh` (run a template through the backend container's LibreOffice
-before generating anything: the DOCX it returns is what Faction hands out),
-`tools/faction/minio_pull.sh` (copy the generated files straight out of the MinIO volume when the
-API session is not available).
-
-The reverse also holds: a correct PDF does not prove the DOCX. The PDF is drawn from LibreOffice's
-own model, the DOCX is what LibreOffice writes back out, and the two disagree on table borders
-(lesson 7). Open the generated DOCX and check `tcBorders` on its cells, or run
-`verify_network_v6.py`, before calling table lines fixed.
-
----
-
-## 19. Repeatable workflow for a new template
-
-1. Inspect the original DOCX: sections, placeholders `{…}`, repeated structures, images, text
-   boxes, headers/footers, tables and their styles, numbering definitions. Render it (Word → PDF)
-   as the reference picture.
-2. List every field: static / built-in / UDF / gap, in a mapping document with the same section
-   numbers as the template.
-3. Create the assessment type, the UDF JSON (reusing the shared names), the CSS, in Faction.
-4. Script the transformation of the DOCX (copy `tools/template-edits/` and adapt paths and
-   geometry): placeholders → tags, single loop row and single block, config rows merged, notes page
-   removed, highlights stripped, `TableGridLight` restyled, cover boxes fixed.
-5. Apply the client-logo recipe: measure the placeholder(s), put `${clientImage logo width=W height=H}`
-   in a text box sized to the placeholder (cover) and in each footer band box.
-6. Apply the page-number recipe if the original uses a frame.
-7. Build the summary table and the findings block exactly as in sections 9 and 10, then adapt the
-   columns and rows to the assessment type.
-8. Produce the two files (annotated master with "Faction Mapping" comments at every gap, comment-free
-   upload copy). Open both in Word once.
-9. Run the engine offline if a fork checkout is available (a throwaway JUnit test that loads the
-   DOCX, as done in this project) or upload to a throwaway template in the local Faction
-   ("<Name> (test)") and generate on a throwaway assessment.
-10. Validate per section 18; fix; repeat. Keep each version's upload file in `samples/`.
-11. Upload to the real template, generate on a real assessment, validate again, publish the docs
-    (mapping document, backend-changes document, README rows).
-12. Record in the mapping document's history what changed and how it was verified.
-
-**Feeding the checklist chart.** `${chartData checklist}` counts the checklists attached to the
-assessment, so a test assessment needs one before the chart shows anything. Three API calls, all
-proven on the Network template:
-
-1. `POST /api/v1/checklist-templates` with
-   `{name, assessmentTypeId, questions: [{text, order}], preventClosure}`.
-2. `POST /api/v1/assessments/{id}/checklists` with `{templateId}`.
-3. `PUT /api/v1/assessments/{id}/checklists/{checklistId}` with
-   `{responses: [{questionId, questionText, result, comment, order}]}`, `result` being `PASS`,
-   `FAIL` or `NA`.
-
-The 13 iSec Network checklist rows were extracted from the template's own 4.1 table and are kept as
-`tools/faction/network_checklist_questions.json`.
-
----
-
-## 20. Tools index (`tools/`)
-
-All scripts have hard-coded paths from this project (session scratchpads, the Web template,
-OneBank ids). Copy, then edit the constants at the top before use.
-
-| Script | Does |
-|---|---|
-| `template-edits/cover_fix.py` | v3→v4: strips every `w:highlight`, widens and left-aligns the cover date box (DrawingML + VML), removes empty runs. |
-| `template-edits/table_fix.py` | v4→v5: restyles `TableGridLight` → `TableGrid`, writes explicit 0.5 pt `BFBFBF` borders, completes partial merged cells, keeps nil edges; also strips comments for the upload copy. |
-| `template-edits/build_v6.py` | Cover placeholder picture → `${clientImage}` tag in a box narrowed to the placeholder; removes footer placeholders and a stray body tag. Geometry computed from the placeholder's XML. |
-| `template-edits/build_v7.py` | Footer page number: frame → page-anchored text box at the tab position measured from a Word render. |
-| `template-edits/build_v8.py` | Restores the footer placeholder box (from the original template) holding a `${clientImage}` tag; cover tag gets `width= height=`. |
-| `template-edits/build_v9.py` | Resizes and repositions the footer logo box from band measurements (bar position, wordmark centre). |
-| `template-edits/build_network_v1.py` | The whole Network conversion in one pass: highlights, notes page, cover and footer boxes, every `{placeholder}` → tag, tables rebuilt, borders, the `5.1.%1` numbering, master + upload copy. |
-| `template-edits/build_network_v2.py` | v1→v2: blank page after the TOC removed, 1.3 Author inline, 2.3 SmartArt → `methodology.png` rendered from Word, 5.x affected assets centred. |
-| `template-edits/build_network_v3.py` | v2→v3: `${chartData checklist}` and `${chartData severity}` marker paragraphs before the two native charts; `${cvssString link}` → `${cvssLink View CVSS Metrics}`. |
-| `template-edits/build_network_v4.py` | v3→v4: the merged scope and credentials cells split back into the original's own cells, one RICH_TEXT tag each, so nothing is nested. |
-| `template-edits/build_network_v5.py` | v4→v5: the 3.1.1 table pinned to fixed twips; also put the 12 light tables back on the `TableGridLight` style, which v6 had to undo. |
-| `template-edits/build_network_v6.py` | v5→v6: the 12 tables back on `TableGrid` with a `BFBFBF` border on every cell, the only form LibreOffice returns intact in the DOCX (lesson 7). |
-| `verify/build_placement_test.py` | Builds a probe template with the tag in every kind of place (cover box, cell, right-aligned, mixed, unknown slot, header) to learn what the engine honours. |
-| `verify/inspect_placement.py` | Reports where images landed in a generated DOCX (boxes, cells, body, header) with sizes. |
-| `verify/render_where.py` | Renders template and generated pages (Word COM + PyMuPDF), boxes the tag/image, side-by-side sheet. |
-| `verify/verify_v9.py` | Word and container-LibreOffice renders of an engine output, logo and page-number measurements, band crop, comparison sheet. |
-| `verify/verify_network_v3.py`, `verify_network_v5.py`, `verify_network_v6.py` | Read a generated Network report back and assert it (v6 adds: no cell with an empty `tcBorders`, light borders on the cells, no `TableGridLight` left): both charts against the engagement's real data (cached values and embedded workbook), one NVD link per finding carrying that finding's vector, the scope and credentials cells, no surviving tag or marker. |
-| `faction/e2e_client.py` | `setup`: upload template file, import UDFs by variable name, create client + contacts + logo, attach the application. `generate`: generate, poll, download DOCX/PDF, grep unresolved tags. Needs a session token file. |
-| `faction/e2e_clone.py` | Clones an assessment (field values + findings) onto a client-owned application and generates. |
-| `faction/minio_pull.sh` | Copies the latest generated DOCX/PDF of an assessment out of the MinIO volume with a helper container. |
-| `faction/wsl_mvn_mergecheck.sh` | Runs Maven inside Docker (WSL) against a checkout, with the cached `.m2` volume; used for tests and offline compiles. |
-| `faction/rebuild_backend_clean.sh` | `docker compose build --no-cache backend` + restart + health wait + provenance check. |
-| `faction/kali_restore_stack.sh` | One-shot restore of the stack into the VM's Docker engine from `docker-migration/`: checksums, images, both data volumes, `compose up`, health wait. `--force` overwrites non-empty volumes. |
-| `faction/kali_stack.sh` | Day-to-day `start` / `stop` / `restart` / `status` / `logs` for the stack on the VM. |
-| `faction/kali_mvn_clientimage.sh` | Maven for the fork backend inside Docker on the VM, with the persistent `faction-m2` volume. |
-| `faction/kali_rebuild_backend.sh` | Rebuilds the backend image from the `isec-faction-clientimage` worktree and restarts the container (the Dockerfile packages with `-DskipTests`). |
-| `faction/kali_stage_files_network.sh` | Puts the template, UDF JSON, CSS and checklist JSON on the frontend nginx root so the signed-in page can upload them same-origin. |
-| `faction/kali_minio_pull_network.sh` | Copies an assessment's newest generated DOCX and PDF out of MinIO on the VM through the S3 API (`mc` inside the minio container), byte for byte what Faction serves; a raw copy of `part.1` is not (lesson 27). |
-| `verify/kali_lo_roundtrip.sh` | Runs a DOCX through the backend container's LibreOffice (docx and pdf out), the same converter Faction uses, so a template can be proven before a report is generated. |
-| `faction/sync_to_kali.sh` | Copies the given project-relative paths from the Windows backup copy to the live Kali working directory and prints their checksums. |
-| `faction/Set-FactionKaliPortProxy.ps1` | Windows, elevated: repoints the `127.0.0.1:8080` portproxy rule at the VM's current IP (read from `vmrun`) and verifies `http://localhost:8080`. |
-| `faction/network_checklist_questions.json` | The 13 iSec Network checklist rows taken from the template's own 4.1 table, in the order the checklist template wants them. |
-
-Requirements on the workstation: Python 3 with `pywin32` (Word COM export), `PyMuPDF`, `Pillow`,
-`numpy`, `lxml`; Microsoft Word; the Kali VM with Docker for the local Faction (section 21); `curl`.
-The `kali_*` scripts run on the VM over `ssh kali`, with the project at `/home/kali/Reporting System/`.
-
----
-
-## 21. Environment notes for the local Faction
-
-- **Where it runs**: inside a Kali VM on VMware Workstation (`D:\exported vm\Kareem's vm.vmx`, NAT
-  on VMnet8, guest `192.168.159.128`, 8 GB RAM, 4 vCPU). The live working directory is
-  `/home/kali/Reporting System/`; the Windows folder `C:\Users\ISEC\Desktop\Reporting System` is now
-  the backup copy, and edits made there are pushed with
-  `tools/faction/sync_to_kali.sh <project-relative-path>...`. Shell access is `ssh kali` (key auth
-  already configured, passwordless sudo, the `kali` user in the `docker` group).
-- **Stack**: compose project `owasp-faction-2`, four containers (db, minio, backend, frontend on
-  port 8080), images `isec-faction-backend:local` / `isec-faction-frontend:local` built from the
-  fork checkout with `docker-compose.yml` + `docker-compose.local.yml`; `.env` holds the secrets
-  (never print them). All four carry `restart=unless-stopped` and `docker.service` is enabled, so
-  Faction returns by itself after a VM reboot; `tools/faction/kali_stack.sh` is the manual control.
-- **Reaching it from Windows**: `http://localhost:8080` goes through a netsh portproxy rule
-  `127.0.0.1:8080 -> 192.168.159.128:8080`. The rule needs an elevated shell;
-  `tools/faction/Set-FactionKaliPortProxy.ps1` reads the VM's current IP from `vmrun` and rewrites
-  it. Re-run it if the VM's DHCP lease ever changes.
-- **WSL is the backup, not the environment**: the `kali-linux` distro is kept untouched and is no
-  longer active. WSL2 itself currently cannot start on this machine
-  (`HCS_E_HYPERV_NOT_INSTALLED`, the Windows hypervisor is off), which is why VMware works: with
-  `hypervisorlaunchtype` off, VMware runs natively.
-- **Building the fork**: Maven for the backend runs in Docker on the VM,
-  `tools/faction/kali_mvn_clientimage.sh` (persistent `faction-m2` volume); the backend image is
-  rebuilt and restarted by `tools/faction/kali_rebuild_backend.sh`. That Dockerfile packages with
-  `-DskipTests`, so the test suite must be run separately.
-- **API paths that matter**: templates `/api/v1/report-templates/{id}` (`PUT` for UDFs, `POST …/file`
-  multipart for the DOCX, `GET …/file` to download it), organizations `/api/v1/organizations/{id}`
-  and `…/images`, assessments `/api/v1/assessments`, reports `/api/v1/reports/{id}/generate`,
-  `…/documents`, `…/documents/DOCX/content`, terminology `/api/v1/config/terminology`.
-- **Session token**: the person signs in; scripts read the JWT from a local file that is never
-  printed. From the signed-in browser page, API calls can be made with `fetch` and the token from
-  `localStorage`; file transfer into that page needs the file served from the same origin.
-- **Throwaway objects for tests**: a template named "<Name> (test)" and an assessment named the same,
-  on an application attached to the test client. Delete them when done.
-- **Known local gap**: the ENCRYPTED_PDF document always fails with "SSO_ENCRYPTION_KEY is not
-  configured", because that value is not set in `.env`. DOCX and PDF are unaffected.
-
----
-
-## 22. Quick reference
+## 17. Quick reference
 
 ```
 Tags:            ${asmtName} ${asmtType} ${asmtAppid} ${asmtClient} ${asmtClient_<field>}
@@ -852,3 +600,17 @@ Web v9 geometry: cover logo 139x54 px (3.67x1.44 cm), box 4.29 cm wide at 15.05 
                  page number box 1.10x0.80 cm at page 0.54/28.71 cm
 Colours:         Critical C00000, High FFC000, Medium F8F200 (table) / FFFF00 (block), Low 00B050, Informational 00B0F0, Status grey 808080
 ```
+
+---
+
+## 18. Where the process lives
+
+This file stops at what the engine does. **How a conversion is actually run** — the standing
+rules, what arrives and what comes back, preparing the Word document, validating a finished
+template, the scripts and the local environment — is
+[`CONVERSION_WORKFLOW.md`](CONVERSION_WORKFLOW.md).
+
+Those sections used to live here, as sections 0, 2 and 18–21. They moved so that this file answers
+one question — *what will Faction do with this tag?* — and that one answers the other — *how do I
+convert a document?*
+

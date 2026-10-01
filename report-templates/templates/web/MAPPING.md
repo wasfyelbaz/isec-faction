@@ -1,6 +1,6 @@
 # Faction 2 variables mapped to the iSec WAPT template
 
-Template: `1._iSec_WAPT_Template.docx` (Desktop copy). Tagged result: `iSec_WAPT_Template_Faction.docx`.
+Template: `isec-web-original.docx` (Desktop copy). Tagged result: `isec-web-annotated.docx`.
 Faction: 2.0.x as in `isec-faction`. Engine `backend/.../util/reporting/DocxUtils.java`, data `ReportData.java`, service `DocxReportGenerationService.java`.
 Official docs: https://docs.factionsecurity.com/reporting/docx-templates/
 
@@ -212,7 +212,7 @@ The paragraph keeps its own alignment and spacing. A slot the client has not fil
 
 ## 4. Template sections filled by UDFs
 
-Create these in the Report Designer. Full option lists and defaults: `Faction_Backend_Changes_Needed.md`, section 2.
+Create these in the Report Designer. Full option lists and defaults: `../../BACKEND_GAPS.md`, section 2.
 
 | Section | Item | UDF (scope) | Type | Note |
 |---|---|---|---|---|
@@ -261,7 +261,7 @@ Create these in the Report Designer. Full option lists and defaults: `Faction_Ba
 | 5.15 | Assessment "Scope" text field | Present on the assessment, not passed to `ReportData`. | `${summary2}` UDF duplicates the content. |
 | 5.16 | Auto-removal of the "Notes for Penetration Testers" page | No conditional or instruction blocks. | Delete it in the uploaded copy. |
 
-The variables that close these gaps are listed in `Faction_Backend_Changes_Needed.md`, section 3.
+The variables that close these gaps are listed in `../../BACKEND_GAPS.md`, section 3.
 
 ## 6. Layout of the two dynamic blocks
 
@@ -310,12 +310,12 @@ ${fiEnd}
 2. Replace every `{…}` placeholder with the `${…}` tag or UDF from sections 3 and 4. Faction ignores single-brace text.
 3. Keep the native TOC. Do not add `${TOC}`.
 4. Type all tags with spell-check off. Keep each block tag alone in its paragraph.
-5. Charts (2.4, 2.5, 2.7) and checklists (4.1, 4.2) stay manual until the variables in `Faction_Backend_Changes_Needed.md`, section 3, exist.
-6. Upload `iSec_WAPT_Template_Faction_UPLOAD.docx`, not the annotated master. Faction copies Word comments into every generated DOCX, so the file uploaded to Faction must carry none. The master `iSec_WAPT_Template_Faction.docx` keeps the "Faction Mapping" comments as documentation.
+5. Charts (2.4, 2.5, 2.7) and checklists (4.1, 4.2) stay manual until the variables in `../../BACKEND_GAPS.md`, section 3, exist.
+6. Upload `isec-web-upload.docx`, not the annotated master. Faction copies Word comments into every generated DOCX, so the file uploaded to Faction must carry none. The master `isec-web-annotated.docx` keeps the "Faction Mapping" comments as documentation.
 7. Verified on 2026-09-18 with a real generation in the local fork build (3 sample findings): no unresolved tags, TOC and 5.1.N numbering refreshed, colour maps applied, CVSS links resolved, 30-page PDF.
 8. Template history after v5 (all applied to both files; scripts in the session scratchpad, results verified in Word and in Faction's LibreOffice output):
    - v6: the cover placeholder picture "[Insert Image Here]" became the `${clientImage}` tag in a text box narrowed to the placeholder's footprint; the footer placeholder pictures and the 1.0 logo paragraph were removed.
    - v7: the footer page number moved from a Word frame (dropped by LibreOffice, number invisible) into a page-anchored text box inside the pink tab.
    - v8: the footer placeholder box returned, holding a `${clientImage}` tag, once the engine could fill headers and footers (fork commit b77a81b); the cover tag got a fixed `width= height=` box.
    - v9 (current): the footer box grew to the iSec wordmark's width (`width=64 height=25`) and sits right after the separator bar, centred on the wordmark.
-9. Verified on 2026-09-20 on the real Web template in the local fork build with the OneBank client: cover logo 3.68 × 1.43 cm at the placeholder position, footer logo 1.69 × 0.66 cm on every page from page 2, page numbers in the tab, no unresolved tags (`samples/Sample_Web_Report_v9*`).
+9. Verified on 2026-09-20 on the real Web template in the local fork build with the OneBank client: cover logo 3.68 × 1.43 cm at the placeholder position, footer logo 1.69 × 0.66 cm on every page from page 2, page numbers in the tab, no unresolved tags (`samples/v9-report.*`).

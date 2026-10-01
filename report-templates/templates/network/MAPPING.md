@@ -1,13 +1,13 @@
 # Faction 2 variables mapped to the iSec Internal/External Network Penetration Testing template
 
 Template: `Documents\iSec\Reports\Templates\Old Templates\1. iSec_INT_EXTNWPT_Template (1).docx`.
-Tagged result: `iSec_INT_EXTNWPT_Template_Faction.docx` (annotated master, v5) and
-`iSec_INT_EXTNWPT_Template_Faction_UPLOAD.docx` (the file uploaded to Faction).
+Tagged result: `isec-network-annotated.docx` (annotated master, v5) and
+`isec-network-upload.docx` (the file uploaded to Faction).
 Built by `tools/template-edits/build_network_v1.py` from the original in one pass, then `build_network_v2.py` … `build_network_v5.py`.
 Faction: the `isec-faction` fork at commit `a811886` or later (client images in headers and footers need `b77a81b`).
 
 The engine rules, the complete variable reference and the client package are documented once, in
-`Faction2_WAPT_Template_Mapping.md` sections 1 and 2, and the conversion recipes in `AGENT.md`. This
+`../../templates/web/MAPPING.md` sections 1 and 2, and the conversion recipes in `../../AGENT.md`. This
 document only records what is specific to the Network template. Status words are the same as in the Web
 mapping: DIRECT, UDF, PARTIAL, GAP, STATIC.
 
@@ -78,7 +78,7 @@ is the same static text.
 | 6.0 | Recommendation | `${recommendations}` | UDF |
 | 7.1 / 7.2 | Appendices | Static. | STATIC |
 
-## 3. User-defined fields (`Faction_INT_EXTNWPT_UDF_Definitions.json`, 22 fields)
+## 3. User-defined fields (`isec-network-udfs.json`, 22 fields)
 
 Shared names (same meaning as the Web and MAPT templates): `summary1`, `summary2`, `report_version`,
 `asmt_phase`, `test_type`, `testing_hours`, `project_name`, `environment`, `first_reviewer`,
@@ -100,7 +100,7 @@ Not needed here (Web only): `app_url`, `app_version`, `in_scope_functions`, `out
 
 ## 4. Gaps
 
-The shared gaps of `Faction2_WAPT_Template_Mapping.md` section 5 apply (checklists, reviewers, conditional
+The shared gaps of `../../templates/web/MAPPING.md` section 5 apply (checklists, reviewers, conditional
 sentences, one-string assets, ordinal dates, the notes page). Two of them are closed for this template from
 v3: the two native charts are fed from report data by `${chartData severity}` / `${chartData checklist}`, and
 the CVSS cell links a label to the finding's own NVD URL through `${cvssLink ...}`. Network-specific:
@@ -168,18 +168,18 @@ History:
 
 - v1 (2026-09-21): first conversion, built by `build_network_v1.py`; offline verification as above.
 - v1 verified on Faction (2026-09-21): template "iSec Network Penetration Test (Internal/External)" (id `7c032499-3103-44e2-bbd4-3d2347a05391`,
-  type "Network Assessment", font Calibri, CVSS 3.1, 22 fields, `iSec_INT_EXTNWPT_Template_Faction_UPLOAD.docx`), generated on the
+  type "Network Assessment", font Calibri, CVSS 3.1, 22 fields, `isec-network-upload.docx`), generated on the
   throwaway assessment "Network (test)" (id `8cb7c223-a95d-40d7-8344-af43607899aa`, OneBank client, 17 variables, 3 findings with
   tables and code): no unresolved tag in body, headers or footers; cover logo 3.68 x 1.43 cm at 16.62 / 0.75 cm; footer logo
   1.69 x 0.66 cm at 4.45 / 28.22 cm on every page from page 3; page numbers in the tab; Calibri (+ Liberation Mono for code);
   24 pages; 5.1.1-5.1.3 numbered with their Proof Of Concept pages; TOC refreshed; distribution list, document history,
-  reviewers, severity fills and CVSS links correct. Output kept as `samples/Sample_Network_Report_v1.docx` / `_faction.pdf`.
+  reviewers, severity fills and CVSS links correct. Output kept as `samples/v1-report.docx` / `.pdf`.
   Gap N.5 found on the same run (tables typed into the scope / credentials rich-text cells flatten the outer table).
 - v2 (2026-09-21, `tools/template-edits/build_network_v2.py`, review items 1, 2, 3, 9 of the first generated report): (1) the empty
   paragraph after the TOC removed and the TOC field-end and section-break paragraphs set to 1 pt, so LibreOffice's rebuilt TOC no
   longer pushes a blank page before 1.0; (2) 1.3 Author `${asmtAssessor}` inline (centred); (3) the 2.3 SmartArt replaced by
   `methodology.png` (rendered from Word at 300 dpi from the drawing bounds only, 18 x 10.96 cm, centred); (9) 5.x Affected Assets centred. Verified in Word
-  (20 pages, no repair) and on Faction (`samples/Sample_Network_Report_v2*`: 23 pages, page 3 = 1.0 Document Control, picture centre
+  (20 pages, no repair) and on Faction (`samples/v2-report.*`: 23 pages, page 3 = 1.0 Document Control, picture centre
   10.50 cm = page centre, scope and credentials tables with nested tables intact, no unresolved tag). Item 6 (text cut off in 2.8)
   is not in the PDF: the words are complete at 220 dpi and no clip path surrounds those cells (viewer artefact). Items 4, 5, 8
   (charts from real data, NVD link) need the engine: proposal sent, waiting for the go.
@@ -198,7 +198,7 @@ History:
   finding, each carrying that finding's own vector (checked in the rendered PDF's link annotations, not only in
   the DOCX). Scope, out-of-scope and credentials cells keep their nested tables with the outer table intact and a
   closing paragraph, with the typed values deliberately sent without a trailing `<p></p>` so the engine's guard
-  was what closed them. Output kept as `samples/Sample_Network_Report_v3.docx` / `_faction.pdf`.
+  was what closed them. Output kept as `samples/v3-report.docx` / `.pdf`.
   Known limitation: ENCRYPTED_PDF fails on this install because `SSO_ENCRYPTION_KEY` is not set in `.env`
   (unrelated to the template; DOCX and PDF are unaffected).
 - v4 (2026-09-22, `tools/template-edits/build_network_v4.py`): the three merged scope / credentials cells are
