@@ -61,9 +61,8 @@ report-templates/
   changed; renaming on every revision would break `git log --follow` and leave stale files behind.
   Samples are the exception — you want several side by side, so they carry `v<n>`.
 
-## One thing that is not here
+## Completeness
 
-`templates/mobile/REPORT_TEMPLATE_UPDATES.md` is the Mobile template's conversion notes. It is
-listed in `.gitignore` as a deliberately untracked working file, so it exists on disk but is not
-committed, and Mobile therefore has no `MAPPING.md` in the repository. Promoting it is a decision
-for whoever wrote it.
+Web and Network have the full set. Mobile has its template, its README and a detailed `MAPPING.md`,
+but no UDF JSON and no annotated master or samples — see
+[`templates/mobile/README.md`](templates/mobile/README.md).

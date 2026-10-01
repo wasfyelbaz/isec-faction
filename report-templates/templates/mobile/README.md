@@ -7,23 +7,21 @@ actually generates from.
 |---|---|
 | `isec-mobile-original.docx` | The untouched iSec template the conversion started from. |
 | `isec-mobile-upload.docx` | The file to upload to Faction. No Word comments, so none appear in a generated report. |
+| [`MAPPING.md`](MAPPING.md) | Section-by-section mapping: the three report sections and eight fields it needs, what was deliberately left static, what Faction cannot express, and what would have to be built for the rest. |
 
-## What is missing, and why
+`MAPPING.md` is unusually detailed about *why* each decision was made — its section D (mappings
+deliberately not made) and section E (what cannot be expressed) are the clearest statement of the
+engine's limits anywhere in this folder, and the general parts of both have been lifted into
+[`../../AGENT.md`](../../AGENT.md) section 2.
 
-This template was converted before the others and never got their supporting documents. Compared
-with [`../web/`](../web/) and [`../network/`](../network/) it has **no `MAPPING.md`, no UDF JSON,
-no annotated master and no samples**.
+## What is still missing
 
-Its conversion notes exist on disk as `REPORT_TEMPLATE_UPDATES.md` in this folder, but that file is
-listed in [`.gitignore`](../../../.gitignore) as a deliberately untracked working file, so it is
-not in the repository. Anyone cloning this repo gets the two documents above and nothing else
-explaining them.
+Compared with [`../web/`](../web/) and [`../network/`](../network/) this template has **no UDF
+JSON and no annotated master or samples**. Worth closing when there is a reason to touch it again:
 
-Worth closing when there is a reason to touch this template again:
-
-1. Promote the notes to a committed `MAPPING.md`, or write one from the template itself.
-2. Export its user-defined fields to `isec-mobile-udfs.json`, as the other two have.
-3. Generate a sample into `samples/` so there is a reference render.
+1. Export its user-defined fields to `isec-mobile-udfs.json`, as the other two have — they are
+   specified in `MAPPING.md` section B but not in the API's shape.
+2. Generate a sample into `samples/` so there is a reference render.
 
 ## Registered twice
 

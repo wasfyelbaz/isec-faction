@@ -128,6 +128,42 @@ template's placeholder numbers, which would read as real results.
 
 ---
 
+### Variables that look right and are not
+
+Each of these is close enough to be tempting and means something else. Using one produces a report
+that renders cleanly and is wrong, which is the worst failure mode available — nobody re-reads a
+report that looks finished. Proven on the Mobile conversion
+(`templates/mobile/MAPPING.md` section D).
+
+| Tag | What it actually is | What it is not |
+|---|---|---|
+| `${impact}` | A *rating* — `High`/`Medium`/`Low`, the value the `FAC703` colour sentinel keys off. | An impact narrative. Use a RICH_TEXT UDF. |
+| `${remediationStatus}` | `Open` or `Closed`, a property of the **finding**. | The engagement's phase (`Initial Test`/`Retest`). That is a property of the assessment. |
+| `${category}` | The Faction vulnerability-category name. | An OWASP entry, unless the taxonomy was built that way — and a template usually needs the taxonomy *and* a checklist reference, which is two values for one variable. |
+| `${asmtAssessor*}` | The testing team, flat. | Distinct workflow roles (author / reviewer / approver), each with its own date. |
+
+Two more are simply empty or useless: `${asmtTeam}` is always empty in Faction 2, and
+`${asmtAccessKey}` just repeats the assessment id.
+
+### The one structural limit
+
+**Faction iterates over findings and nothing else.** Every "repeat these rows" need that is not a
+finding — a distribution list, a document-history table, scope rows, credential rows — has no loop
+and stays static. When a conversion stalls, this is usually why.
+
+### `${TOC}` is fixed at three levels
+
+`${TOC}` generates `TOC \o "1-3"`, hardcoded as a string literal in the renderer rather than taken
+as an argument the way the date variables take their format. A template whose own Word field was
+`TOC \o "1-6"` therefore **loses its Heading 4 entries** — on the Mobile template that is every
+"Proof Of Concept" sub-heading.
+
+What it buys is a contents page that always describes the report actually generated. A native Word
+TOC field carries a cached snapshot, so a template converted with one still listed findings from
+the original document until somebody pressed F9 — and anybody who forgot shipped a contents page
+for a different report. Page numbers are `PAGEREF` fields either way and resolve when Word opens
+the document.
+
 ## 3. User-defined fields (UDFs)
 
 **When**: the value is typed per engagement or per finding and Faction has no built-in for it
