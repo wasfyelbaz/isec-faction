@@ -371,10 +371,13 @@ class RoleControllerTest extends TestContainersConfig {
         assertThat(responseBody).contains("test:edit:self");
     }
 
+    /**
+     * An external role is a role only a client or application owner could hold, and this
+     * portal has no such accounts — EXTERNAL_OWNERS is off, so the endpoint refuses rather
+     * than minting a role nobody can be given. Upstream asserts the create succeeds.
+     */
     @Test
-
-    @EnterpriseOnly
-    void createRole_WithExternalFlag_PersistsAndReturnsIt() throws Exception {
+    void createRole_refusesAnExternalRoleBecauseThePortalIsOff() throws Exception {
         String token = jwtService.generateToken(
                 superAdminUser.getUsername(),
                 List.of(new SimpleGrantedAuthority("super_admin"))
@@ -389,34 +392,13 @@ class RoleControllerTest extends TestContainersConfig {
                 }
                 """;
 
-        String createdId = mockMvc.perform(post("/api/v1/roles")
+        mockMvc.perform(post("/api/v1/roles")
                         .header("Authorization", "Bearer " + token)
                         .contentType("application/json")
                         .content(requestBody))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.externalRole").value(true))
-                .andReturn().getResponse().getContentAsString()
-                .replaceAll(".*\"id\":\"([^\"]+)\".*", "$1");
+                .andExpect(status().isPaymentRequired());
 
-        assertThat(roleRepository.findById(createdId).orElseThrow().isExternalRole()).isTrue();
-
-        // Toggling it off via update clears the flag
-        String updateBody = """
-                {
-                    "name": "Client Viewer",
-                    "description": "External client role",
-                    "permissions": ["applications:read:owned"],
-                    "externalRole": false
-                }
-                """;
-        mockMvc.perform(put("/api/v1/roles/" + createdId)
-                        .header("Authorization", "Bearer " + token)
-                        .contentType("application/json")
-                        .content(updateBody))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.externalRole").value(false));
-
-        assertThat(roleRepository.findById(createdId).orElseThrow().isExternalRole()).isFalse();
+        assertThat(roleRepository.findByName("Client Viewer")).isEmpty();
     }
 
     @Test

@@ -976,11 +976,14 @@ class UserControllerTest extends TestContainersConfig {
 
     // ==================== ADDITIONAL VALIDATION TESTS ====================
 
+    /**
+     * Clients and application owners never sign in to this portal, so EXTERNAL_OWNERS is off
+     * and the endpoint refuses to mint the account. Upstream asserts the opposite here,
+     * because upstream's paid build sells that portal; the assertion is inverted rather than
+     * deleted, so the gate stays covered and reopening it has to be deliberate.
+     */
     @Test
-
-    @EnterpriseOnly
-    void createUser_WithExternalUserWithoutOrganization_Succeeds() throws Exception {
-        // External users may have no organization (e.g. app-level assignment only)
+    void createUser_refusesAnExternalAccountBecauseThePortalIsOff() throws Exception {
         String token = generateToken(superAdminUser, List.of("super_admin"));
 
         String requestBody = String.format("""
@@ -1000,8 +1003,9 @@ class UserControllerTest extends TestContainersConfig {
                         .header("Authorization", "Bearer " + token)
                         .contentType("application/json")
                         .content(requestBody))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.isInternal").value(false));
+                .andExpect(status().isPaymentRequired());
+
+        assertThat(userRepository.findByUsername("externaluser")).isEmpty();
     }
 
     @Test
@@ -1135,9 +1139,9 @@ class UserControllerTest extends TestContainersConfig {
 
     // ── Organization and sub-organization membership ─────────────────────────────
 
+    /** Memberships do not buy a way round the gate: the account type is what is refused. */
     @Test
-    @EnterpriseOnly
-    void createExternalUser_storesOrganizationAndSubOrganizationMemberships() throws Exception {
+    void createExternalUser_isRefusedEvenWithOrganizationMemberships() throws Exception {
         String token = generateToken(superAdminUser, List.of("super_admin"));
         Organization orgB = organizationRepository.save(Organization.builder().name("Org B").build());
         SubOrganization emea = subOrganizationRepository.save(SubOrganization.builder()
@@ -1162,20 +1166,18 @@ class UserControllerTest extends TestContainersConfig {
                         .header("Authorization", "Bearer " + token)
                         .contentType("application/json")
                         .content(body))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.organizationIds[0]").value(testOrganization.getId()))
-                .andExpect(jsonPath("$.data.subOrganizationIds[0]").value(emea.getId()))
-                .andExpect(jsonPath("$.data.organizationNames[0]").value(testOrganization.getName()))
-                .andExpect(jsonPath("$.data.subOrganizationNames[0]").value("Org B / EMEA"));
+                .andExpect(status().isPaymentRequired());
 
-        User saved = userRepository.findByUsername("multi").orElseThrow();
-        assertThat(saved.getOrganizationIds()).containsExactly(testOrganization.getId());
-        assertThat(saved.getSubOrganizationIds()).containsExactly(emea.getId());
+        assertThat(userRepository.findByUsername("multi")).isEmpty();
     }
 
+    /**
+     * The gate fires ahead of the sub-organization lookup, so this is 402 and not the 404
+     * upstream returns — worth pinning, because it proves nothing reaches the external code
+     * path rather than merely failing somewhere inside it.
+     */
     @Test
-    @EnterpriseOnly
-    void createExternalUser_rejectsUnknownSubOrganization() throws Exception {
+    void createExternalUser_isRefusedBeforeTheSubOrganizationIsEvenLookedUp() throws Exception {
         String token = generateToken(superAdminUser, List.of("super_admin"));
         String body = """
                 {
@@ -1194,7 +1196,7 @@ class UserControllerTest extends TestContainersConfig {
                         .header("Authorization", "Bearer " + token)
                         .contentType("application/json")
                         .content(body))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isPaymentRequired());
         assertThat(userRepository.findByUsername("bad")).isEmpty();
     }
 

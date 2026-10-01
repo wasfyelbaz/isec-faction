@@ -123,8 +123,13 @@ class BootstrapServiceTest extends TestContainersConfig {
 
         assertThat(userRepository.count()).isEqualTo(2);
         // SuperAdmin, Pentester, Pentester-Team, Pentester-Assessment, Remediation-Team,
-        // Remediation-All, Scheduling, Scheduling-Team, Organization Read, App Owner
-        assertThat(roleRepository.count()).isEqualTo(10);
+        // Remediation-All, Scheduling, Scheduling-Team. Upstream seeds ten; the two missing
+        // here are Organization Read and App Owner, which ensureExternalRoles() mints only
+        // when EXTERNAL_OWNERS is on. This fork keeps that off, so a fresh install never
+        // creates a role whose only possible holder is an account it refuses to make.
+        assertThat(roleRepository.count()).isEqualTo(8);
+        assertThat(roleRepository.findByName("App Owner")).isEmpty();
+        assertThat(roleRepository.findByName("Organization Read")).isEmpty();
 
         Optional<Role> superAdminRole = roleRepository.findByName("SuperAdmin");
         assertThat(superAdminRole).isPresent();

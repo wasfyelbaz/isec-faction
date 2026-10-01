@@ -31,17 +31,32 @@ class EditionPolicyTest {
      * silently emptying the Sections tab again.
      */
     @Test
-    void everyFeatureIsEnabledInThisFork() {
+    void everyFeatureExceptTheExternalPortalIsEnabledInThisFork() {
         for (Feature feature : Feature.values()) {
+            if (feature == Feature.EXTERNAL_OWNERS) continue;
             assertThat(community.enabled(feature))
                     .as("%s must be on in this fork", feature)
                     .isTrue();
         }
     }
 
+    /**
+     * The one feature this fork keeps shut, and it is a product decision rather than a
+     * licensing one: clients and application owners never sign in to this portal. Asserted
+     * on its own so that opening the gate again has to be deliberate.
+     */
     @Test
-    void requireAllowsEveryFeatureInThisFork() {
+    void theExternalOwnerPortalStaysOff() {
+        assertThat(community.enabled(Feature.EXTERNAL_OWNERS)).isFalse();
+
+        assertThatThrownBy(() -> community.require(Feature.EXTERNAL_OWNERS))
+                .isInstanceOf(FeatureNotLicensedException.class);
+    }
+
+    @Test
+    void requireAllowsEveryOtherFeatureInThisFork() {
         for (Feature feature : Feature.values()) {
+            if (feature == Feature.EXTERNAL_OWNERS) continue;
             assertThatCode(() -> community.require(feature))
                     .as("%s must not be refused in this fork", feature)
                     .doesNotThrowAnyException();

@@ -37,7 +37,14 @@ class EditionStatusServiceTest {
 
         assertThat(status.getEdition()).isEqualTo("COMMUNITY");
         assertThat(status.getFeatures()).hasSize(Feature.values().length).containsValue(true);
-        assertThat(status.getFeatures()).doesNotContainValue(false);
+        // Every feature is reported on, and only the external portal comes back off — the
+        // client sidebar and user form key off exactly this map.
+        assertThat(status.getFeatures()).containsEntry("external_owners", false);
+        assertThat(status.getFeatures()).containsOnlyKeys(
+                java.util.Arrays.stream(Feature.values()).map(Feature::getKey).toArray(String[]::new));
+        assertThat(status.getFeatures().entrySet().stream()
+                .filter(e -> !e.getValue()).map(java.util.Map.Entry::getKey))
+                .containsExactly("external_owners");
         assertThat(status.getLimits())
                 .doesNotContainKey("users")
                 .containsEntry("ai_providers", 1)
