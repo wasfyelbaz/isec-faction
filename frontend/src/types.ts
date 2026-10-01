@@ -371,6 +371,8 @@ export interface ApplicationImportResult {
 export interface AssessmentImportPreviewRow {
   line: number;
   name: string;
+  /** The client the row's target belongs to — every row names one. */
+  client?: string;
   application?: string;
   newApplication: boolean;
   assessmentType?: string;

@@ -1074,15 +1074,15 @@ class AssessmentControllerTest extends TestContainersConfig {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
                         "attachment; filename=assessment-import-template.csv"))
-                .andExpect(content().string(startsWith("name,appId,applicationName,assessmentType")));
+                .andExpect(content().string(startsWith("name,client,appId,applicationName,assessmentType")));
     }
 
     @Test
     void importPreview_ReturnsRowsWithoutWriting() throws Exception {
         mockMvc.perform(multipart("/api/v1/assessments/import/preview")
                         .file(importCsv("""
-                                name,applicationName,assessmentType,startDate,durationDays
-                                CSV One,test application,penetration test,2026-10-05,5
+                                name,client,applicationName,assessmentType,startDate,durationDays
+                                CSV One,Test Organization,test application,penetration test,2026-10-05,5
                                 """))
                         .header("Authorization", "Bearer " + jwtToken))
                 .andExpect(status().isOk())
@@ -1097,9 +1097,9 @@ class AssessmentControllerTest extends TestContainersConfig {
     void import_CreatesAssessments() throws Exception {
         mockMvc.perform(multipart("/api/v1/assessments/import")
                         .file(importCsv("""
-                                name,applicationName,assessmentType,startDate,durationDays
-                                CSV One,Test Application,Penetration Test,2026-10-05,5
-                                CSV Two,Test Application,Penetration Test,2026-11-05,5
+                                name,client,applicationName,assessmentType,startDate,durationDays
+                                CSV One,Test Organization,Test Application,Penetration Test,2026-10-05,5
+                                CSV Two,Test Organization,Test Application,Penetration Test,2026-11-05,5
                                 """))
                         .param("notifyStakeholders", "false")
                         .header("Authorization", "Bearer " + jwtToken))
@@ -1113,8 +1113,8 @@ class AssessmentControllerTest extends TestContainersConfig {
     void import_WithRowErrors_Returns400WithThePreview() throws Exception {
         mockMvc.perform(multipart("/api/v1/assessments/import")
                         .file(importCsv("""
-                                name,applicationName,assessmentType,startDate,durationDays
-                                CSV One,Test Application,No Such Type,2026-10-05,5
+                                name,client,applicationName,assessmentType,startDate,durationDays
+                                CSV One,Test Organization,Test Application,No Such Type,2026-10-05,5
                                 """))
                         .header("Authorization", "Bearer " + jwtToken))
                 .andExpect(status().isBadRequest())
@@ -1178,8 +1178,8 @@ class AssessmentControllerTest extends TestContainersConfig {
                 List.of(new SimpleGrantedAuthority("assessments:create:all"),
                         new SimpleGrantedAuthority("assessments:read:all")));
         String body = """
-                name,applicationName,assessmentType,startDate,durationDays,campaign
-                CSV One,Test Application,Penetration Test,2026-10-05,5,Controller Campaign
+                name,client,applicationName,assessmentType,startDate,durationDays,campaign
+                CSV One,Test Organization,Test Application,Penetration Test,2026-10-05,5,Controller Campaign
                 """;
 
         mockMvc.perform(multipart("/api/v1/assessments/import/preview")

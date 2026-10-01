@@ -4,6 +4,7 @@ import { assessmentsApi } from '../api';
 import type { AssessmentImportPreview, AssessmentImportResult } from '../types';
 import { Modal, Button, Badge, Checkbox, FormGroup, FormLabel } from '.';
 import './AssessmentImportModal.css';
+import { useTerminology } from '../context/TerminologyContext';
 
 interface AssessmentImportModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface AssessmentImportModalProps {
 type Step = 'choose' | 'preview' | 'done';
 
 export default function AssessmentImportModal({ isOpen, onClose, onImported }: AssessmentImportModalProps) {
+  const { organizationSingular, targetSingular } = useTerminology();
   const [step, setStep] = useState<Step>('choose');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<AssessmentImportPreview | null>(null);
@@ -186,7 +188,7 @@ export default function AssessmentImportModal({ isOpen, onClose, onImported }: A
               <table className="asmt-import-table">
                 <thead>
                   <tr>
-                    <th>Line</th><th>Name</th><th>Application</th><th>Type</th>
+                    <th>Line</th><th>Name</th><th>{organizationSingular}</th><th>{targetSingular}</th><th>Type</th>
                     <th>Dates</th><th>Assessors</th><th>Campaign</th><th>Status</th>
                   </tr>
                 </thead>
@@ -195,6 +197,7 @@ export default function AssessmentImportModal({ isOpen, onClose, onImported }: A
                     <tr key={row.line} className={row.errors.length ? 'asmt-import-row-error' : ''}>
                       <td>{row.line}</td>
                       <td>{row.name || '—'}</td>
+                      <td>{row.client || '—'}</td>
                       <td>
                         {row.application || '—'}
                         {row.newApplication && <Badge variant="warning">New</Badge>}

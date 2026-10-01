@@ -21,6 +21,7 @@ public record AssessmentImportPlan(
                              String pendingApplicationKey, String pendingCampaignKey) {
     }
 
-    public record PendingApplication(String appId, String name) {
+    /** A target the import will create, and the client it belongs to. */
+    public record PendingApplication(String appId, String name, String organizationId) {
     }
 }

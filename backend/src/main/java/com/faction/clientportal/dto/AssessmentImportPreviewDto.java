@@ -34,6 +34,8 @@ public class AssessmentImportPreviewDto {
         /** 1-based file line; the header is line 1. */
         private int line;
         private String name;
+        /** The client the row's target belongs to, so the preview shows where the work lands. */
+        private String client;
         private String application;
         private boolean newApplication;
         private String assessmentType;

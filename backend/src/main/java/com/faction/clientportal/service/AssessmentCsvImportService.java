@@ -39,6 +39,7 @@ import java.util.function.Function;
 public class AssessmentCsvImportService {
 
     private final ApplicationRepository applicationRepository;
+    private final com.faction.clientportal.repository.OrganizationRepository organizationRepository;
     private final AssessmentTypeRepository assessmentTypeRepository;
     private final CampaignRepository campaignRepository;
     private final TeamRepository teamRepository;
@@ -50,7 +51,7 @@ public class AssessmentCsvImportService {
 
     /** The built-in columns, in template order. Any other header must be a custom-field variable. */
     static final List<String> COLUMNS = List.of(
-            "name", "appId", "applicationName", "assessmentType", "startDate", "endDate",
+            "name", "client", "appId", "applicationName", "assessmentType", "startDate", "endDate",
             "durationDays", "assessors", "campaign", "team", "engagementManager",
             "remediationManager", "reportTemplate", "scope");
 
@@ -278,6 +279,7 @@ public class AssessmentCsvImportService {
         private final Map<String, List<Campaign>> campaigns = new HashMap<>();
         private final Map<String, List<User>> users = new HashMap<>();
         private final Map<String, List<Application>> applications = new HashMap<>();
+        private final Map<String, List<Organization>> organizations = new HashMap<>();
         private final Map<String, TypeTemplates> typeTemplates = new HashMap<>();
         private final boolean canCreateCampaigns;
         private Optional<Campaign> defaultCampaign;
@@ -354,6 +356,23 @@ public class AssessmentCsvImportService {
                 return null;
             }
 
+            // Every row names its client. A target belongs to one, and an import that guessed
+            // would be creating records nobody can find from the client they were for.
+            String clientName = value(cells, "client");
+            if (clientName.isEmpty()) {
+                errors.add("client is required");
+                return null;
+            }
+            Organization client = cached(organizations, clientName,
+                    k -> organizationRepository.findByNameIgnoreCase(clientName)
+                            .map(List::of).orElseGet(List::of)).stream().findFirst().orElse(null);
+            if (client == null) {
+                errors.add("No client named '" + clientName + "'");
+                return null;
+            }
+            request.setOrganizationId(client.getId());
+            row.client(client.getName());
+
             List<Application> matches = !appId.isEmpty()
                     ? cached(applications, "appid:" + appId,
                             k -> applicationRepository.findAllByAppIdIgnoreCase(appId))
@@ -382,7 +401,8 @@ public class AssessmentCsvImportService {
                     : "name:" + appName.toLowerCase(Locale.ROOT);
             AssessmentImportPlan.PendingApplication pending = pendingApplications.computeIfAbsent(key,
                     k -> new AssessmentImportPlan.PendingApplication(
-                            appId.isEmpty() ? null : appId, appName.isEmpty() ? appId : appName));
+                            appId.isEmpty() ? null : appId, appName.isEmpty() ? appId : appName,
+                            client.getId()));
             request.setAppId(pending.appId());
             request.setApplicationName(pending.name());
             row.application(label(pending.name(), pending.appId())).newApplication(true);

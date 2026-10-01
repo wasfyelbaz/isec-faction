@@ -41,12 +41,14 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Autowired private CampaignRepository campaignRepository;
     @Autowired private TeamRepository teamRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private OrganizationRepository organizationRepository;
 
     @MockBean private EventNotificationEmailSender eventEmailSender;
     @MockBean private NotificationService notificationService;
 
     private AssessmentType pentest;
     private ReportTemplate pentestTemplate;
+    private com.faction.clientportal.model.Organization acme;
     private Application checkout;
     private User jane;
     private User sam;
@@ -60,6 +62,7 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
         reportTemplateRepository.deleteAll();
         assessmentTypeRepository.deleteAll();
         applicationRepository.deleteAll();
+        organizationRepository.deleteAll();
         campaignRepository.deleteAll();
         teamRepository.deleteAll();
         userRepository.deleteAll();
@@ -77,8 +80,11 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
                                 .displayName("Ticket").fieldType(FieldType.STRING)
                                 .fieldScope(FieldScope.ASSESSMENT).build())))
                 .createdAt(LocalDateTime.now()).build());
+        acme = organizationRepository.save(com.faction.clientportal.model.Organization.builder()
+                .name("Acme").build());
         checkout = applicationRepository.save(Application.builder()
-                .appId("APP-001").name("Checkout").createdAt(LocalDateTime.now()).build());
+                .appId("APP-001").name("Checkout").organizationId(acme.getId())
+                .createdAt(LocalDateTime.now()).build());
         jane = userRepository.save(User.builder().username("jane.doe").email("jane@example.com")
                 .firstName("Jane").lastName("Doe").password("x").loginOption(LoginOption.NATIVE)
                 .isInternal(true).createdAt(LocalDateTime.now()).build());
@@ -107,8 +113,8 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void previewResolvesEveryColumnIgnoringCase() throws IOException {
         var p = preview("""
-                NAME,appid,AssessmentType,startDate,endDate,assessors,campaign,team,engagementManager,Environment
-                Q4 Pentest,app-001,penetration test,2026-10-05,2026-10-16,JANE.DOE;sam.lee@example.com,general,red team,SAM.LEE,Production
+                NAME,appid,AssessmentType,startDate,endDate,assessors,campaign,team,engagementManager,Environment,client
+                Q4 Pentest,app-001,penetration test,2026-10-05,2026-10-16,JANE.DOE;sam.lee@example.com,general,red team,SAM.LEE,Production,Acme
                 """);
 
         assertThat(p.isValid()).isTrue();
@@ -130,8 +136,8 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void previewWritesNothing() throws IOException {
         preview("""
-                name,appId,applicationName,assessmentType,startDate,durationDays,campaign
-                New One,APP-NEW,Brand New,Penetration Test,2026-10-05,5,Brand New Campaign
+                name,appId,applicationName,assessmentType,startDate,durationDays,campaign,client
+                New One,APP-NEW,Brand New,Penetration Test,2026-10-05,5,Brand New Campaign,Acme
                 """);
 
         assertThat(assessmentRepository.count()).isZero();
@@ -142,9 +148,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void unknownAppAndCampaignBecomePendingAndAreSharedAcrossRows() throws IOException {
         var p = preview("""
-                name,appId,applicationName,assessmentType,startDate,durationDays,campaign
-                One,APP-NEW,Brand New,Penetration Test,2026-10-05,5,Q4 Campaign
-                Two,app-new,Other Spelling,Penetration Test,2026-11-05,5,q4 campaign
+                name,appId,applicationName,assessmentType,startDate,durationDays,campaign,client
+                One,APP-NEW,Brand New,Penetration Test,2026-10-05,5,Q4 Campaign,Acme
+                Two,app-new,Other Spelling,Penetration Test,2026-11-05,5,q4 campaign,Acme
                 """);
 
         assertThat(p.isValid()).isTrue();
@@ -161,8 +167,8 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void blankCampaignUsesTheDefaultCampaign() throws IOException {
         var row = preview("""
-                name,appId,assessmentType,startDate,durationDays
-                One,APP-001,Penetration Test,2026-10-05,5
+                name,appId,assessmentType,startDate,durationDays,client
+                One,APP-001,Penetration Test,2026-10-05,5,Acme
                 """).getRows().get(0);
 
         assertThat(row.getCampaign()).isEqualTo("General");
@@ -172,9 +178,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void durationDaysComputesTheEndDateAndEndDateWins() throws IOException {
         var p = preview("""
-                name,appId,assessmentType,startDate,endDate,durationDays
-                By Duration,APP-001,Penetration Test,2026-10-05,,5
-                Both Given,APP-001,Penetration Test,2026-10-05,2026-10-30,5
+                name,appId,assessmentType,startDate,endDate,durationDays,client
+                By Duration,APP-001,Penetration Test,2026-10-05,,5,Acme
+                Both Given,APP-001,Penetration Test,2026-10-05,2026-10-30,5,Acme
                 """);
 
         assertThat(p.getRows().get(0).getEndDate()).isEqualTo(LocalDate.of(2026, 10, 10));
@@ -184,10 +190,10 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void rowErrorsAreCollectedPerRow() throws IOException {
         var p = preview("""
-                name,appId,assessmentType,startDate,endDate,assessors,team,reportTemplate
-                Good,APP-001,Penetration Test,2026-10-05,2026-10-10,jane.doe,,
-                ,APP-001,Nope Type,05/10/2026,2026-10-10,ghost;nobody@example.com,Blue Team,Missing Template
-                Backwards,APP-001,Penetration Test,2026-10-10,2026-10-05,,,
+                name,appId,assessmentType,startDate,endDate,assessors,team,reportTemplate,client
+                Good,APP-001,Penetration Test,2026-10-05,2026-10-10,jane.doe,,,Acme
+                ,APP-001,Nope Type,05/10/2026,2026-10-10,ghost;nobody@example.com,Blue Team,Missing Template,Acme
+                Backwards,APP-001,Penetration Test,2026-10-10,2026-10-05,,,,Acme
                 """);
 
         assertThat(p.isValid()).isFalse();
@@ -210,8 +216,8 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
         campaignRepository.save(Campaign.builder().name("q1").createdAt(LocalDateTime.now()).build());
 
         var row = preview("""
-                name,appId,assessmentType,startDate,durationDays,campaign
-                One,APP-001,Penetration Test,2026-10-05,5,Q1
+                name,appId,assessmentType,startDate,durationDays,campaign,client
+                One,APP-001,Penetration Test,2026-10-05,5,Q1,Acme
                 """).getRows().get(0);
 
         assertThat(row.getErrors()).containsExactly("Ambiguous campaign 'Q1': 2 match ignoring case");
@@ -223,8 +229,8 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
         userRepository.save(sam);
 
         var row = preview("""
-                name,appId,assessmentType,startDate,durationDays,assessors
-                One,APP-001,Penetration Test,2026-10-05,5,sam.lee
+                name,appId,assessmentType,startDate,durationDays,assessors,client
+                One,APP-001,Penetration Test,2026-10-05,5,sam.lee,Acme
                 """).getRows().get(0);
 
         assertThat(row.getErrors()).containsExactly("Unknown user 'sam.lee'");
@@ -233,9 +239,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void customFieldsAreCheckedAgainstTheRowsTemplate() throws IOException {
         var p = preview("""
-                name,appId,assessmentType,startDate,durationDays,environment,ticket
-                Good,APP-001,Penetration Test,2026-10-05,5,Staging,SEC-1
-                Bad Option,APP-001,Penetration Test,2026-10-05,5,Moon,
+                name,appId,assessmentType,startDate,durationDays,environment,ticket,client
+                Good,APP-001,Penetration Test,2026-10-05,5,Staging,SEC-1,Acme
+                Bad Option,APP-001,Penetration Test,2026-10-05,5,Moon,,Acme
                 """);
 
         assertThat(p.getRows().get(0).getErrors()).isEmpty();
@@ -252,8 +258,8 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
                 .userDefinedFields(new ArrayList<>()).createdAt(LocalDateTime.now()).build());
 
         var row = preview("""
-                name,appId,assessmentType,startDate,durationDays,ticket
-                One,APP-001,Web App,2026-10-05,5,SEC-9
+                name,appId,assessmentType,startDate,durationDays,ticket,client
+                One,APP-001,Web App,2026-10-05,5,SEC-9,Acme
                 """).getRows().get(0);
 
         assertThat(row.getErrors())
@@ -285,10 +291,64 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
         String template = service.template();
         String header = template.lines().findFirst().orElseThrow();
 
-        assertThat(header).startsWith("name,appId,applicationName,assessmentType,startDate,endDate,durationDays,"
+        assertThat(header).startsWith("name,client,appId,applicationName,assessmentType,startDate,endDate,durationDays,"
                 + "assessors,campaign,team,engagementManager,remediationManager,reportTemplate,scope");
         assertThat(header).endsWith(",environment,ticket");
         assertThat(template.lines().count()).isEqualTo(2);
+    }
+
+    // ── The client column ──────────────────────────────────────────────────
+
+    /**
+     * Every row names its client. The import can create a target, and a target created without
+     * one is unreachable from the client the work was actually for — which is how this
+     * installation collected orphans one assessment at a time.
+     */
+    @Test
+    void aRowWithoutAClientIsRejected() throws IOException {
+        var p = preview("""
+                name,appId,assessmentType,startDate,durationDays
+                Q4 Pentest,APP-001,Penetration Test,2026-10-05,5
+                """);
+
+        assertThat(p.isValid()).isFalse();
+        assertThat(p.getRows().get(0).getErrors()).anyMatch(e -> e.contains("client is required"));
+    }
+
+    @Test
+    void aRowNamingAClientThatDoesNotExistIsRejected() throws IOException {
+        var p = preview("""
+                name,client,appId,assessmentType,startDate,durationDays
+                Q4 Pentest,Nobody Ltd,APP-001,Penetration Test,2026-10-05,5
+                """);
+
+        assertThat(p.isValid()).isFalse();
+        assertThat(p.getRows().get(0).getErrors()).anyMatch(e -> e.contains("No client named 'Nobody Ltd'"));
+    }
+
+    /** The preview says where the work lands, so a wrong client is caught before committing. */
+    @Test
+    void thePreviewReportsTheClientForEachRow() throws IOException {
+        var p = preview("""
+                name,client,appId,assessmentType,startDate,durationDays
+                Q4 Pentest,acme,APP-001,Penetration Test,2026-10-05,5
+                """);
+
+        assertThat(p.isValid()).isTrue();
+        // Matched case-insensitively, reported as the client is actually spelled.
+        assertThat(p.getRows().get(0).getClient()).isEqualTo("Acme");
+    }
+
+    @Test
+    void aTargetTheImportCreatesBelongsToTheRowsClient() throws IOException {
+        importCsv("""
+                name,client,appId,applicationName,assessmentType,startDate,durationDays
+                Q4 Pentest,Acme,APP-NEW,Brand New Target,Penetration Test,2026-10-05,5
+                """, false);
+
+        Application created = applicationRepository.findAllByAppIdIgnoreCase("APP-NEW").get(0);
+        assertThat(created.getName()).isEqualTo("Brand New Target");
+        assertThat(created.getOrganizationId()).isEqualTo(acme.getId());
     }
 
     // ── Import ─────────────────────────────────────────────────────────────
@@ -303,8 +363,8 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void importCreatesEveryRowWithItsResolvedValues() throws IOException {
         var result = importCsv("""
-                name,appId,assessmentType,startDate,endDate,assessors,team,remediationManager,scope,environment
-                Q4 Pentest,app-001,penetration test,2026-10-05,2026-10-16,jane.doe;SAM.LEE,red team,jane@example.com,Web <b>and</b> API,Staging
+                name,appId,assessmentType,startDate,endDate,assessors,team,remediationManager,scope,environment,client
+                Q4 Pentest,app-001,penetration test,2026-10-05,2026-10-16,jane.doe;SAM.LEE,red team,jane@example.com,Web <b>and</b> API,Staging,Acme
                 """, false);
 
         assertThat(result.getCreated()).isEqualTo(1);
@@ -326,9 +386,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void importCreatesPendingApplicationsAndCampaignsOnce() throws IOException {
         var result = importCsv("""
-                name,appId,applicationName,assessmentType,startDate,durationDays,campaign
-                One,APP-NEW,Brand New,Penetration Test,2026-10-05,5,Q4 Campaign
-                Two,app-new,Ignored Spelling,Penetration Test,2026-11-05,5,q4 CAMPAIGN
+                name,appId,applicationName,assessmentType,startDate,durationDays,campaign,client
+                One,APP-NEW,Brand New,Penetration Test,2026-10-05,5,Q4 Campaign,Acme
+                Two,app-new,Ignored Spelling,Penetration Test,2026-11-05,5,q4 CAMPAIGN,Acme
                 """, false);
 
         assertThat(result.getCreated()).isEqualTo(2);
@@ -349,9 +409,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void anyRowErrorImportsNothing() {
         assertThatThrownBy(() -> importCsv("""
-                name,appId,applicationName,assessmentType,startDate,durationDays,campaign
-                Good,APP-NEW,Brand New,Penetration Test,2026-10-05,5,New Campaign
-                Bad,APP-001,,No Such Type,2026-10-05,5,
+                name,appId,applicationName,assessmentType,startDate,durationDays,campaign,client
+                Good,APP-NEW,Brand New,Penetration Test,2026-10-05,5,New Campaign,Acme
+                Bad,APP-001,,No Such Type,2026-10-05,5,,Acme
                 """, false))
                 .isInstanceOf(com.faction.clientportal.exception.AssessmentImportInvalidException.class)
                 .satisfies(e -> assertThat(((com.faction.clientportal.exception.AssessmentImportInvalidException) e)
@@ -365,9 +425,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void aFailureMidCommitRollsBackTheWholeBatch() throws IOException {
         AssessmentImportPlan plan = service.plan(csv("""
-                name,appId,applicationName,assessmentType,startDate,durationDays,campaign
-                First,APP-NEW,Brand New,Penetration Test,2026-10-05,5,New Campaign
-                Second,APP-001,,Penetration Test,2026-10-05,5,
+                name,appId,applicationName,assessmentType,startDate,durationDays,campaign,client
+                First,APP-NEW,Brand New,Penetration Test,2026-10-05,5,New Campaign,Acme
+                Second,APP-001,,Penetration Test,2026-10-05,5,,Acme
                 """), CAN_CREATE_CAMPAIGNS);
         // Break the second row after planning, as if its type vanished between preview and commit.
         plan.rows().get(1).request().setAssessmentTypeId("no-such-type");
@@ -383,8 +443,8 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void withoutNotifyOnlyTheExtensionEventFires() throws IOException {
         importCsv("""
-                name,appId,assessmentType,startDate,durationDays,assessors
-                Quiet,APP-001,Penetration Test,2026-10-05,5,jane.doe
+                name,appId,assessmentType,startDate,durationDays,assessors,client
+                Quiet,APP-001,Penetration Test,2026-10-05,5,jane.doe,Acme
                 """, false);
 
         org.mockito.Mockito.verifyNoInteractions(eventEmailSender);
@@ -411,8 +471,8 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
                 org.mockito.ArgumentMatchers.anyString());
 
         importCsv("""
-                name,appId,assessmentType,startDate,durationDays,assessors
-                Loud,APP-001,Penetration Test,2026-10-05,5,jane.doe
+                name,appId,assessmentType,startDate,durationDays,assessors,client
+                Loud,APP-001,Penetration Test,2026-10-05,5,jane.doe,Acme
                 """, true);
 
         org.mockito.Mockito.verify(notificationService).send(
@@ -429,9 +489,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
 
     @Test
     void aBatchLargerThanOneFlushChunkSharesItsNewApplicationAndCampaign() throws IOException {
-        StringBuilder body = new StringBuilder("name,appId,applicationName,assessmentType,startDate,durationDays,campaign\n");
+        StringBuilder body = new StringBuilder("name,client,appId,applicationName,assessmentType,startDate,durationDays,campaign\n");
         for (int i = 1; i <= 250; i++) {
-            body.append("Row ").append(i).append(",APP-BULK,Bulk App,Penetration Test,2026-10-05,5,Bulk Campaign\n");
+            body.append("Row ").append(i).append(",Acme,APP-BULK,Bulk App,Penetration Test,2026-10-05,5,Bulk Campaign\n");
         }
         org.mockito.Mockito.clearInvocations(workflowCatalogService);
 
@@ -460,9 +520,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
                 .isInternal(false).createdAt(LocalDateTime.now()).build());
 
         var p = preview("""
-                name,appId,assessmentType,startDate,durationDays,assessors,engagementManager,remediationManager
-                One,APP-001,Penetration Test,2026-10-05,5,jane.doe;CLIENT.CONTACT,,
-                Two,APP-001,Penetration Test,2026-10-05,5,jane.doe,client.contact,client@example.org
+                name,appId,assessmentType,startDate,durationDays,assessors,engagementManager,remediationManager,client
+                One,APP-001,Penetration Test,2026-10-05,5,jane.doe;CLIENT.CONTACT,,,Acme
+                Two,APP-001,Penetration Test,2026-10-05,5,jane.doe,client.contact,client@example.org,Acme
                 """);
 
         assertThat(p.getRows().get(0).getErrors())
@@ -474,9 +534,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void creatingACampaignNeedsPermissionToCreateCampaigns() throws IOException {
         String body = """
-                name,appId,assessmentType,startDate,durationDays,campaign
-                One,APP-001,Penetration Test,2026-10-05,5,Brand New Campaign
-                Two,APP-001,Penetration Test,2026-10-05,5,general
+                name,appId,assessmentType,startDate,durationDays,campaign,client
+                One,APP-001,Penetration Test,2026-10-05,5,Brand New Campaign,Acme
+                Two,APP-001,Penetration Test,2026-10-05,5,general,Acme
                 """;
 
         var denied = service.preview(csv(body), Set.of("assessments:create:all"));
@@ -554,9 +614,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
                 .userDefinedFields(new ArrayList<>()).createdAt(LocalDateTime.now()).build());
 
         var p = preview("""
-                name,appId,assessmentType,startDate,durationDays,reportTemplate
-                Unnamed,APP-001,Penetration Test,2026-10-05,5,
-                Named,APP-001,Penetration Test,2026-10-05,5,pentest report
+                name,appId,assessmentType,startDate,durationDays,reportTemplate,client
+                Unnamed,APP-001,Penetration Test,2026-10-05,5,,Acme
+                Named,APP-001,Penetration Test,2026-10-05,5,pentest report,Acme
                 """);
 
         assertThat(p.getRows().get(0).getErrors()).containsExactly(
@@ -569,9 +629,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
         assessmentTypeRepository.save(AssessmentType.builder().name("Red Team Op").createdAt(LocalDateTime.now()).build());
 
         var p = preview("""
-                name,appId,assessmentType,startDate,durationDays,ticket
-                Plain,APP-001,Red Team Op,2026-10-05,5,
-                With Field,APP-001,Red Team Op,2026-10-05,5,SEC-1
+                name,appId,assessmentType,startDate,durationDays,ticket,client
+                Plain,APP-001,Red Team Op,2026-10-05,5,,Acme
+                With Field,APP-001,Red Team Op,2026-10-05,5,SEC-1,Acme
                 """);
 
         assertThat(p.getRows().get(0).getErrors()).isEmpty();
@@ -592,9 +652,9 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
     @Test
     void durationDaysHasAnUpperBound() throws IOException {
         var p = preview("""
-                name,appId,assessmentType,startDate,durationDays
-                Ten Years,APP-001,Penetration Test,2026-10-05,3650
-                Too Long,APP-001,Penetration Test,2026-10-05,3651
+                name,appId,assessmentType,startDate,durationDays,client
+                Ten Years,APP-001,Penetration Test,2026-10-05,3650,Acme
+                Too Long,APP-001,Penetration Test,2026-10-05,3651,Acme
                 """);
 
         assertThat(p.getRows().get(0).getErrors()).isEmpty();
