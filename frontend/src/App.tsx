@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { PageTitleProvider } from './context/PageTitleContext';
 import { authApi } from './api';
 import { getCurrentUser } from './utils/permissions';
 import { BrandingProvider } from './context/BrandingContext';
 import { EditionProvider } from './context/EditionContext';
 import { TerminologyProvider } from './context/TerminologyContext';
+import { WorkflowsProvider } from './context/WorkflowsContext';
 import UpgradeDialog from './components/UpgradeDialog';
 import { PaidFeature } from './components/PaidFeature';
-import { SsoConfig, BrandingPage, InboundEmailConfigPage } from '@enterprise';
+import { SsoConfig, BrandingPage, InboundEmailConfigPage, AvailabilityAdminPage } from '@enterprise';
 import Login from './components/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
@@ -50,6 +51,19 @@ import AiConfigPage from './pages/AiConfigPage';
 import ContentTemplates from './pages/ContentTemplates';
 import Logs from './pages/Logs';
 import ApplicationIdConfig from './pages/ApplicationIdConfig';
+
+/**
+ * Your Assessments, remounted per assessment type.
+ *
+ * The key is not cosmetic. The page keeps its filters, sort and paging in localStorage under a
+ * key derived from the type, and `usePersistedState` reads that store once on mount and writes
+ * back whenever the key changes — so without a remount, switching between two types would restore
+ * the wrong view and then save it over the other type's entry.
+ */
+function AssessmentsForType() {
+  const { typeId } = useParams<{ typeId?: string }>();
+  return <Assessments key={typeId ?? 'all'} />;
+}
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -129,11 +143,10 @@ function App() {
     );
   }
 
-  return (
-    <BrandingProvider>
-    <EditionProvider>
-      <TerminologyProvider>
-    <PageTitleProvider>
+  // Router and everything inside it, split out so it can be wrapped in WorkflowsProvider
+  // only once a session is authenticated (see the comment on the return below).
+  const content = (
+    <>
     <UpgradeDialog />
     <Router>
       <Routes>
@@ -431,7 +444,25 @@ function App() {
             isAuthenticated ? (
               <DashboardLayout>
                 <ProtectedRoute requiredPermission="canViewAssessments">
-                  <Assessments />
+                  <AssessmentsForType />
+                </ProtectedRoute>
+              </DashboardLayout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        {/* One assessment type's assessments — the same page, locked to that type. The route
+            resolves whether or not the sidebar offers it, so a bookmark still lands somewhere
+            sensible once the menu is switched off again. */}
+        <Route
+          path="/assessments/type/:typeId"
+          element={
+            isAuthenticated ? (
+              <DashboardLayout>
+                <ProtectedRoute requiredPermission="canViewAssessments">
+                  <AssessmentsForType />
                 </ProtectedRoute>
               </DashboardLayout>
             ) : (
@@ -695,6 +726,27 @@ function App() {
         />
 
         <Route
+          path="/availability"
+          element={
+            isAuthenticated ? (
+              <DashboardLayout>
+                <ProtectedRoute requiredPermission="canViewAvailabilityAdmin">
+                  <PaidFeature
+                    feature="team_scheduling"
+                    title="Availability"
+                    description="Scheduling blocks such as code freezes and shutdowns, and the holiday calendars that mark people out of office by region."
+                  >
+                    <AvailabilityAdminPage />
+                  </PaidFeature>
+                </ProtectedRoute>
+              </DashboardLayout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
           path="/email-notifications"
           element={
             isAuthenticated ? (
@@ -793,6 +845,23 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
+    </>
+  );
+
+  return (
+    <BrandingProvider>
+    <EditionProvider>
+      <TerminologyProvider>
+    <PageTitleProvider>
+    {/*
+      WorkflowsProvider fetches from an authenticated-only endpoint, unlike its three
+      siblings above (branding/edition/terminology are meant to render on the sign-in
+      page too). Gating it here — rather than mounting it unconditionally like they do —
+      keeps that fetch from firing for a signed-out visitor, while still mounting it once
+      per session rather than once per route (which nesting it inside DashboardLayout,
+      remounted on every navigation, would cause).
+    */}
+    {isAuthenticated ? <WorkflowsProvider>{content}</WorkflowsProvider> : content}
     </PageTitleProvider>
       </TerminologyProvider>
     </EditionProvider>

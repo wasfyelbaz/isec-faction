@@ -47,6 +47,12 @@ public class UpdateReportTemplateRequest {
     /** Colours, axis label and size for the severity bar chart. Null means "leave alone". */
     private Map<String, String> barChartConfig;
 
+    /**
+     * The colour palette, or null to leave it alone. The designer sends the whole template on
+     * every save, so a null here means "this edit was not about colours" rather than "clear them".
+     */
+    private com.faction.clientportal.model.ReportPalette reportPalette;
+
     private List<String> sections;
 
     @Valid

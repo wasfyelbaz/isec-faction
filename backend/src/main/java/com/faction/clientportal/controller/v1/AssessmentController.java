@@ -7,6 +7,8 @@ import com.faction.clientportal.model.User;
 import com.faction.clientportal.security.RequiresPermission;
 import com.faction.clientportal.dto.*;
 import com.faction.clientportal.dto.common.JsonApiResponse;
+import com.faction.clientportal.exception.AssessmentImportInvalidException;
+import com.faction.clientportal.service.AssessmentCsvImportService;
 import com.faction.clientportal.service.AssessmentLockService;
 import com.faction.clientportal.service.AssessmentService;
 import com.faction.clientportal.service.ReportGenerationService;
@@ -34,6 +36,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -55,6 +58,7 @@ public class AssessmentController {
     private final UserService userService;
     private final ReportGenerationService reportGenerationService;
     private final UploadRequests uploadRequests;
+    private final AssessmentCsvImportService assessmentCsvImportService;
 
     /**
      * Sortable assessment columns → the keys the search query's ORDER BY whitelist resolves. The
@@ -106,6 +110,78 @@ public class AssessmentController {
         return ResponseUtil.success("Assessment created successfully", assessment);
     }
 
+    // ── CSV import ───────────────────────────────────────────────────────────
+
+    @GetMapping(value = "/import/template", produces = "text/csv")
+    @RequiresPermission({Permission.ASSESSMENTS_CREATE_ALL})
+    @Operation(
+        summary = "Download the assessment CSV import template",
+        description = "Every built-in column, one column per assessment custom-field variable, and an example row.",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "Template returned"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - requires assessments:create:all")
+        }
+    )
+    public ResponseEntity<String> downloadImportTemplate() {
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=assessment-import-template.csv")
+                .body(assessmentCsvImportService.template());
+    }
+
+    @PostMapping(value = "/import/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequiresPermission({Permission.ASSESSMENTS_CREATE_ALL})
+    @Operation(
+        summary = "Preview an assessment CSV import",
+        description = "Dry run: resolves every row and reports what it would create and any errors. Writes nothing.",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "Preview returned (see valid and each row's errors)"),
+            @ApiResponse(responseCode = "400", description = "The file is missing, empty, too large or too long, or has unknown, duplicate or missing columns"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - requires assessments:create:all")
+        }
+    )
+    public ResponseEntity<JsonApiResponse<AssessmentImportPreviewDto>> previewImport(
+            @RequestParam("file") MultipartFile file, Authentication authentication) throws IOException {
+        return ResponseUtil.success("Import previewed",
+                assessmentCsvImportService.preview(file, authorities(authentication)));
+    }
+
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequiresPermission({Permission.ASSESSMENTS_CREATE_ALL})
+    @Operation(
+        summary = "Import assessments from a CSV",
+        description = "Creates one assessment per row, all or nothing. Missing applications are created, and "
+                + "missing campaigns too when the caller has campaigns:create:all. notifyStakeholders sends the "
+                + "usual assessment-created notifications and email.",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "All rows imported"),
+            @ApiResponse(responseCode = "400", description = "File problem, or rows with errors (data holds the preview); nothing imported"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - requires assessments:create:all")
+        }
+    )
+    public ResponseEntity<JsonApiResponse<AssessmentImportResultDto>> importAssessments(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "notifyStakeholders", defaultValue = "false") boolean notifyStakeholders,
+            Authentication authentication) throws IOException {
+        return ResponseUtil.success("Assessments imported",
+                assessmentCsvImportService.importCsv(file, notifyStakeholders, authentication.getName(),
+                        authorities(authentication)));
+    }
+
+    /** The caller's granted authorities, which decide whether an import may create campaigns. */
+    private static java.util.Set<String> authorities(Authentication authentication) {
+        return authentication == null ? java.util.Set.of()
+                : authentication.getAuthorities().stream()
+                        .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    /** Rows failed validation: 400, with the fresh preview so the dialog can show why. */
+    @ExceptionHandler(AssessmentImportInvalidException.class)
+    public ResponseEntity<JsonApiResponse<AssessmentImportPreviewDto>> handleInvalidImport(
+            AssessmentImportInvalidException e) {
+        return ResponseEntity.badRequest().body(new JsonApiResponse<>(false, e.getMessage(), e.getPreview()));
+    }
+
     @GetMapping
     @RequiresPermission({Permission.ASSESSMENTS_READ_ALL, Permission.ASSESSMENTS_READ_TEAM, Permission.ASSESSMENTS_READ_ASSIGNED, Permission.ASSESSMENTS_READ_ORG, Permission.ASSESSMENTS_READ_OWNED})
     @Operation(
@@ -120,8 +196,8 @@ public class AssessmentController {
             @Parameter(name = "assessmentTypeId", description = "Filter by assessment type ID"),
             @Parameter(name = "assessmentTypeIds", description = "Filter by any of several assessment type IDs (repeatable or comma-separated)"),
             @Parameter(name = "assessorId", description = "Filter by assessor user ID"),
-            @Parameter(name = "status", description = "Filter by status", example = "IN_PROGRESS"),
-            @Parameter(name = "statuses", description = "Filter by any of several statuses (repeatable or comma-separated)", example = "IN_PROGRESS,ON_HOLD"),
+            @Parameter(name = "status", description = "Filter by status", example = "Testing"),
+            @Parameter(name = "statuses", description = "Filter by any of several statuses (repeatable or comma-separated)", example = "Testing,Reporting"),
             @Parameter(name = "openSurveys", description = "Only assessments with at least one unfinished survey", example = "true"),
             @Parameter(name = "startDateFrom", description = "Filter by start date from (ISO format)", example = "2024-01-01T00:00:00"),
             @Parameter(name = "startDateTo", description = "Filter by start date to (ISO format)", example = "2024-12-31T23:59:59"),
@@ -131,6 +207,7 @@ public class AssessmentController {
             @Parameter(name = "completedDateTo", description = "Filter by completion date to (ISO format)"),
             @Parameter(name = "pastDue", description = "Filter for past due assessments only", example = "true"),
             @Parameter(name = "showCompleted", description = "Include completed/approved/archived assessments", example = "false"),
+            @Parameter(name = "onlyCompleted", description = "Only assessments their workflow calls completed", example = "true"),
             @Parameter(name = "assignedToMe", description = "Show only assessments assigned to current user", example = "true"),
             @Parameter(name = "sort", description = "Sort field and direction", example = "createdAt,desc")
         },
@@ -165,6 +242,7 @@ public class AssessmentController {
         @Parameter(hidden = true) @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime completedDateTo,
         @Parameter(hidden = true) @RequestParam(required = false) Boolean pastDue,
         @Parameter(hidden = true) @RequestParam(required = false) Boolean showCompleted,
+        @Parameter(hidden = true) @RequestParam(required = false) Boolean onlyCompleted,
         @Parameter(hidden = true) @RequestParam(required = false) Boolean assignedToMe,
         @Parameter(hidden = true) @RequestParam(defaultValue = "createdAt,desc") String sort,
         Authentication authentication
@@ -199,6 +277,7 @@ public class AssessmentController {
             completedDateTo,
             pastDue,
             showCompleted,
+            onlyCompleted,
             assignedToMe,
             currentUserId,
             null,
@@ -384,7 +463,9 @@ public class AssessmentController {
         summary = "Get assessment metrics",
         description = "Get assessment statistics by status and past due count",
         parameters = {
-            @Parameter(name = "organizationId", description = "Filter metrics by organization ID (optional)")
+            @Parameter(name = "organizationId", description = "Filter metrics by organization ID (optional)"),
+            @Parameter(name = "assessmentTypeIds", description = "Count only assessments of any of these type IDs "
+                + "(repeatable or comma-separated); omit to count every type")
         },
         responses = {
             @ApiResponse(
@@ -398,9 +479,10 @@ public class AssessmentController {
     )
     public ResponseEntity<JsonApiResponse<AssessmentMetricsDto>> getMetrics(
         @Parameter(hidden = true) @RequestParam(required = false) String organizationId,
+        @Parameter(hidden = true) @RequestParam(required = false) List<String> assessmentTypeIds,
         Authentication authentication
     ) {
-        AssessmentMetricsDto metrics = assessmentService.getMetrics(organizationId, authentication);
+        AssessmentMetricsDto metrics = assessmentService.getMetrics(organizationId, assessmentTypeIds, authentication);
         return ResponseUtil.success("Metrics retrieved successfully", metrics);
     }
 
@@ -489,7 +571,11 @@ public class AssessmentController {
     }
 
     @PostMapping("/assessor-availability")
-    @RequiresPermission({Permission.ASSESSMENTS_CREATE_ALL, Permission.ASSESSMENTS_CREATE_TEAM})
+    // Also retest schedulers: the Schedule Retest page is gated on vulnerabilities:create:*
+    // (permissions.canScheduleRetests) and asks this for its assessor warnings.
+    @RequiresPermission({Permission.ASSESSMENTS_CREATE_ALL, Permission.ASSESSMENTS_CREATE_TEAM,
+            Permission.VULNERABILITIES_CREATE_ALL, Permission.VULNERABILITIES_CREATE_TEAM,
+            Permission.VULNERABILITIES_CREATE_ASSESSMENT})
     @Operation(
         summary = "Check which candidate assessors are free",
         description = "Given a proposed window and a set of candidate assessors, reports which of "
@@ -570,7 +656,7 @@ public class AssessmentController {
             @Parameter(name = "organizationId", description = "Filter by organization ID"),
             @Parameter(name = "assessmentTypeId", description = "Filter by assessment type ID"),
             @Parameter(name = "assessorId", description = "Filter by assessor user ID"),
-            @Parameter(name = "status", description = "Filter by status", example = "IN_PROGRESS"),
+            @Parameter(name = "status", description = "Filter by status", example = "Testing"),
             @Parameter(name = "name", description = "Search by name (case-insensitive)")
         },
         responses = {

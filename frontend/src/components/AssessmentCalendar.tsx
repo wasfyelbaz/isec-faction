@@ -1,8 +1,9 @@
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { Assessment } from '../types';
+import { Assessment, Workflow, HolidayEntry, ScheduleBlock } from '../types';
+import { colorFor, isCompleted, statusLabel } from '../utils/workflowLookup';
+import './AssessmentCalendar.css';
 
 interface AssessmentCalendarProps {
   assessments: Assessment[];
@@ -11,23 +12,44 @@ interface AssessmentCalendarProps {
   onEventResize?: (assessmentId: string, newStart: Date, newEnd: Date, revert: () => void) => void;
   loading?: boolean;
   currentAssessmentId?: string; // ID of the assessment being edited (to highlight it)
+  // Flat name->color override, independent of any workflow (e.g. the synthetic RETEST_*
+  // statuses ScheduleRetestPage draws, which are not real workflow statuses at all).
   statusColors?: Record<string, string>;
+  // The workflow list, for per-row colours keyed off each assessment's own workflowId. Omit
+  // it (as CreateAssessment and ScheduleRetestPage do) to keep the old flat-map-only behaviour.
+  workflows?: Workflow[];
   initialDate?: string; // ISO date string to navigate to on mount
+  /** Called with the visible [start, end] dates (inclusive, YYYY-MM-DD) whenever the view moves. */
+  onRangeChange?: (start: string, end: string) => void;
+  // Org-wide calendar: the default holiday region's holidays and manager-defined scheduling
+  // blocks, drawn as day-tinted background events (not per-user personal time off — that stays
+  // on the By User timeline only).
+  orgHolidays?: HolidayEntry[];
+  blocks?: ScheduleBlock[];
 }
 
-const DEFAULT_STATUS_COLORS: Record<string, string> = {
-  DRAFT: '#6c757d',
-  IN_PROGRESS: '#0d6efd',
-  ON_HOLD: '#ffc107',
-  PENDING_REVIEW: '#0dcaf0',
-  COMPLETED: '#198754',
-  APPROVED: '#20c997',
-  ARCHIVED: '#212529',
+/**
+ * A row's colour: the owning workflow's colour for its status when `workflows` is supplied,
+ * falling back to the flat `statusColors` override, falling back to a neutral grey. Keeping
+ * the flat-map fallback lets ScheduleRetestPage's synthetic RETEST_* statuses (which belong
+ * to no workflow) and CreateAssessment's unconfigured calendar keep their existing look.
+ */
+const getStatusColor = (
+  workflows: Workflow[] | undefined,
+  statusColors: Record<string, string> | undefined,
+  workflowId: string | null | undefined,
+  status: string
+): string => {
+  // Completed always renders green, regardless of what a workflow author configured for its
+  // terminal status: the point of a calendar is to see who's still booked vs. done at a glance,
+  // and a workflow that colors its completed status, say, blue would otherwise hide that signal.
+  if (workflows && isCompleted(workflows, workflowId, status)) return '#10b981';
+  const workflowColor = workflows && workflows.length > 0 ? colorFor(workflows, workflowId, status) : undefined;
+  return workflowColor ?? statusColors?.[status] ?? '#6c757d';
 };
 
-const getStatusColor = (status: string, customColors?: Record<string, string>): string => {
-  return customColors?.[status] || DEFAULT_STATUS_COLORS[status] || '#6c757d';
-};
+/** The assessment being created or edited, picked out from the rest. */
+const CURRENT_COLOR = '#8b5cf6';
 
 /** The calendar date part of an API value, dropping the always-midnight time. */
 const dateOnly = (value: string): string => value.split('T')[0];
@@ -54,18 +76,25 @@ export default function AssessmentCalendar({
   loading = false,
   currentAssessmentId,
   statusColors,
+  workflows,
   initialDate,
+  onRangeChange,
+  orgHolidays,
+  blocks,
 }: AssessmentCalendarProps) {
   const events = assessments
     .filter((a) => a.startDate && a.plannedEndDate)
     .map((assessment) => {
       const isCurrentAssessment = currentAssessmentId && assessment.id === currentAssessmentId;
-      const baseColor = getStatusColor(assessment.status, statusColors);
+      const baseColor = getStatusColor(workflows, statusColors, assessment.workflowId, assessment.status);
       const isEditable = currentAssessmentId ? isCurrentAssessment : true;
 
       return {
         id: assessment.id,
-        title: assessment.name,
+        title:
+          assessment.assessorNames && assessment.assessorNames.length > 0
+            ? `${assessment.name} — ${assessment.assessorNames.join(', ')}`
+            : assessment.name,
         // Date-only, all-day events: the API's start/plannedEndDate are LocalDateTime at
         // midnight, and feeding those through as timed events shifts them by the viewer's
         // UTC offset. FullCalendar's `end` is exclusive, so the planned end is pushed one day
@@ -73,21 +102,53 @@ export default function AssessmentCalendar({
         allDay: true,
         start: dateOnly(assessment.startDate!),
         end: shiftDays(dateOnly(assessment.plannedEndDate!), 1),
-        backgroundColor: isCurrentAssessment ? '#8b5cf6' : baseColor, // Purple for current
-        borderColor: isCurrentAssessment
-          ? '#7c3aed'
-          : assessment.isPastDue
-            ? '#dc3545'
-            : baseColor,
+        // Bars are painted in CSS from --bar-color (set in eventDidMount) — a tinted fill with a
+        // status-colored edge, matching the Engagements By User timeline — not FullCalendar's
+        // solid inline colors.
+        backgroundColor: 'transparent',
+        borderColor: 'transparent',
+        classNames: [
+          'tl-event',
+          ...(assessment.isPastDue ? ['past-due'] : []),
+          ...(isCurrentAssessment ? ['current'] : []),
+        ],
         editable: isEditable ? true : false, // Controls both drag and resize
         extendedProps: {
           assessment,
           isCurrentAssessment,
+          color: isCurrentAssessment ? CURRENT_COLOR : baseColor,
         },
       };
     });
 
+  // Org-wide holidays and scheduling blocks: background events so they tint the day cells
+  // without competing with assessment bars for event rows. FullCalendar gives these no native
+  // tooltip, so eventDidMount below sets a title attribute instead.
+  const orgHolidayEvents = (orgHolidays ?? []).map((holiday) => ({
+    start: holiday.date,
+    end: shiftDays(holiday.date, 1),
+    allDay: true,
+    display: 'background' as const,
+    classNames: ['cal-org-event', 'cal-org-event--holiday'],
+    title: holiday.name,
+  }));
+
+  const blockEvents = (blocks ?? []).map((block) => ({
+    start: block.startDate,
+    end: shiftDays(block.endDate, 1),
+    allDay: true,
+    display: 'background' as const,
+    classNames: ['cal-org-event', 'cal-org-event--block'],
+    title: block.note ? `${block.title} — ${block.note}` : block.title,
+  }));
+
+  const allEvents = [...events, ...orgHolidayEvents, ...blockEvents];
+
   const handleEventClick = (info: any) => {
+    // Holiday/block background events carry no `assessment` in their extendedProps — FullCalendar
+    // fires eventClick for them same as any other event, and forwarding undefined on to the
+    // caller's edit navigation throws.
+    if (info.event.display === 'background') return;
     if (onEventClick) {
       const assessment = info.event.extendedProps.assessment;
       onEventClick(assessment);
@@ -107,6 +168,9 @@ export default function AssessmentCalendar({
   };
 
   const handleEventDrop = (info: any) => {
+    // Background events are never editable (see `editable` below), but guard defensively anyway —
+    // a background event has no assessment id to update.
+    if (info.event.display === 'background') return;
     if (onEventDrop) {
       const { start, end } = draggedRange(info);
       onEventDrop(info.event.id, start, end, () => info.revert());
@@ -114,6 +178,7 @@ export default function AssessmentCalendar({
   };
 
   const handleEventResize = (info: any) => {
+    if (info.event.display === 'background') return;
     if (onEventResize) {
       const { start, end } = draggedRange(info);
       onEventResize(info.event.id, start, end, () => info.revert());
@@ -132,76 +197,32 @@ export default function AssessmentCalendar({
 
   return (
     <div className="assessment-calendar">
-      <style>{`
-        .fc {
-          font-family: inherit;
-        }
-        .fc-event {
-          cursor: pointer;
-          border-width: 2px;
-        }
-        .fc-event:hover {
-          opacity: 0.85;
-        }
-        .fc-daygrid-event {
-          white-space: normal;
-        }
-        .fc-toolbar-title {
-          font-size: 1.5rem;
-        }
-        .fc-button {
-          text-transform: capitalize;
-        }
-        /* Make resize handles more visible */
-        .fc-event-resizer {
-          display: block !important;
-          position: absolute;
-          z-index: 4;
-          width: 10px;
-          height: 100%;
-          top: 0;
-        }
-        .fc-event-resizer-start {
-          left: 0;
-          cursor: w-resize;
-          background: rgba(255, 255, 255, 0.2);
-        }
-        .fc-event-resizer-end {
-          right: 0;
-          cursor: e-resize;
-          background: rgba(255, 255, 255, 0.2);
-        }
-        .fc-event:hover .fc-event-resizer-start,
-        .fc-event:hover .fc-event-resizer-end {
-          background: rgba(255, 255, 255, 0.6);
-        }
-        /* Show appropriate cursors */
-        .fc-daygrid-event.fc-event-resizable {
-          cursor: move;
-        }
-        .fc-direction-ltr .fc-daygrid-event.fc-event-end.fc-event-resizable-after:hover,
-        .fc-direction-ltr .fc-daygrid-block-event.fc-event-end:hover {
-          cursor: e-resize;
-        }
-        .fc-direction-ltr .fc-daygrid-event.fc-event-start.fc-event-resizable-before:hover,
-        .fc-direction-ltr .fc-daygrid-block-event.fc-event-start:hover {
-          cursor: w-resize;
-        }
-      `}</style>
-
       <FullCalendar
-        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+        plugins={[dayGridPlugin, interactionPlugin]}
         initialView="dayGridMonth"
         initialDate={initialDate}
+        eventDidMount={(info) => {
+          if (info.event.display === 'background') {
+            info.el.setAttribute('title', info.event.title);
+            return;
+          }
+          info.el.style.setProperty('--bar-color', info.event.extendedProps.color);
+        }}
+        buttonText={{ today: 'Today', month: 'Month', week: 'Week', day: 'Day' }}
         headerToolbar={{
+          // The arrows sit in their own fixed-width chunk (see AssessmentCalendar.css), so they never
+          // shift as the centered title's length changes.
           left: 'prev,next today',
           center: 'title',
-          right: 'dayGridMonth,timeGridWeek,timeGridDay',
+          // Assessments are all-day, so an hour-by-hour time grid is empty space: day grids instead.
+          right: 'dayGridDay,dayGridWeek,dayGridMonth',
         }}
-        events={events}
+        events={allEvents}
         eventClick={handleEventClick}
         eventDrop={handleEventDrop}
         eventResize={handleEventResize}
+        // FullCalendar's range end is exclusive; hand back the last visible day instead.
+        datesSet={(info) => onRangeChange?.(localDate(info.start), shiftDays(localDate(info.end), -1))}
         editable={!!(onEventDrop || onEventResize)}
         eventDurationEditable={true}
         eventStartEditable={true}
@@ -210,36 +231,51 @@ export default function AssessmentCalendar({
         height="auto"
         aspectRatio={1.8}
         eventDisplay="block"
-        // Assessments are scheduled by date, not time of day — every event is all-day, so
-        // there is no clock to show. Without this the week/day views prefix each bar with a
-        // meaningless "00:00".
+        // Assessments are scheduled by date, not time of day, so there is no clock to show.
         displayEventTime={false}
-        allDayText="Assessments"
       />
 
-      {/* Legend — driven by statuses present in the current event set */}
+      {/* Legend — driven by statuses present in the current event set. Every entry is a small
+          swatch plus a plain label, matching the By User timeline's own legend format (see
+          AssessorTimeline's .tl-away / .tl-legend-swatch) rather than the old solid "badge" chips
+          this used to mix in for statuses/current/past-due. */}
       <div className="calendar-legend">
         {currentAssessmentId && (
-          <span className="badge" style={{ backgroundColor: '#8b5cf6', border: '3px solid #7c3aed' }}>
+          <span className="cal-legend-entry">
+            <i className="cal-legend-swatch cal-legend-swatch--solid" style={{ ['--legend-color' as string]: CURRENT_COLOR }} />
             Current (Editing)
           </span>
         )}
-        {Array.from(new Set(assessments.map((a) => a.status))).map((status) => {
-          const color = getStatusColor(status, statusColors);
-          const isDark = color === '#212529' || color === '#ffc107';
-          return (
-            <span
-              key={status}
-              className="badge"
-              style={{ backgroundColor: color, color: isDark ? '#000' : '#fff' }}
-            >
-              {status}
+        {(() => {
+          // Keyed on the (status, colour) pair, not the name alone — two workflows' same-named
+          // statuses only collapse into one legend entry when they also agree on colour.
+          const entries = new Map<string, { status: string; workflowId?: string; color: string }>();
+          for (const a of assessments) {
+            const color = getStatusColor(workflows, statusColors, a.workflowId, a.status);
+            const key = `${a.status}::${color}`;
+            if (!entries.has(key)) entries.set(key, { status: a.status, workflowId: a.workflowId, color });
+          }
+          return Array.from(entries.values()).map((entry) => (
+            <span key={`${entry.status}::${entry.color}`} className="cal-legend-entry">
+              <i className="cal-legend-swatch cal-legend-swatch--solid" style={{ ['--legend-color' as string]: entry.color }} />
+              {statusLabel(workflows ?? [], entry.workflowId, entry.status)}
             </span>
-          );
-        })}
-        <span className="badge" style={{ backgroundColor: '#6c757d', border: '2px solid #dc3545' }}>
-          Past Due (Red Border)
+          ));
+        })()}
+        <span className="cal-legend-entry">
+          <i className="cal-legend-swatch cal-legend-swatch--past-due" />
+          Past due (red border)
         </span>
+        {orgHolidayEvents.length > 0 && (
+          <span className="cal-legend-entry">
+            <i className="cal-legend-swatch cal-legend-swatch--holiday" /> Holiday
+          </span>
+        )}
+        {blockEvents.length > 0 && (
+          <span className="cal-legend-entry">
+            <i className="cal-legend-swatch cal-legend-swatch--block" /> Block
+          </span>
+        )}
       </div>
     </div>
   );

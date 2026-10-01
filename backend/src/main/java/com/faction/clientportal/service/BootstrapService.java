@@ -35,6 +35,7 @@ public class BootstrapService implements ApplicationRunner {
     private final CampaignRepository campaignRepository;
     private final EditionPolicy editionPolicy;
     private final DefaultReportTemplateService defaultReportTemplateService;
+    private final AssessmentWorkflowConfigService workflowConfigService;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -64,6 +65,9 @@ public class BootstrapService implements ApplicationRunner {
         }
 
         regionConfigService.ensureDefaults();
+
+        // Before the assessment types below, which start on Default Workflow.
+        workflowConfigService.ensureDefaultWorkflow();
 
         if (assessmentTypeRepository.count() == 0) {
             log.info("No assessment types found. Initializing default assessment types...");
@@ -423,7 +427,8 @@ public class BootstrapService implements ApplicationRunner {
                     Permission.ASSESSMENTS_CREATE_ALL.getPermission(),
                     Permission.ASSESSMENTS_EDIT_ALL.getPermission(),
                     Permission.ASSESSMENTS_DELETE_ALL.getPermission(),
-                    Permission.USERS_READ_ALL.getPermission()),
+                    Permission.USERS_READ_ALL.getPermission(),
+                    Permission.AVAILABILITY_MANAGE_ALL.getPermission()),
             SCHEDULING_SHARED_PERMISSIONS.stream()).toList();
 
     /**
@@ -437,7 +442,8 @@ public class BootstrapService implements ApplicationRunner {
                     Permission.ASSESSMENTS_CREATE_TEAM.getPermission(),
                     Permission.ASSESSMENTS_EDIT_TEAM.getPermission(),
                     Permission.ASSESSMENTS_DELETE_TEAM.getPermission(),
-                    Permission.USERS_READ_TEAM.getPermission()),
+                    Permission.USERS_READ_TEAM.getPermission(),
+                    Permission.AVAILABILITY_MANAGE_TEAM.getPermission()),
             SCHEDULING_SHARED_PERMISSIONS.stream()).toList();
 
     /**

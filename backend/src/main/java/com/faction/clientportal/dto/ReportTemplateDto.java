@@ -29,6 +29,9 @@ public class ReportTemplateDto {
     private String css;
     private String font;
 
+    /** What each painted colour sentinel resolves to; null on a template that predates palettes. */
+    private com.faction.clientportal.model.ReportPalette reportPalette;
+
     // File metadata
     private String templateFileId;
     private String templateFileName;
@@ -73,6 +76,7 @@ public class ReportTemplateDto {
             .assessmentTypeId(entity.getAssessmentTypeId())
             .css(entity.getCss())
             .font(entity.getFont())
+            .reportPalette(entity.getReportPalette())
             .templateFileId(entity.getTemplateFileId())
             .templateFileName(entity.getTemplateFileName())
             .templateFileSize(entity.getTemplateFileSize())

@@ -203,6 +203,8 @@ export interface AssessmentType {
   name: string;
   description: string;
   active: boolean;
+  /** The workflow new assessments of this type are created under. */
+  workflowId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -211,12 +213,16 @@ export interface CreateAssessmentTypeRequest {
   name: string;
   description: string;
   active: boolean;
+  /** Omitted: Default Workflow. */
+  workflowId?: string;
 }
 
 export interface UpdateAssessmentTypeRequest {
   name: string;
   description: string;
   active: boolean;
+  /** Omitted: the type keeps its workflow. */
+  workflowId?: string;
 }
 
 export interface AssignedUser {
@@ -359,6 +365,40 @@ export interface ApplicationImportResult {
   /** Rendered as "Organization / Division". */
   createdSubOrganizations: string[];
   errors: { line: number; identifier?: string; message: string }[];
+}
+
+/** One row of an assessment CSV import dry run. */
+export interface AssessmentImportPreviewRow {
+  line: number;
+  name: string;
+  application?: string;
+  newApplication: boolean;
+  assessmentType?: string;
+  startDate?: string;
+  endDate?: string;
+  assessors: string[];
+  campaign?: string;
+  newCampaign: boolean;
+  team?: string;
+  errors: string[];
+}
+
+export interface AssessmentImportPreview {
+  rows: AssessmentImportPreviewRow[];
+  total: number;
+  validCount: number;
+  errorCount: number;
+  newApplicationCount: number;
+  newCampaignCount: number;
+  /** True only when every row is valid; the import refuses otherwise. */
+  valid: boolean;
+}
+
+export interface AssessmentImportResult {
+  created: number;
+  createdApplications: string[];
+  createdCampaigns: string[];
+  assessmentIds: string[];
 }
 
 // Application Types
@@ -516,7 +556,7 @@ export interface UpdateApplicationConnectionRequest {
 }
 
 // Report Template & Assessment Types
-export type FieldType = 'STRING' | 'RICH_TEXT' | 'DROPDOWN';
+export type FieldType = 'STRING' | 'RICH_TEXT' | 'DROPDOWN' | 'HYPERLINK';
 export type FieldScope = 'ASSESSMENT' | 'VULNERABILITY' | 'APPLICATION' | 'ORGANIZATION';
 
 export interface UserDefinedField {
@@ -532,6 +572,41 @@ export interface UserDefinedField {
   minLength?: number;
   displayOrder?: number;
   fieldScope?: FieldScope;
+  /** Offered on the scheduling form. Off unless ticked in the Report Designer. */
+  showInScheduling?: boolean;
+}
+
+/** Font colour and cell fill for one value of one colourable dimension, as bare RRGGBB hex. */
+export interface ColourPair {
+  text?: string;
+  fill?: string;
+}
+
+/** One user-defined field's allocated colour slot and the colours for its values. */
+export interface FieldColours {
+  slot?: number;
+  values: Record<string, ColourPair>;
+}
+
+/**
+ * What each painted colour sentinel in a DOCX template resolves to.
+ *
+ * Severity is keyed on the enum name (CRITICAL, HIGH, …) so renaming a severity in Organization
+ * Config cannot break it. Likelihood and impact are free-text on the vulnerability — they happen to
+ * use the same five levels, via SeverityLevelSelect — so they are keyed on the stored value and
+ * matched case-insensitively by the backend.
+ */
+export interface ReportPalette {
+  severity: Record<string, ColourPair>;
+  likelihood: Record<string, ColourPair>;
+  impact: Record<string, ColourPair>;
+  customFields: Record<string, FieldColours>;
+  /**
+   * Whether likelihood and impact carry their own colours rather than severity's. Off by default:
+   * all three are the same five levels, so the designer shows one setting until this is set.
+   */
+  separateRatingColours?: boolean;
+  nextCustomSlot?: number;
 }
 
 export interface ReportTemplate {
@@ -541,6 +616,7 @@ export interface ReportTemplate {
   assessmentTypeId: string;
   css?: string;
   font?: string;
+  reportPalette?: ReportPalette;
   templateFileId?: string;
   templateFileName?: string;
   templateFileSize?: number;
@@ -591,13 +667,13 @@ export interface UpdateReportTemplateRequest {
   assessmentTypeId?: string;
   css?: string;
   font?: string;
+  /** Omitted when the edit was not about colours; the backend then leaves the palette alone. */
+  reportPalette?: ReportPalette;
   scoringType?: ScoringType;
   sections?: string[];
   userDefinedFields?: UserDefinedField[];
   active?: boolean;
 }
-
-export type AssessmentStatus = 'DRAFT' | 'IN_PROGRESS' | 'ON_HOLD' | 'PENDING_REVIEW' | 'COMPLETED' | 'APPROVED' | 'ARCHIVED';
 
 export interface VulnerabilitySla {
   severity: string;
@@ -636,6 +712,105 @@ export interface AssessmentWorkflowConfig {
   /** Ordered remediation stages; the last one is terminal (closes the vulnerability). */
   remediationStages?: RemediationStage[];
   allowSelfPeerReview?: boolean;
+}
+
+/** One assessment workflow: its statuses, SLAs, vulnerability statuses and remediation stages. */
+export interface Workflow {
+  id: string;
+  name: string;
+  /** Default Workflow (id `default`): it can't be archived or deleted. */
+  defaultWorkflow: boolean;
+  /** Hidden from pickers; its assessments keep working. */
+  archived: boolean;
+  statuses: string[];
+  newAssessmentStatus: string;
+  inProgressStatus: string;
+  completedStatus: string;
+  statusColors: Record<string, string> | null;
+  vulnerabilitySlas: VulnerabilitySla[] | null;
+  /** This workflow's own vulnerability statuses; the built-in ones are listed separately. */
+  vulnerabilityStatuses: string[] | null;
+  builtInVulnerabilityStatuses: string[];
+  remediationStages: RemediationStage[];
+  allowSelfPeerReview: boolean;
+  createdAt: string;
+  updatedAt: string;
+  /** Vulnerability status renames still updating findings in the background. */
+  renamesInProgress: WorkflowRenameInProgress[];
+}
+
+export interface WorkflowRenameInProgress {
+  fromName: string;
+  toName: string;
+  /** Findings updated so far. */
+  processed: number;
+}
+
+/** How many assessment types and assessments use a workflow. */
+export interface WorkflowUsage {
+  workflowId: string;
+  assessmentTypeCount: number;
+  assessmentCount: number;
+}
+
+/** A status row in a workflow edit: its name when the editor loaded (null for a new row) and its name now. */
+export interface WorkflowNamedEntry {
+  originalName: string | null;
+  name: string;
+}
+
+export interface CreateWorkflowRequest {
+  /** The workflow whose settings the new one copies. */
+  sourceWorkflowId: string;
+  name: string;
+}
+
+export interface UpdateWorkflowRequest {
+  name: string;
+  statuses: WorkflowNamedEntry[];
+  newAssessmentStatus: string;
+  inProgressStatus: string;
+  completedStatus: string;
+  /** Keyed by the statuses' new names. */
+  statusColors: Record<string, string>;
+  vulnerabilitySlas: VulnerabilitySla[];
+  vulnerabilityStatuses: WorkflowNamedEntry[];
+  remediationStages: RemediationStage[];
+  allowSelfPeerReview: boolean;
+}
+
+/** One reason the server refused a workflow change (the `violations` of a 409). */
+export interface WorkflowViolation {
+  kind:
+    | 'ASSESSMENT_STATUS_IN_USE'
+    | 'VULNERABILITY_STATUS_IN_USE'
+    | 'REMEDIATION_STAGE_IN_USE'
+    | 'RENAME_IN_PROGRESS'
+    | 'NAME_TAKEN'
+    | 'DEFAULT_WORKFLOW'
+    | 'USED_BY_ASSESSMENT_TYPES'
+    | 'USED_BY_ASSESSMENTS'
+    | 'TARGET_ARCHIVED';
+  name: string;
+  /** How many things use it; 0 when the kind is not a count. */
+  count: number;
+}
+
+/** What moving an assessment to another workflow changes; `applied` is false for a dry run. */
+export interface WorkflowMovePreview {
+  assessmentId: string;
+  fromWorkflowId: string;
+  toWorkflowId: string;
+  fromStatus: string;
+  toStatus: string;
+  findingCount: number;
+  findingStatusChanges: { from: string; to: string; count: number }[];
+  /** Findings whose stored due or warning date changes under the target's SLAs. */
+  dueDateChanges: number;
+  remappedStageCompletions: number;
+  /** Completions whose stage has no same-named stage on the target: kept, but not shown. */
+  unmappedStageCompletions: number;
+  applied: boolean;
 }
 
 export type AssessmentPeerReviewStatus = 'IN_PROGRESS' | 'IN_PEER_REVIEW' | 'NEEDS_ACCEPTANCE' | 'COMPLETE';
@@ -735,6 +910,94 @@ export interface VulnerabilitySummary {
   unsectioned?: number;
 }
 
+export type UnavailabilityKind = 'TIME_OFF' | 'HOLIDAY' | 'BLOCK';
+
+export interface Unavailability {
+  userId: string;
+  start: string;
+  end: string;
+  kind: UnavailabilityKind;
+  label: string;
+  sourceId?: string;
+}
+
+export interface HolidayEntry {
+  date: string;
+  key?: string | null;
+  name: string;
+  added: boolean;
+}
+
+export interface HolidayRegion {
+  code: string;
+  name: string;
+  subdivisions: HolidayRegion[];
+}
+
+export interface TimeOffEntry {
+  id: string;
+  userId: string;
+  startDate: string;
+  endDate: string;
+  note?: string | null;
+}
+
+export interface UserAvailability {
+  userId: string;
+  holidayRegion?: string | null;
+  effectiveRegion?: string | null;
+  defaultRegion?: string | null;
+  upcomingHolidays: HolidayEntry[];
+  timeOff: TimeOffEntry[];
+}
+
+export type ScheduleBlockScope = 'EVERYONE' | 'TEAM' | 'USERS';
+
+export interface ScheduleBlock {
+  id: string;
+  title: string;
+  note?: string | null;
+  startDate: string;
+  endDate: string;
+  scope: ScheduleBlockScope;
+  teamId?: string | null;
+  teamName?: string | null;
+  userIds: string[];
+  createdBy?: string;
+}
+
+export interface ScheduleBlockRequest {
+  title: string;
+  note?: string;
+  startDate: string;
+  endDate: string;
+  scope: ScheduleBlockScope;
+  teamId?: string;
+  userIds?: string[];
+}
+
+export interface HolidayOverrideEntry {
+  id: string;
+  date: string;
+  endDate: string;
+  name: string;
+}
+
+export interface RegionHolidays {
+  region: string;
+  year: number;
+  library: HolidayEntry[];
+  disabledKeys: string[];
+  added: HolidayOverrideEntry[];
+  /** Off on the region's country (a subdivision inherits them); toggled only at the country level. */
+  inheritedDisabledKeys?: string[];
+}
+
+/** Props for the overlay's availability card; `userId` set means a manager editing someone else. */
+export interface AvailabilityProfileCardProps {
+  userId?: string;
+}
+
 /**
  * Whether one candidate assessor is already booked across a proposed assessment window.
  * Asked about everyone who could be assigned, so the picker can show availability before
@@ -749,6 +1012,7 @@ export interface AssessorAvailability {
     startDate: string;
     plannedEndDate: string;
   }[];
+  unavailable: Unavailability[];
 }
 
 export interface Assessment {
@@ -759,6 +1023,10 @@ export interface Assessment {
   applicationName?: string; // For display in tables
   assessmentTypeId: string;
   assessmentTypeName?: string; // For display in tables
+  /** The workflow this assessment runs on: its type's workflow when created, unless it has been moved. */
+  workflowId?: string;
+  /** Computed by the server from this assessment's own workflow — never compare status text to decide this. */
+  completed: boolean;
   organizationId: string;
   campaignId?: string;
   campaignName?: string; // For display in tables
@@ -825,6 +1093,72 @@ export interface CreateAssessmentRequest {
   initialFieldValues?: Record<string, string>;
 }
 
+/**
+ * Values an outside source hands the scheduling form, named the way people name things rather
+ * than by id. The form resolves each one against its own lists and reports what it couldn't place.
+ */
+export interface AssessmentPrefill {
+  /** Selects the application with this Application Id if one exists, else starts a new one. */
+  appId?: string;
+  applicationName?: string;
+  assessmentName?: string;
+  /** yyyy-mm-dd */
+  startDate?: string;
+  /** A planned-end duration preset, in working days (e.g. '3'). */
+  duration?: string;
+  assessorEmails?: string[];
+  /** A workflow status, matched ignoring spaces and case. */
+  status?: string;
+  /** An assessment type, matched by name against the form's list, ignoring case. */
+  assessmentTypeName?: string;
+  teamName?: string;
+  /** Variable values keyed by the field's display name. */
+  variables?: Record<string, string>;
+}
+
+/** The slot on the scheduling form an edition can fill with a way to pre-fill it. */
+export interface AssessmentPrefillActionProps {
+  /** Applies the values. The form itself tells the user about anything it couldn't place. */
+  onPrefill: (prefill: AssessmentPrefill) => Promise<void>;
+}
+
+/** The By User timeline's range. */
+export type TimelineSpan = 'week' | 'month' | 'quarter';
+
+/**
+ * The Engagements "By User" timeline slot, filled by the paid overlay (feature
+ * `team_scheduling`). Core owns the data — assessments, the user directory, the fetched
+ * window — and the persisted filter state; the overlay owns the drawing.
+ */
+export interface AssessorTimelineProps {
+  assessments: Assessment[];
+  workflows?: Workflow[];
+  /**
+   * The user directory, so people with nothing booked still get a row. `null` when the viewer
+   * can't read users: rows then come only from the assessors on the loaded assessments.
+   */
+  users: User[] | null;
+  /** Teams for the filter; empty hides it (the teams list needs the same permission as users). */
+  teams: Team[];
+  teamId: string;
+  onTeamChange: (teamId: string) => void;
+  /**
+   * Hide every user who has no assessment assigned to them in the visible range, regardless of
+   * status — a completed assessment still counts as "booked." Off shows every internal user
+   * whether or not they have anything assigned. Assessment bars themselves are never filtered
+   * by status; this only controls which user rows appear.
+   */
+  activeOnly: boolean;
+  onActiveOnlyChange: (activeOnly: boolean) => void;
+  span: TimelineSpan;
+  onSpanChange: (span: TimelineSpan) => void;
+  onEventClick?: (assessment: Assessment) => void;
+  /** Called with the visible [start, end] dates (inclusive, YYYY-MM-DD) so the parent can fetch them. */
+  onRangeChange?: (start: string, end: string) => void;
+  loading?: boolean;
+  unavailability?: Unavailability[];
+}
+
 /** A person who can be assigned to an assessment (the assessor picker's option shape). */
 export interface AssignableUser {
   id: string;
@@ -855,6 +1189,8 @@ export interface UpdateAssessmentRequest {
   scope?: string;
   engagementUrls?: EngagementUrl[];
   stakeholders?: Stakeholder[];
+  /** With a type change, also move the assessment to the new type's workflow. Needs config:write. */
+  moveToTypeWorkflow?: boolean;
 }
 
 export interface ManagerDashboardPeriodCounts {
@@ -928,13 +1264,6 @@ export interface ManagerDashboardFilters {
 
 export interface AssessmentMetrics {
   totalCount: number;
-  draftCount: number;
-  inProgressCount: number;
-  onHoldCount: number;
-  pendingReviewCount: number;
-  completedCount: number;
-  approvedCount: number;
-  archivedCount: number;
   pastDueCount: number;
   statusCounts?: Record<string, number>;
 }
@@ -1133,6 +1462,8 @@ export interface VulnerabilityListItem {
   exceptionState?: string;
   exceptionApproval?: string;
   assessmentId: string;
+  /** The workflow the finding's assessment runs on; findings have no workflow of their own. */
+  workflowId?: string;
   applicationId?: string;
   organizationId?: string;
   assessmentName?: string;
@@ -1671,6 +2002,9 @@ export interface EmailNotificationEvent {
   customMessage?: string | null;
   perStage: boolean;
   stageId?: string | null;
+  /** Present on per-stage events: which workflow's stage this setting belongs to. */
+  workflowId?: string;
+  workflowName?: string;
 }
 
 export interface EmailNotificationConfig {
@@ -1912,6 +2246,32 @@ export interface AiRequestLog {
   responseContent?: string;
 }
 
+export interface McpServerConfig {
+  enabled: boolean;
+  endpointPath: string;
+}
+
+export interface McpStatus {
+  licensed: boolean;
+  enabled: boolean;
+  endpointPath: string;
+}
+
+export interface McpToolCallLog {
+  id: string;
+  createdAt: string;
+  username: string;
+  apiKeyId?: string;
+  toolName: string;
+  arguments?: string;
+  assessmentId?: string;
+  vulnerabilityId?: string;
+  success: boolean;
+  errorMessage?: string;
+  correlationId?: string;
+  durationMs: number;
+}
+
 export interface AiPromptSummary {
   id: string;
   name: string;
@@ -2042,7 +2402,10 @@ export type FeatureKey =
   | 'ai_observability'
   | 'external_owners'
   | 'custom_roles'
-  | 'report_sections';
+  | 'report_sections'
+  | 'custom_workflows'
+  | 'mcp_server'
+  | 'team_scheduling';
 
 /** Quota keys from the backend `Quota` enum. Capabilities that ship, but capped. */
 export type QuotaKey = 'ai_providers' | 'ai_prompts' | 'extensions';
@@ -2058,6 +2421,11 @@ export interface EditionStatus {
   limits: Partial<Record<QuotaKey, number>>;
   usage: Record<QuotaKey, number>;
   upgradeUrl: string;
+  /**
+   * Whether this install lists each assessment type under Your Assessments. An install
+   * preference rather than an edition capability, which is why it sits beside `features`.
+   */
+  assessmentTypeMenu?: boolean;
 }
 
 /** Body of a 402. `code` is what to branch on; `message` is for people. */

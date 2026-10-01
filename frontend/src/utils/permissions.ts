@@ -103,6 +103,10 @@ export const permissions = {
       'assessments:create:team',
     ]),
 
+  /** Bulk CSV import: create:all only — team-scoped create isn't enforced per row. */
+  canImportAssessments: (authorities: string[]): boolean =>
+    hasAnyPermission(authorities, ['assessments:create:all']),
+
   canEditAssessments: (authorities: string[]): boolean =>
     hasPermissionPattern(authorities, /^assessments:edit/),
 
@@ -253,6 +257,19 @@ export const permissions = {
   // Manager dashboard (single org-wide grant, independent of assessment/vuln reads)
   canViewManagerDashboard: (authorities: string[]): boolean =>
     hasAnyPermission(authorities, ['manager_dashboard:read:all']) || isSuperAdmin(authorities),
+
+  // Availability (enterprise team scheduling): other people's time off and scheduling blocks.
+  canManageAvailability: (authorities: string[]): boolean =>
+    isSuperAdmin(authorities) || hasAnyPermission(authorities, ['availability:manage:team', 'availability:manage:all']),
+
+  // Holiday calendars: the org default region and per-region overrides.
+  canConfigureAvailability: (authorities: string[]): boolean =>
+    isSuperAdmin(authorities) || hasAnyPermission(authorities, ['availability:configure']),
+
+  // The Availability admin page: blocks for managers, holiday calendars for configurators.
+  canViewAvailabilityAdmin: (authorities: string[]): boolean =>
+    isSuperAdmin(authorities) || hasAnyPermission(authorities,
+      ['availability:manage:team', 'availability:manage:all', 'availability:configure']),
 
   // Assigned users management
   canAssignApplicationUsers: (authorities: string[]): boolean =>

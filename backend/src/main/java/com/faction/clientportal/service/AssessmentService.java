@@ -34,6 +34,7 @@ import org.springframework.security.core.Authentication;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Service
@@ -52,7 +53,6 @@ public class AssessmentService {
     private final StorageService storageService;
     private final InlineImageService inlineImageService;
     private final VulnerabilityRepository vulnerabilityRepository;
-    private final AssessmentWorkflowConfigService workflowConfigService;
     private final AssessmentChecklistRepository assessmentChecklistRepository;
     private final AssessmentSurveyRepository assessmentSurveyRepository;
     private final ChecklistTemplateRepository checklistTemplateRepository;
@@ -64,12 +64,31 @@ public class AssessmentService {
     private final CampaignRepository campaignRepository;
     private final com.faction.clientportal.service.email.EventNotificationEmailSender eventEmailSender;
     private final DefaultReportTemplateService defaultReportTemplateService;
+    private final SlaService slaService;
+    private final WorkflowCatalogService workflowCatalogService;
+    private final AssessmentWorkflowMoveService workflowMoveService;
+    private final UnavailabilitySource unavailabilitySource;
 
     /**
-     * Create a new assessment from a report template
-     * Snapshots the template's field definitions at creation time
+     * Create a new assessment from a report template.
+     * Snapshots the template's field definitions at creation time.
      */
     public AssessmentDto createAssessment(CreateAssessmentRequest request, String userId) {
+        WorkflowCatalog catalog = workflowCatalogService.load();
+        Assessment saved = persistNewAssessment(request, userId, catalog);
+        announceNewAssessment(saved, true);
+        return migrateAndConvertToDto(saved, catalog);
+    }
+
+    /**
+     * Everything a new assessment is made of — the row, its field-image references, the
+     * "Assessment scheduled" chat post and its notebook root — and nothing that reaches outside
+     * the database. The CSV import runs this for a whole batch in one transaction, so a failure
+     * part-way leaves nothing behind, and only announces once the batch has committed.
+     *
+     * @param catalog the workflow catalog, loaded once by the caller — a batch shares one
+     */
+    public Assessment persistNewAssessment(CreateAssessmentRequest request, String userId, WorkflowCatalog catalog) {
         Application application;
         if (org.springframework.util.StringUtils.hasText(request.getApplicationId())) {
             application = applicationRepository.findById(request.getApplicationId())
@@ -93,9 +112,10 @@ public class AssessmentService {
             }
         }
 
-        // Verify assessment type exists
-        assessmentTypeRepository.findById(request.getAssessmentTypeId())
+        // Verify assessment type exists, and resolve the workflow it takes at creation
+        AssessmentType assessmentType = assessmentTypeRepository.findById(request.getAssessmentTypeId())
             .orElseThrow(() -> new ResourceNotFoundException("Assessment type not found with id: " + request.getAssessmentTypeId()));
+        AssessmentWorkflow workflow = catalog.forType(assessmentType);
 
         ReportTemplate template;
         if (org.springframework.util.StringUtils.hasText(request.getReportTemplateId())) {
@@ -182,12 +202,15 @@ public class AssessmentService {
             .templateName(template.getName())
             .templateCss(template.getCss())
             .templateFont(template.getFont())
+            .templatePalette(template.getReportPalette() == null
+                    ? null : template.getReportPalette().copy())
             .templateFileId(template.getTemplateFileId())
             .scoringType(template.getScoringType())
             .sections(template.getSections() != null ? new ArrayList<>(template.getSections()) : new ArrayList<>())
             .fieldDefinitions(fieldDefinitionsSnapshot)
             .fieldValues(fieldValues)
-            .status(workflowConfigService.getConfig().getNewAssessmentStatus())
+            .workflowId(workflow.getId())
+            .status(workflow.getNewAssessmentStatus())
             .assessorId(request.getAssessorId()) // Legacy field
             .assessorIds(assessorIds)
             .engagementManagerId(request.getEngagementManagerId())
@@ -205,6 +228,15 @@ public class AssessmentService {
             .build();
 
         Assessment savedAssessment = assessmentRepository.save(assessment);
+        // Values carried forward from another assessment hold that assessment's screenshots, and an
+        // inline image authorises against its owner. Copying needs this assessment's id, hence after
+        // the save; the second save only happens when something was actually copied.
+        Map<String, String> rehomed = rehomeFieldImages(fieldValues, savedAssessment.getId(), userId);
+        if (!rehomed.equals(fieldValues)) {
+            savedAssessment.setFieldValues(rehomed);
+            assessmentRepository.save(savedAssessment);
+            fieldValues = rehomed;
+        }
         // Field values supplied at creation were never indexed — only updateAssessment did it —
         // so a screenshot in a field of an assessment nobody edited again was deleted by the GC
         // a day later. The id only exists after the save, which is why this is not up with the
@@ -215,18 +247,6 @@ public class AssessmentService {
         }
         log.info("Created assessment: {} from template: {} (version: {})",
             savedAssessment.getName(), template.getName(), template.getVersion());
-
-        // Notify assigned assessors and managers
-        String assessmentLink = "/assessments/" + savedAssessment.getId();
-        notifyUsers(savedAssessment.getAssessorIds(), savedAssessment.getName(), assessmentLink, "ASSESSOR_ASSIGNED");
-        notifyUserById(savedAssessment.getEngagementManagerId(), savedAssessment.getName(), assessmentLink, "ASSESSMENT_CREATED");
-        notifyUserById(savedAssessment.getRemediationManagerId(), savedAssessment.getName(), assessmentLink, "ASSESSMENT_CREATED");
-
-        // Stakeholders and the app owner hear about it through the admin-configured
-        // routing table rather than the per-user notification preferences: they are
-        // addresses on an application, not accounts with a preference of their own.
-        emailAssessmentEvent(com.faction.clientportal.model.EmailNotificationEvent.ASSESSMENT_CREATED,
-                savedAssessment, null);
 
         // Announce the new assessment in the application's chat
         String scheduledMsg = "**Assessment scheduled**: \"" + savedAssessment.getName() + "\" by {actor}"
@@ -245,8 +265,29 @@ public class AssessmentService {
             userId
         );
 
+        return savedAssessment;
+    }
 
-        return migrateAndConvertToDto(savedAssessment);
+    /**
+     * Tell people about a newly persisted assessment: the in-app notifications and the
+     * stakeholder email, when {@code notify} asks for them.
+     *
+     * <p>Upstream also fires an App Store extension event here. This fork has no extension
+     * runtime, so there is nothing to announce to.
+     */
+    public void announceNewAssessment(Assessment assessment, boolean notify) {
+        if (notify) {
+            String assessmentLink = "/assessments/" + assessment.getId();
+            notifyUsers(assessment.getAssessorIds(), assessment.getName(), assessmentLink, "ASSESSOR_ASSIGNED");
+            notifyUserById(assessment.getEngagementManagerId(), assessment.getName(), assessmentLink, "ASSESSMENT_CREATED");
+            notifyUserById(assessment.getRemediationManagerId(), assessment.getName(), assessmentLink, "ASSESSMENT_CREATED");
+
+            // Stakeholders and the app owner hear about it through the admin-configured
+            // routing table rather than the per-user notification preferences: they are
+            // addresses on an application, not accounts with a preference of their own.
+            emailAssessmentEvent(com.faction.clientportal.model.EmailNotificationEvent.ASSESSMENT_CREATED,
+                    assessment, null);
+        }
     }
 
     /**
@@ -263,11 +304,18 @@ public class AssessmentService {
      */
     public AssessmentDto updateAssessment(String id, UpdateAssessmentRequest request, String userId,
                                           Authentication authentication) {
+        // Loaded once, up front, and reused for the rest of the method — including the
+        // moveToTypeWorkflow validation/apply below — rather than each of them loading their own.
+        WorkflowCatalog catalog = workflowCatalogService.load();
+        String moveToWorkflowId = workflowToMoveTo(id, request, authentication, catalog);
+
         Assessment assessment = assessmentRepository.findByIdAndDeletedAtIsNull(id)
             .orElseThrow(() -> new ResourceNotFoundException("Assessment not found with id: " + id));
 
         // Out-of-scope reads already 404; an out-of-scope write is an explicit denial.
         accessScopeService.checkAssessmentEditAccess(authentication, assessment);
+
+        AssessmentWorkflow workflow = catalog.forAssessment(assessment);
 
         // Peer-review lock guard — block field edits while a review is in flight.
         // Status-only updates (from the peer review service itself) are permitted.
@@ -290,24 +338,49 @@ public class AssessmentService {
             assessment.setName(request.getName());
         }
 
-        // Update assessment type. The report template is chosen per type, so a type change has to
-        // arrive with a template of the new type (or leave the existing template already matching);
-        // otherwise the assessment would keep field definitions that belong to the old type.
+        // Update assessment type. The report template is chosen per type, so a type change needs a
+        // template of the new type. A caller that names one belonging to another type is rejected —
+        // that is a mistake, not something to resolve away. A caller that names none at all (the
+        // Edit info dialog, and the API) has the new type's own template resolved for it, exactly as
+        // creation resolves one; otherwise changing type could only ever fail.
+        // Blank counts as "named none": the edit form clears its template picker when the type
+        // changes and still sends the empty field, which must resolve rather than 404.
+        final String requestedTemplateId =
+                request.getReportTemplateId() == null || request.getReportTemplateId().isBlank()
+                        ? null : request.getReportTemplateId();
+
+        String typeChangeTemplateId = null;
         if (request.getAssessmentTypeId() != null
                 && !request.getAssessmentTypeId().equals(assessment.getAssessmentTypeId())) {
             assessmentTypeRepository.findById(request.getAssessmentTypeId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                     "Assessment type not found with id: " + request.getAssessmentTypeId()));
-            String templateId = request.getReportTemplateId() != null
-                    ? request.getReportTemplateId() : assessment.getReportTemplateId();
-            if (templateId != null) {
-                ReportTemplate template = reportTemplateRepository.findById(templateId)
+            if (requestedTemplateId != null) {
+                ReportTemplate template = reportTemplateRepository.findById(requestedTemplateId)
                     .orElseThrow(() -> new ResourceNotFoundException(
-                        "Report template not found with id: " + templateId));
+                        "Report template not found with id: " + requestedTemplateId));
                 if (!request.getAssessmentTypeId().equals(template.getAssessmentTypeId())) {
                     throw new IllegalArgumentException(
                         "Report template assessment type does not match. Expected: "
                             + request.getAssessmentTypeId() + ", Template has: " + template.getAssessmentTypeId());
+                }
+            } else {
+                ReportTemplate current = assessment.getReportTemplateId() == null ? null
+                        : reportTemplateRepository.findById(assessment.getReportTemplateId()).orElse(null);
+                // Only a template belonging to the old type needs replacing. An assessment carrying
+                // none, or one already of the new type, keeps what it has — as it always did.
+                if (current != null && !request.getAssessmentTypeId().equals(current.getAssessmentTypeId())) {
+                    try {
+                        typeChangeTemplateId = defaultReportTemplateService
+                                .resolveForAssessmentType(request.getAssessmentTypeId()).getId();
+                    } catch (IllegalStateException e) {
+                        // The new type has nothing to move to. That is fixed by uploading a template,
+                        // not by retrying, so it answers 400 with the reason instead of 500.
+                        throw new IllegalArgumentException(e.getMessage(), e);
+                    }
+                    // The values were snapshotted from the old type's template and mean nothing under
+                    // the new one, so the assessment starts from the new template's fields.
+                    assessment.setFieldValues(new HashMap<>());
                 }
             }
             assessment.setAssessmentTypeId(request.getAssessmentTypeId());
@@ -336,10 +409,10 @@ public class AssessmentService {
 
         // Update field values with validation
         if (request.getFieldValues() != null) {
-            Map<String, String> validatedValues = validateFieldValues(
+            Map<String, String> validatedValues = rehomeFieldImages(validateFieldValues(
                 request.getFieldValues(),
                 assessment.getFieldDefinitions()
-            );
+            ), id, userId);
             // Merge with existing values
             assessment.getFieldValues().putAll(validatedValues);
             // Update inline image reference index for each saved field.
@@ -360,6 +433,8 @@ public class AssessmentService {
         // status it moved away from, and by the time that email is built the entity has
         // already been mutated.
         String previousStatus = assessment.getStatus();
+        LocalDateTime previousStartDate = assessment.getStartDate();
+        LocalDateTime previousPlannedEndDate = assessment.getPlannedEndDate();
 
         // Update status
         if (request.getStatus() != null) {
@@ -369,9 +444,9 @@ public class AssessmentService {
             // reopen window. Past that it is a historical record — its findings have been reported
             // and their SLA clocks are running — so correcting it becomes a deliberate act rather
             // than an edit anyone with assessment access can make.
-            if (workflowConfigService.isCompletedStatus(oldStatus)
-                    && !workflowConfigService.isCompletedStatus(request.getStatus())) {
-                if (!withinReopenWindow(assessment)) {
+            if (AssessmentWorkflows.isCompleted(workflow, oldStatus)
+                    && !AssessmentWorkflows.isCompleted(workflow, request.getStatus())) {
+                if (!withinReopenWindow(assessment, workflow)) {
                     throw new IllegalArgumentException(
                             "This assessment was completed more than " + REOPEN_WINDOW_DAYS
                                     + " days ago and can no longer be reopened");
@@ -381,8 +456,8 @@ public class AssessmentService {
             }
 
             // Block finalization if any preventClosure checklists have unanswered questions
-            if (workflowConfigService.isCompletedStatus(request.getStatus())
-                    && !workflowConfigService.isCompletedStatus(oldStatus)) {
+            if (AssessmentWorkflows.isCompleted(workflow, request.getStatus())
+                    && !AssessmentWorkflows.isCompleted(workflow, oldStatus)) {
                 List<com.faction.clientportal.model.AssessmentChecklist> checklists =
                         assessmentChecklistRepository.findByAssessmentId(assessment.getId());
                 List<String> blocking = checklists.stream()
@@ -402,12 +477,12 @@ public class AssessmentService {
                 }
             }
 
-            String completedStatus = workflowConfigService.getConfig().getCompletedStatus();
+            String completedStatus = workflow.getCompletedStatus();
             assessment.setStatus(request.getStatus());
 
             // Set completion date when status changes to a completed state
-            if (workflowConfigService.isCompletedStatus(request.getStatus())
-                    && !workflowConfigService.isCompletedStatus(oldStatus)) {
+            if (AssessmentWorkflows.isCompleted(workflow, request.getStatus())
+                    && !AssessmentWorkflows.isCompleted(workflow, oldStatus)) {
                 // An import of historical work supplies the real completion date; everything else
                 // is being completed right now.
                 assessment.setCompletedDate(request.getCompletedDate() != null
@@ -438,6 +513,7 @@ public class AssessmentService {
                         }
                     }
                 }
+                slaService.refreshAll(vulns, workflow);
                 vulnerabilityRepository.saveAll(vulns);
 
                 // Announce completion in the application's chat
@@ -445,11 +521,6 @@ public class AssessmentService {
                     "**Assessment completed**: \"" + assessment.getName() + "\" was marked "
                         + request.getStatus() + " by {actor}.",
                     userId);
-            }
-
-            // Set peer review date when status changes to PENDING_REVIEW (legacy)
-            if ("PENDING_REVIEW".equals(request.getStatus()) && !"PENDING_REVIEW".equals(oldStatus)) {
-                assessment.setPeerReviewedAt(LocalDateTime.now());
             }
 
             // Set assessment date when status first moves into an active state
@@ -464,7 +535,7 @@ public class AssessmentService {
         // the Faction 1 importer) may supply the real date. A date sent for an assessment that is
         // not completed has no meaning and is ignored.
         if (request.getCompletedDate() != null && !finalizing
-                && workflowConfigService.isCompletedStatus(assessment.getStatus())) {
+                && AssessmentWorkflows.isCompleted(workflow, assessment.getStatus())) {
             if (!isSuperAdmin(authentication)) {
                 throw new AccessDeniedException("Only a super admin can change the completion date");
             }
@@ -526,13 +597,15 @@ public class AssessmentService {
             assessment.setStakeholders(stakeholders);
         }
 
-        // Switch report template: re-snapshot metadata and force a field-definition re-sync
-        if (request.getReportTemplateId() != null
-                && !request.getReportTemplateId().equals(assessment.getReportTemplateId())) {
+        // Switch report template: re-snapshot metadata and force a field-definition re-sync. Either
+        // the caller named a template, or a type change above resolved the new type's own.
+        String switchTemplateId = requestedTemplateId != null ? requestedTemplateId : typeChangeTemplateId;
+        if (switchTemplateId != null && !switchTemplateId.equals(assessment.getReportTemplateId())) {
+            final String resolvedTemplateId = switchTemplateId;
             ReportTemplate newTemplate = reportTemplateRepository
-                    .findById(request.getReportTemplateId())
+                    .findById(resolvedTemplateId)
                     .orElseThrow(() -> new ResourceNotFoundException(
-                            "Report template not found: " + request.getReportTemplateId()));
+                            "Report template not found: " + resolvedTemplateId));
             assessment.setReportTemplateId(newTemplate.getId());
             assessment.setTemplateName(newTemplate.getName());
             assessment.setTemplateCss(newTemplate.getCss());
@@ -557,18 +630,66 @@ public class AssessmentService {
         Assessment updatedAssessment = assessmentRepository.save(assessment);
         log.info("Updated assessment: {} (status: {})", updatedAssessment.getName(), updatedAssessment.getStatus());
 
+        if (moveToWorkflowId != null) {
+            workflowMoveService.move(updatedAssessment.getId(), moveToWorkflowId, false, catalog);
+            updatedAssessment = assessmentRepository.findById(updatedAssessment.getId()).orElseThrow();
+        }
 
         // Completing an assessment is also a change, but only the completion email is
         // sent: two emails describing one save reads as a bug.
         if (finalizing) {
             emailAssessmentEvent(com.faction.clientportal.model.EmailNotificationEvent.ASSESSMENT_COMPLETED,
                     updatedAssessment, null);
-        } else {
+        } else if (worthAnnouncing(updatedAssessment, previousStatus,
+                previousStartDate, previousPlannedEndDate)) {
             emailAssessmentEvent(com.faction.clientportal.model.EmailNotificationEvent.ASSESSMENT_CHANGED,
                     updatedAssessment, previousStatus);
         }
 
-        return migrateAndConvertToDto(updatedAssessment);
+        return migrateAndConvertToDto(updatedAssessment, catalog);
+    }
+
+    /**
+     * The workflow this update moves the assessment onto, or null when it stays where it is.
+     *
+     * <p>Two ways in. Changing the assessment type carries the assessment onto that type's workflow:
+     * the type decides the workflow everywhere else — a new assessment is created on its type's — so
+     * leaving the two disagreeing is what produced assessments holding statuses their own workflow
+     * does not define. Choosing the type is choosing its workflow, so this needs nothing beyond the
+     * right to edit the assessment.
+     *
+     * <p>{@code moveToTypeWorkflow} is the other: an explicit move for an assessment already out of
+     * step with its type, without changing the type. That is a configuration action and still needs
+     * {@code config:write}.
+     *
+     * <p>Either way the move is validated (edition, archived target) before anything is saved, on
+     * the one catalog the caller already loaded.
+     */
+    private String workflowToMoveTo(String id, UpdateAssessmentRequest request, Authentication authentication,
+                                    WorkflowCatalog catalog) {
+        Assessment current = assessmentRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Assessment not found with id: " + id));
+
+        boolean typeChanged = request.getAssessmentTypeId() != null
+                && !request.getAssessmentTypeId().equals(current.getAssessmentTypeId());
+        if (!typeChanged && !Boolean.TRUE.equals(request.getMoveToTypeWorkflow())) {
+            return null;
+        }
+        if (!typeChanged
+                && !hasAuthority(authentication, Permission.CONFIG_WRITE.getPermission())
+                && !hasAuthority(authentication, RequiresPermissionAuthorizationManager.SUPER_ADMIN)) {
+            throw new AccessDeniedException("Moving an assessment to another workflow needs config:write");
+        }
+
+        String typeId = request.getAssessmentTypeId() != null ? request.getAssessmentTypeId() : current.getAssessmentTypeId();
+        String workflowId = typeId == null ? AssessmentWorkflow.DEFAULT_ID
+                : assessmentTypeRepository.findById(typeId).map(AssessmentType::getWorkflowId).orElse(AssessmentWorkflow.DEFAULT_ID);
+        if (workflowId.equals(current.getWorkflowId())) {
+            return null;
+        }
+        // Validation only — no finding/completion work — so this doesn't pay for a full dry-run move.
+        workflowMoveService.checkMove(current, workflowId, catalog);
+        return workflowId;
     }
 
     /**
@@ -589,8 +710,9 @@ public class AssessmentService {
         }
 
         syncFieldDefinitionsIfNeeded(assessment);
-        applyDateTransitionIfNeeded(assessment);
-        return migrateAndConvertToDto(assessment);
+        WorkflowCatalog catalog = workflowCatalogService.load();
+        applyDateTransitionIfNeeded(assessment, catalog.forAssessment(assessment));
+        return migrateAndConvertToDto(assessment, catalog);
     }
 
     /**
@@ -693,11 +815,11 @@ public class AssessmentService {
      * in the newAssessmentStatus. This prevents overriding statuses that have been
      * manually advanced past the initial state.
      */
-    private void applyDateTransitionIfNeeded(Assessment assessment) {
+    private void applyDateTransitionIfNeeded(Assessment assessment, AssessmentWorkflow workflow) {
         if (assessment.getStartDate() == null || assessment.getPlannedEndDate() == null) return;
-        if (workflowConfigService.isCompletedStatus(assessment.getStatus())) return;
+        if (AssessmentWorkflows.isCompleted(workflow, assessment.getStatus())) return;
 
-        var config = workflowConfigService.getConfig();
+        var config = workflow;
         String newStatus = config.getNewAssessmentStatus();
         String inProgressStatus = config.getInProgressStatus();
 
@@ -727,6 +849,7 @@ public class AssessmentService {
         copy.setDefaultValue(src.getDefaultValue());
         copy.setDisplayOrder(src.getDisplayOrder());
         copy.setFieldScope(src.getFieldScope());
+        copy.setShowInScheduling(src.getShowInScheduling());
         return copy;
     }
 
@@ -748,7 +871,7 @@ public class AssessmentService {
             // the single-column finders below cannot express — route through the scoped search.
             return searchAssessmentsAdvanced(name, applicationId, null, organizationId, assessmentTypeId, null,
                     assessorId, status, null, null, null, null, null, null, null, null, null, Boolean.TRUE, null,
-                    null, null, null, null, pageable, authentication);
+                    null, null, null, null, null, pageable, authentication);
         }
         return searchAssessments(applicationId, organizationId, assessmentTypeId, assessorId, status, name, pageable);
     }
@@ -782,7 +905,8 @@ public class AssessmentService {
             assessments = assessmentRepository.findAll(pageable);
         }
 
-        return assessments.map(this::migrateAndConvertToDto);
+        WorkflowCatalog catalog = workflowCatalogService.load();
+        return assessments.map(a -> migrateAndConvertToDto(a, catalog));
     }
 
     /**
@@ -808,8 +932,8 @@ public class AssessmentService {
         Authentication authentication
     ) {
         return searchAssessmentsAdvanced(search, applicationId, applicationIds, organizationId, assessmentTypeId, null, assessorId,
-            status, null, null, startDateFrom, startDateTo, endDateFrom, endDateTo, null, null, pastDue, showCompleted, assignedToMe,
-            currentUserId, null, null, null, pageable, authentication);
+            status, null, null, startDateFrom, startDateTo, endDateFrom, endDateTo, null, null, pastDue, showCompleted, null,
+            assignedToMe, currentUserId, null, null, null, pageable, authentication);
     }
 
     /**
@@ -836,6 +960,50 @@ public class AssessmentService {
         LocalDateTime completedDateTo,
         Boolean pastDue,
         Boolean showCompleted,
+        Boolean onlyCompleted,
+        Boolean assignedToMe,
+        String currentUserId,
+        String teamId,
+        String campaignId,
+        List<VulnerabilitySeverity> severities,
+        Pageable pageable,
+        Authentication authentication
+    ) {
+        return searchAssessmentsAdvanced(search, applicationId, applicationIds, organizationId,
+                assessmentTypeId, assessmentTypeIds, assessorId, status, statuses, openSurveysOnly,
+                startDateFrom, startDateTo, endDateFrom, endDateTo, completedDateFrom, completedDateTo,
+                null, null, pastDue, showCompleted, onlyCompleted, assignedToMe, currentUserId,
+                teamId, campaignId, severities, pageable, authentication);
+    }
+
+    /**
+     * As above, plus the activity window: one date range matched against an assessment's start,
+     * planned end, or completed date (see {@link AssessmentSearchCriteria#activityFrom()}). The
+     * operational dashboard filters this way, because most assessments carry no start date and a
+     * start-date-only window hid the finished work its stats-cards were counting.
+     */
+    public Page<AssessmentDto> searchAssessmentsAdvanced(
+        String search,
+        String applicationId,
+        Collection<String> applicationIds,
+        String organizationId,
+        String assessmentTypeId,
+        Collection<String> assessmentTypeIds,
+        String assessorId,
+        String status,
+        Collection<String> statuses,
+        Boolean openSurveysOnly,
+        LocalDateTime startDateFrom,
+        LocalDateTime startDateTo,
+        LocalDateTime endDateFrom,
+        LocalDateTime endDateTo,
+        LocalDateTime completedDateFrom,
+        LocalDateTime completedDateTo,
+        LocalDateTime activityFrom,
+        LocalDateTime activityTo,
+        Boolean pastDue,
+        Boolean showCompleted,
+        Boolean onlyCompleted,
         Boolean assignedToMe,
         String currentUserId,
         String teamId,
@@ -885,10 +1053,8 @@ public class AssessmentService {
                 search, effectiveAppId, effectiveOrgId, assessmentTypeId, assessorId, status,
                 pastDue, showCompleted, assignedToMe, currentUserId);
 
-        // Resolve the completed-status set once (isCompletedStatus() otherwise hits the
-        // uncached singleton config per row) and translate the filters into criteria the
-        // repository turns into a single DB query — no findAll() + in-memory scan.
-        var completed = completedStatuses();
+        // One catalog snapshot serves the completed filter and the DTO conversion below.
+        WorkflowCatalog catalog = workflowCatalogService.load();
         var severityOrdinals = (severities == null || severities.isEmpty())
                 ? null
                 : severities.stream().map(Enum::ordinal).toList();
@@ -924,8 +1090,11 @@ public class AssessmentService {
                 .endDateTo(endDateTo)
                 .completedDateFrom(completedDateFrom)
                 .completedDateTo(completedDateTo)
+                .activityFrom(activityFrom)
+                .activityTo(activityTo)
                 .pastDue(Boolean.TRUE.equals(pastDue))
-                .excludeCompleted(Boolean.FALSE.equals(showCompleted))
+                .excludeCompleted(Boolean.FALSE.equals(showCompleted) && !Boolean.TRUE.equals(onlyCompleted))
+                .onlyCompleted(Boolean.TRUE.equals(onlyCompleted))
                 .assignedToMe(Boolean.TRUE.equals(assignedToMe))
                 .currentUserId(currentUserId)
                 .teamMemberIds(teamMemberIds)
@@ -933,14 +1102,14 @@ public class AssessmentService {
                 .scopeTeamIds(effectiveScopeTeamIds)
                 .campaignId(campaignId)
                 .severityOrdinals(severityOrdinals)
-                .completedStatuses(completed)
+                .completed(catalog.completedStatusFilter())
                 .now(LocalDateTime.now())
                 .build();
 
         Page<Assessment> page = assessmentRepository.searchAdvanced(criteria, pageable);
 
         List<AssessmentDto> dtos = page.getContent().stream()
-                .map(this::migrateAndConvertToDto)
+                .map(a -> migrateAndConvertToDto(a, catalog))
                 .collect(Collectors.toList());
 
         return new PageImpl<>(dtos, pageable, page.getTotalElements());
@@ -958,7 +1127,15 @@ public class AssessmentService {
      * window rather than reopenable forever.
      */
     public boolean withinReopenWindow(Assessment assessment) {
-        if (!workflowConfigService.isCompletedStatus(assessment.getStatus())) {
+        return withinReopenWindow(assessment, workflowCatalogService.forAssessment(assessment));
+    }
+
+    /**
+     * As {@link #withinReopenWindow(Assessment)}, but taking the assessment's workflow when the
+     * caller already has it, avoiding a repeat catalog load.
+     */
+    private boolean withinReopenWindow(Assessment assessment, AssessmentWorkflow workflow) {
+        if (!AssessmentWorkflows.isCompleted(workflow, assessment.getStatus())) {
             return false;
         }
         LocalDateTime completed = assessment.getCompletedDate();
@@ -970,7 +1147,7 @@ public class AssessmentService {
 
     /**
      * Aggregate assessment counts for the nav badge / dashboards, scoped like the list endpoint.
-     * Uses a single {@code GROUP BY status} query — the badge only needs totals, so it must not
+     * Uses a single {@code GROUP BY workflow_id, status} query — the badge only needs totals, so it must not
      * route through searchAssessmentsAdvanced (which materializes every row and calls getConfig()
      * per row).
      */
@@ -986,35 +1163,40 @@ public class AssessmentService {
             // rather than falling back to global totals.
             case ORG -> membershipStatusCounts(scope);
             case OWNED -> scope.appIds() == null || scope.appIds().isEmpty()
-                    ? List.of() : assessmentRepository.countByStatusGroupedOwned(scope.appIds());
+                    ? List.of() : assessmentRepository.countByWorkflowAndStatusGroupedOwned(scope.appIds());
             case TEAM -> scope.teamIds() == null || scope.teamIds().isEmpty()
-                    ? List.of() : assessmentRepository.countByStatusGroupedTeam(scope.teamIds());
+                    ? List.of() : assessmentRepository.countByWorkflowAndStatusGroupedTeam(scope.teamIds());
             case ASSIGNED -> scope.assessorId() == null
-                    ? List.of() : assessmentRepository.countByStatusGroupedAssigned(scope.assessorId());
-            case UNRESTRICTED -> assessmentRepository.countByStatusGroupedAll();
+                    ? List.of() : assessmentRepository.countByWorkflowAndStatusGroupedAssigned(scope.assessorId());
+            case UNRESTRICTED -> assessmentRepository.countByWorkflowAndStatusGroupedAll();
         };
 
-        var completed = completedStatuses();
-        long total = rows.stream().mapToLong(row -> ((Number) row[1]).longValue()).sum();
-        // A null status is treated as active (matches isCompletedStatus returning false for null).
-        // Note this deliberately excludes assessments still inside their reopen window: they remain
-        // in the queue so they can be reopened, but they are finished work, and the badge counts
-        // what still needs doing. The badge is therefore lower than the unfiltered list length.
+        WorkflowCatalog catalog = workflowCatalogService.load();
+        long total = rows.stream().mapToLong(row -> ((Number) row[3]).longValue()).sum();
+        // Completed means the row's own workflow's completed status (an unknown workflow id uses Default
+        // Workflow's); a null status is active. Note this deliberately excludes assessments still inside
+        // their reopen window: they remain in the queue so they can be reopened, but they are finished
+        // work, and the badge counts what still needs doing. The badge is therefore lower than the
+        // unfiltered list length.
+        Predicate<Object[]> isActive =
+                row -> !AssessmentWorkflows.isCompleted(catalog.forId((String) row[0]), (String) row[1]);
         long active = rows.stream()
-                .filter(row -> row[0] == null || !completed.contains((String) row[0]))
-                .mapToLong(row -> ((Number) row[1]).longValue())
+                .filter(isActive)
+                .mapToLong(row -> ((Number) row[3]).longValue())
                 .sum();
-        return AssessmentSummaryDto.builder().active(active).total(total).build();
-    }
 
-    /** The "completed" status strings, mirroring AssessmentWorkflowConfigService.isCompletedStatus. */
-    private Set<String> completedStatuses() {
-        var statuses = new HashSet<>(Set.of("COMPLETED", "APPROVED", "ARCHIVED"));
-        var configured = workflowConfigService.getConfig().getCompletedStatus();
-        if (configured != null && !configured.isBlank()) {
-            statuses.add(configured);
+        // The same rows broken down by type, for the sidebar's per-type badges: one more grouping
+        // column rather than a query per type. Every type present in the rows gets an entry, so a
+        // type whose assessments are all finished reports zero instead of going missing.
+        Map<String, Long> activeByType = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            String typeId = (String) row[2];
+            if (typeId == null) continue; // an assessment with no type belongs to no menu entry
+            activeByType.merge(typeId, isActive.test(row) ? ((Number) row[3]).longValue() : 0L, Long::sum);
         }
-        return statuses;
+
+        return AssessmentSummaryDto.builder()
+                .active(active).total(total).activeByType(activeByType).build();
     }
 
     private boolean hasAuthority(Authentication authentication, String authority) {
@@ -1071,9 +1253,10 @@ public class AssessmentService {
         if (scope.denied()) {
             return Page.empty(pageable);
         }
+        WorkflowCatalog catalog = workflowCatalogService.load();
         if (scope.unrestricted()) {
             return assessmentRepository.findByApplicationIdAndDeletedAtIsNull(applicationId, pageable)
-                    .map(this::migrateAndConvertToDto);
+                    .map(a -> migrateAndConvertToDto(a, catalog));
         }
         var criteria = AssessmentSearchCriteria.builder()
                 .applicationId(applicationId)
@@ -1082,11 +1265,10 @@ public class AssessmentService {
                 .ownedAppIds(scope.kind() == AccessScopeService.AssessmentScopeKind.OWNED ? scope.appIds() : null)
                 .scopeTeamIds(scope.kind() == AccessScopeService.AssessmentScopeKind.TEAM ? scope.teamIds() : null)
                 .scopeAssessorId(scope.kind() == AccessScopeService.AssessmentScopeKind.ASSIGNED ? scope.assessorId() : null)
-                .completedStatuses(completedStatuses())
                 .now(LocalDateTime.now())
                 .build();
         Page<Assessment> page = assessmentRepository.searchAdvanced(criteria, pageable);
-        return new PageImpl<>(page.getContent().stream().map(this::migrateAndConvertToDto).toList(),
+        return new PageImpl<>(page.getContent().stream().map(a -> migrateAndConvertToDto(a, catalog)).toList(),
                 pageable, page.getTotalElements());
     }
 
@@ -1157,6 +1339,19 @@ public class AssessmentService {
     }
 
     /**
+     * Points every image in the values at a copy this assessment owns, so variables carried forward
+     * from another assessment render for this one's readers. Images it already owns are untouched.
+     */
+    private Map<String, String> rehomeFieldImages(Map<String, String> values, String assessmentId,
+                                                  String userId) {
+        Map<String, String> seen = new HashMap<>();
+        Map<String, String> rehomed = new HashMap<>();
+        values.forEach((fieldId, value) -> rehomed.put(fieldId, InlineImageService.rehomeImages(value, seen,
+                imageId -> inlineImageService.materializeInto(imageId, assessmentId, userId))));
+        return rehomed;
+    }
+
+    /**
      * Validate a single field value
      */
     private void validateFieldValue(UserDefinedField fieldDef, String value) {
@@ -1202,14 +1397,31 @@ public class AssessmentService {
     /**
      * Get assessment metrics/statistics
      */
-    public AssessmentMetricsDto getMetrics(String organizationId, Authentication authentication) {
+    public AssessmentMetricsDto getMetrics(String organizationId, List<String> assessmentTypeIds,
+                                           Authentication authentication) {
+        java.util.function.Predicate<Assessment> ofTypes = ofTypes(assessmentTypeIds);
         if (isOrgScopedUser(authentication)) {
             var scope = accessScopeService.resolveAssessmentScope(authentication);
             final String requested = organizationId;
             return getMetrics(a -> scope.permits(a)
-                    && (requested == null || requested.equals(a.getOrganizationId())));
+                    && (requested == null || requested.equals(a.getOrganizationId()))
+                    && ofTypes.test(a));
         }
-        return getMetrics(organizationId);
+        return getMetrics(a -> (organizationId == null || organizationId.equals(a.getOrganizationId()))
+                && ofTypes.test(a));
+    }
+
+    /**
+     * Narrows metrics to assessments of the given types, so the Scheduling pills count only what the
+     * calendar and list beneath them show. No types counts every type, as before. Blank ids are
+     * ignored: a stray empty value would otherwise match nothing and zero every pill.
+     */
+    private static java.util.function.Predicate<Assessment> ofTypes(List<String> assessmentTypeIds) {
+        Set<String> ids = assessmentTypeIds == null ? Set.of() : assessmentTypeIds.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) return a -> true;
+        return a -> ids.contains(a.getAssessmentTypeId());
     }
 
     public AssessmentMetricsDto getMetrics(String organizationId) {
@@ -1230,38 +1442,17 @@ public class AssessmentService {
             .filter(a -> a.getStatus() != null)
             .collect(Collectors.groupingBy(Assessment::getStatus, Collectors.counting()));
 
-        // Legacy fixed counts (backwards compatibility: count by old enum string values)
-        long draftCount = statusCounts.getOrDefault("DRAFT", 0L);
-        long inProgressCount = statusCounts.getOrDefault("IN_PROGRESS", 0L);
-        long onHoldCount = statusCounts.getOrDefault("ON_HOLD", 0L);
-        long pendingReviewCount = statusCounts.getOrDefault("PENDING_REVIEW", 0L);
-        long completedCount = statusCounts.getOrDefault("COMPLETED", 0L);
-        long approvedCount = statusCounts.getOrDefault("APPROVED", 0L);
-        long archivedCount = statusCounts.getOrDefault("ARCHIVED", 0L);
-
-        // Add configured completedStatus to completedCount if it differs from "COMPLETED"
-        String configuredCompleted = workflowConfigService.getConfig().getCompletedStatus();
-        if (!"COMPLETED".equals(configuredCompleted)) {
-            completedCount += statusCounts.getOrDefault(configuredCompleted, 0L);
-        }
-
-        // Past due: past planned end date and not in a completed state
+        // Past due: past planned end date and not in its own workflow's completed status
+        WorkflowCatalog catalog = workflowCatalogService.load();
         List<Assessment> pastDueAssessments = assessmentRepository.findPastDue(LocalDateTime.now());
         long pastDueCount = pastDueAssessments.stream()
             .filter(a -> a.getDeletedAt() == null)
             .filter(rowFilter)
-            .filter(a -> !workflowConfigService.isCompletedStatus(a.getStatus()))
+            .filter(a -> !AssessmentWorkflows.isCompleted(catalog.forAssessment(a), a.getStatus()))
             .count();
 
         return AssessmentMetricsDto.builder()
             .totalCount(totalCount)
-            .draftCount(draftCount)
-            .inProgressCount(inProgressCount)
-            .onHoldCount(onHoldCount)
-            .pendingReviewCount(pendingReviewCount)
-            .completedCount(completedCount)
-            .approvedCount(approvedCount)
-            .archivedCount(archivedCount)
             .pastDueCount(pastDueCount)
             .statusCounts(statusCounts)
             .build();
@@ -1309,6 +1500,7 @@ public class AssessmentService {
         Pageable pageable,
         Authentication authentication
     ) {
+        WorkflowCatalog catalog = workflowCatalogService.load();
         if (isOrgScopedUser(authentication)) {
             final var scope = accessScopeService.resolveAssessmentScope(authentication);
             Page<Assessment> assessments = assessmentRepository.findByDateRange(startDate, endDate, pageable);
@@ -1316,11 +1508,11 @@ public class AssessmentService {
                     .filter(scope::permits)
                     .collect(Collectors.toList());
             return new PageImpl<>(
-                    filtered.stream().map(this::migrateAndConvertToDto).collect(Collectors.toList()),
+                    filtered.stream().map(a -> migrateAndConvertToDto(a, catalog)).collect(Collectors.toList()),
                     pageable, filtered.size());
         }
         Page<Assessment> assessments = assessmentRepository.findByDateRange(startDate, endDate, pageable);
-        return assessments.map(this::migrateAndConvertToDto);
+        return assessments.map(a -> migrateAndConvertToDto(a, catalog));
     }
 
     /**
@@ -1349,8 +1541,9 @@ public class AssessmentService {
                     .collect(Collectors.toList());
             }
 
+            WorkflowCatalog catalog = workflowCatalogService.load();
             return conflicts.stream()
-                .map(this::migrateAndConvertToDto)
+                .map(a -> migrateAndConvertToDto(a, catalog))
                 .collect(Collectors.toList());
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize assessor IDs", e);
@@ -1418,14 +1611,22 @@ public class AssessmentService {
             }
         }
 
+        Map<String, List<UnavailabilityDto>> unavailableByUser = unavailabilitySource
+            .find(assessorIds, startDate.toLocalDate(), endDate.toLocalDate())
+            .stream()
+            .collect(Collectors.groupingBy(UnavailabilityDto::userId));
+
         return assessorIds.stream()
             .map(userId -> {
                 List<AssessorAvailabilityDto.ConflictingAssessment> clashes =
                     byAssessor.getOrDefault(userId, Collections.emptyList());
+                List<UnavailabilityDto> unavailable =
+                    unavailableByUser.getOrDefault(userId, Collections.emptyList());
                 return AssessorAvailabilityDto.builder()
                     .userId(userId)
-                    .busy(!clashes.isEmpty())
+                    .busy(!clashes.isEmpty() || !unavailable.isEmpty())
                     .conflicts(clashes)
+                    .unavailable(unavailable)
                     .build();
             })
             .collect(Collectors.toList());
@@ -1490,15 +1691,17 @@ public class AssessmentService {
     /**
      * Migrate assessorId to assessorIds if needed and convert to DTO
      */
-    private AssessmentDto migrateAndConvertToDto(Assessment assessment) {
+    private AssessmentDto migrateAndConvertToDto(Assessment assessment, WorkflowCatalog catalog) {
         migrateAssessorId(assessment);
         AssessmentDto dto = AssessmentDto.fromEntity(assessment);
         enrichWithDisplayNames(dto);
         dto.setVulnerabilitySummary(computeVulnerabilitySummary(assessment));
-        // Compute isPastDue using workflow config (status-aware)
+        AssessmentWorkflow workflow = catalog.forAssessment(assessment);
+        dto.setCompleted(AssessmentWorkflows.isCompleted(workflow, assessment.getStatus()));
+        // Compute isPastDue using the assessment's own workflow (status-aware)
         dto.setIsPastDue(assessment.getPlannedEndDate() != null
                 && LocalDateTime.now().isAfter(assessment.getPlannedEndDate())
-                && !workflowConfigService.isCompletedStatus(assessment.getStatus()));
+                && !AssessmentWorkflows.isCompleted(workflow, assessment.getStatus()));
         return dto;
     }
 
@@ -1607,9 +1810,9 @@ public class AssessmentService {
         var orgs = scope.orgIds() == null ? java.util.Set.<String>of() : scope.orgIds();
         var apps = scope.appIds() == null ? java.util.Set.<String>of() : scope.appIds();
         if (orgs.isEmpty() && apps.isEmpty()) return List.of();
-        if (apps.isEmpty()) return assessmentRepository.countByStatusGroupedOrgs(orgs);
-        if (orgs.isEmpty()) return assessmentRepository.countByStatusGroupedOwned(apps);
-        return assessmentRepository.countByStatusGroupedMembership(orgs, apps);
+        if (apps.isEmpty()) return assessmentRepository.countByWorkflowAndStatusGroupedOrgs(orgs);
+        if (orgs.isEmpty()) return assessmentRepository.countByWorkflowAndStatusGroupedOwned(apps);
+        return assessmentRepository.countByWorkflowAndStatusGroupedMembership(orgs, apps);
     }
 
     private static boolean isSuperAdmin(Authentication authentication) {
@@ -1835,6 +2038,27 @@ public class AssessmentService {
             log.warn("Could not queue the {} email for assessment {}: {}",
                     event, assessment.getId(), e.getMessage());
         }
+    }
+
+    /**
+     * Whether this save is worth an "assessment changed" email: the status moved, or a date the
+     * reader plans around did.
+     *
+     * <p>Every other edit is silent. The assessment screen saves as you type, so anything else
+     * meant a stakeholder list got a mail per keystroke's worth of autosave — for a custom field, a
+     * rename, a scope edit — each one announcing a change it could not describe, because what
+     * changed was not in the mail. Mail nobody can act on is mail nobody reads, including the
+     * status changes that matter.
+     *
+     * <p>Being assigned to an assessment is still announced, to the person assigned, by the in-app
+     * notification that {@code notifyUserById} sends.
+     */
+    private boolean worthAnnouncing(Assessment assessment, String previousStatus,
+                                    LocalDateTime previousStartDate,
+                                    LocalDateTime previousPlannedEndDate) {
+        return !Objects.equals(previousStatus, assessment.getStatus())
+                || !Objects.equals(previousStartDate, assessment.getStartDate())
+                || !Objects.equals(previousPlannedEndDate, assessment.getPlannedEndDate());
     }
 
     private String subjectFor(com.faction.clientportal.model.EmailNotificationEvent event,

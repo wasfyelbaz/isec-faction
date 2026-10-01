@@ -73,7 +73,7 @@ class DocxReportGenerationServiceTest {
                 .templateFileId("templates/tmpl-1/template.docx")
                 .templateCss("")
                 .scoringType("NATIVE")
-                .status("IN_PROGRESS")
+                .status("Testing")
                 .assessorIds(List.of())
                 .createdAt(LocalDateTime.now())
                 .build();

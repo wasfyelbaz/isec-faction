@@ -16,6 +16,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,6 +34,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import com.faction.clientportal.model.Permission;
 import com.faction.clientportal.repository.AssessmentSearchCriteria;
+import com.faction.clientportal.repository.CompletedStatusFilter;
+import com.faction.clientportal.testsupport.TestWorkflows;
 
 @ExtendWith(MockitoExtension.class)
 class AssessmentServiceTest {
@@ -68,9 +71,6 @@ class AssessmentServiceTest {
     private VulnerabilityRepository vulnerabilityRepository;
 
     @Mock
-    private AssessmentWorkflowConfigService workflowConfigService;
-
-    @Mock
     private NotebookService notebookService;
 
     @Mock
@@ -93,6 +93,21 @@ class AssessmentServiceTest {
 
     @Mock
     private DefaultReportTemplateService defaultReportTemplateService;
+
+    @Mock
+    private SlaService slaService;
+
+    @Mock
+    private WorkflowCatalogService workflowCatalogService;
+
+    @Mock
+    private AssessmentWorkflowMoveService workflowMoveService;
+
+    @Mock
+    private com.faction.clientportal.service.email.EventNotificationEmailSender eventEmailSender;
+
+    @Mock
+    private com.faction.clientportal.service.UnavailabilitySource unavailabilitySource;
 
     @InjectMocks
     private AssessmentService assessmentService;
@@ -172,7 +187,7 @@ class AssessmentServiceTest {
                 .reportTemplateId(testTemplate.getId())
                 .reportTemplateVersion(testTemplate.getVersion())
                 .templateName(testTemplate.getName())
-                .status("DRAFT")
+                .status("New")
                 .assessorIds(List.of(testUser.getId()))
                 .engagementManagerId(testUser.getId())
                 .startDate(LocalDateTime.now())
@@ -186,14 +201,18 @@ class AssessmentServiceTest {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        // Stub workflow config service for all tests
-        AssessmentWorkflowConfig defaultConfig = AssessmentWorkflowConfig.builder().id("singleton").build();
-        lenient().when(workflowConfigService.getConfig()).thenReturn(defaultConfig);
-        lenient().when(workflowConfigService.isCompletedStatus(any())).thenAnswer(inv -> {
-            String s = inv.getArgument(0);
-            return s != null && ("Completed".equals(s) || "COMPLETED".equals(s)
-                    || "APPROVED".equals(s) || "ARCHIVED".equals(s));
-        });
+        // Stub workflow catalog service for all tests
+        AssessmentWorkflow defaultConfig = AssessmentWorkflow.defaultWorkflowBuilder().build();
+        lenient().when(workflowCatalogService.load()).thenReturn(WorkflowCatalog.of(List.of(defaultConfig)));
+        lenient().when(workflowCatalogService.forAssessment(any())).thenReturn(defaultConfig);
+    }
+
+    private AssessmentWorkflow secondWorkflowInCatalog() {
+        AssessmentWorkflow second = TestWorkflows.secondWorkflow();
+        WorkflowCatalog catalog = WorkflowCatalog.of(List.of(AssessmentWorkflow.defaultWorkflowBuilder().build(), second));
+        lenient().when(workflowCatalogService.load()).thenReturn(catalog);
+        lenient().when(workflowCatalogService.forAssessment(any())).thenAnswer(inv -> catalog.forAssessment(inv.getArgument(0)));
+        return second;
     }
 
     @Test
@@ -343,7 +362,7 @@ class AssessmentServiceTest {
                 .reportTemplateId(testTemplate.getId())
                 .reportTemplateVersion(testTemplate.getVersion())
                 .templateName(testTemplate.getName())
-                .status("DRAFT")
+                .status("New")
                 .assessorIds(request.getAssessorIds())
                 .fieldDefinitions(new ArrayList<>())
                 .fieldValues(new HashMap<>())
@@ -618,15 +637,12 @@ class AssessmentServiceTest {
 
     @Test
     void testGetMetrics_Success() {
-        // Given — build a list of assessments with various statuses for findAll()
+        // Given — assessments across the default workflow's statuses, for findAll()
         List<Assessment> allAssessments = new ArrayList<>();
-        for (int i = 0; i < 5; i++) allAssessments.add(Assessment.builder().id("d-" + i).status("DRAFT").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build());
-        for (int i = 0; i < 3; i++) allAssessments.add(Assessment.builder().id("ip-" + i).status("IN_PROGRESS").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build());
-        for (int i = 0; i < 2; i++) allAssessments.add(Assessment.builder().id("oh-" + i).status("ON_HOLD").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build());
-        allAssessments.add(Assessment.builder().id("pr-1").status("PENDING_REVIEW").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build());
-        for (int i = 0; i < 4; i++) allAssessments.add(Assessment.builder().id("c-" + i).status("COMPLETED").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build());
-        for (int i = 0; i < 2; i++) allAssessments.add(Assessment.builder().id("ap-" + i).status("APPROVED").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build());
-        allAssessments.add(Assessment.builder().id("ar-1").status("ARCHIVED").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build());
+        for (int i = 0; i < 5; i++) allAssessments.add(Assessment.builder().id("n-" + i).status("New").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build());
+        for (int i = 0; i < 3; i++) allAssessments.add(Assessment.builder().id("t-" + i).status("Testing").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build());
+        for (int i = 0; i < 2; i++) allAssessments.add(Assessment.builder().id("r-" + i).status("Reporting").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build());
+        for (int i = 0; i < 4; i++) allAssessments.add(Assessment.builder().id("c-" + i).status("Completed").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build());
 
         when(assessmentRepository.findAll()).thenReturn(allAssessments);
 
@@ -635,7 +651,15 @@ class AssessmentServiceTest {
                 .name("Past Due Assessment")
                 .applicationId(testApplication.getId())
                 .organizationId(testOrganization.getId())
-                .status("IN_PROGRESS")
+                .status("Testing")
+                .plannedEndDate(LocalDateTime.now().minusDays(1))
+                .fieldDefinitions(new ArrayList<>())
+                .fieldValues(new HashMap<>())
+                .createdAt(LocalDateTime.now())
+                .build();
+        Assessment completedLate = Assessment.builder()
+                .id("past-due-2")
+                .status("Completed")
                 .plannedEndDate(LocalDateTime.now().minusDays(1))
                 .fieldDefinitions(new ArrayList<>())
                 .fieldValues(new HashMap<>())
@@ -643,20 +667,19 @@ class AssessmentServiceTest {
                 .build();
 
         when(assessmentRepository.findPastDue(any(LocalDateTime.class)))
-                .thenReturn(List.of(pastDueAssessment));
+                .thenReturn(List.of(pastDueAssessment, completedLate));
 
         // When
         AssessmentMetricsDto metrics = assessmentService.getMetrics(null);
 
-        // Then
-        assertThat(metrics.getTotalCount()).isEqualTo(18L);
-        assertThat(metrics.getDraftCount()).isEqualTo(5L);
-        assertThat(metrics.getInProgressCount()).isEqualTo(3L);
-        assertThat(metrics.getOnHoldCount()).isEqualTo(2L);
-        assertThat(metrics.getPendingReviewCount()).isEqualTo(1L);
-        assertThat(metrics.getCompletedCount()).isEqualTo(4L);
-        assertThat(metrics.getApprovedCount()).isEqualTo(2L);
-        assertThat(metrics.getArchivedCount()).isEqualTo(1L);
+        // Then — counted per configured status; a completed assessment is never past due
+        assertThat(metrics.getTotalCount()).isEqualTo(14L);
+        assertThat(metrics.getStatusCounts())
+                .containsEntry("New", 5L)
+                .containsEntry("Testing", 3L)
+                .containsEntry("Reporting", 2L)
+                .containsEntry("Completed", 4L)
+                .hasSize(4);
         assertThat(metrics.getPastDueCount()).isEqualTo(1L);
     }
 
@@ -664,10 +687,10 @@ class AssessmentServiceTest {
     void testGetMetrics_WithOrganizationFilter() {
         // Given — two assessments in org-1, one in another org
         String orgId = testOrganization.getId();
-        Assessment a1 = Assessment.builder().id("m1").status("DRAFT").organizationId(orgId).fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build();
-        Assessment a2 = Assessment.builder().id("m2").status("DRAFT").organizationId(orgId).fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build();
-        Assessment a3 = Assessment.builder().id("m3").status("IN_PROGRESS").organizationId(orgId).fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build();
-        Assessment other = Assessment.builder().id("m4").status("DRAFT").organizationId("other-org").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build();
+        Assessment a1 = Assessment.builder().id("m1").status("New").organizationId(orgId).fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build();
+        Assessment a2 = Assessment.builder().id("m2").status("New").organizationId(orgId).fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build();
+        Assessment a3 = Assessment.builder().id("m3").status("Testing").organizationId(orgId).fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build();
+        Assessment other = Assessment.builder().id("m4").status("New").organizationId("other-org").fieldDefinitions(new ArrayList<>()).fieldValues(new HashMap<>()).createdAt(LocalDateTime.now()).build();
 
         when(assessmentRepository.findAll()).thenReturn(List.of(a1, a2, a3, other));
         when(assessmentRepository.findPastDue(any(LocalDateTime.class))).thenReturn(List.of());
@@ -677,8 +700,7 @@ class AssessmentServiceTest {
 
         // Then — only the 3 assessments in org-1 are counted
         assertThat(metrics.getTotalCount()).isEqualTo(3L);
-        assertThat(metrics.getDraftCount()).isEqualTo(2L);
-        assertThat(metrics.getInProgressCount()).isEqualTo(1L);
+        assertThat(metrics.getStatusCounts()).containsEntry("New", 2L).containsEntry("Testing", 1L).hasSize(2);
         assertThat(metrics.getPastDueCount()).isEqualTo(0L);
     }
 
@@ -696,7 +718,7 @@ class AssessmentServiceTest {
                 .assessmentTypeId(testAssessmentType.getId())
                 .organizationId(testOrganization.getId())
                 .reportTemplateId(testTemplate.getId())
-                .status("IN_PROGRESS")
+                .status("Testing")
                 .assessorIds(assessorIds)
                 .startDate(start.plusDays(2))
                 .plannedEndDate(start.plusDays(5))
@@ -772,7 +794,7 @@ class AssessmentServiceTest {
                 .assessmentTypeId(testAssessmentType.getId())
                 .organizationId(testOrganization.getId())
                 .reportTemplateId(testTemplate.getId())
-                .status("IN_PROGRESS")
+                .status("Testing")
                 .assessorIds(assessorIds)
                 .startDate(start.plusDays(2))
                 .plannedEndDate(start.plusDays(5))
@@ -892,6 +914,57 @@ class AssessmentServiceTest {
     }
 
     @Test
+    void availability_marksACandidateBusyWhenUnavailable() {
+        LocalDateTime start = LocalDateTime.of(2026, 12, 21, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 12, 28, 0, 0);
+        when(assessmentRepository.findConflictingByAssessors(anyString(), eq(start), eq(end)))
+                .thenReturn(List.of());
+        when(unavailabilitySource.find(List.of("alice", "bob"), start.toLocalDate(), end.toLocalDate()))
+                .thenReturn(List.of(new UnavailabilityDto("alice", LocalDate.of(2026, 12, 25),
+                        LocalDate.of(2026, 12, 25), UnavailabilityDto.Kind.HOLIDAY, "Christmas Day", null)));
+
+        List<AssessorAvailabilityDto> availability = assessmentService.getAssessorAvailability(
+                null, List.of("alice", "bob"), start, end);
+
+        assertThat(availability.get(0).isBusy()).isTrue();
+        assertThat(availability.get(0).getConflicts()).isEmpty();
+        assertThat(availability.get(0).getUnavailable())
+                .extracting(UnavailabilityDto::label).containsExactly("Christmas Day");
+        assertThat(availability.get(1).isBusy()).isFalse();
+        assertThat(availability.get(1).getUnavailable()).isEmpty();
+    }
+
+    @Test
+    void availability_withNoUnavailabilitySourceDataIsUnchanged() {
+        // The open source edition's source returns nothing; busy must mean exactly what it did.
+        LocalDateTime start = LocalDateTime.now();
+        LocalDateTime end = start.plusDays(7);
+        when(assessmentRepository.findConflictingByAssessors(anyString(), eq(start), eq(end)))
+                .thenReturn(List.of(booking("a-1", "Acme Q3 Retest", start, List.of("alice"))));
+
+        List<AssessorAvailabilityDto> availability = assessmentService.getAssessorAvailability(
+                "a-1", List.of("alice"), start, end);
+
+        // "a-1" is the assessment being edited: it never conflicts with itself.
+        assertThat(availability.get(0).isBusy()).isFalse();
+        assertThat(availability.get(0).getUnavailable()).isEmpty();
+
+        // A real clash with another assessment still makes them busy, with nothing unavailable.
+        when(assessmentRepository.findConflictingByAssessors(anyString(), eq(start), eq(end)))
+                .thenReturn(List.of(booking("a-1", "Acme Q3 Retest", start, List.of("alice")),
+                        booking("a-2", "Globex Pentest", start, List.of("alice"))));
+
+        List<AssessorAvailabilityDto> clashing = assessmentService.getAssessorAvailability(
+                "a-1", List.of("alice"), start, end);
+
+        assertThat(clashing.get(0).isBusy()).isTrue();
+        assertThat(clashing.get(0).getConflicts())
+                .extracting(AssessorAvailabilityDto.ConflictingAssessment::getName)
+                .containsExactly("Globex Pentest");
+        assertThat(clashing.get(0).getUnavailable()).isEmpty();
+    }
+
+    @Test
     void testGetAssessmentsByDateRange_Success() {
         // Given
         LocalDateTime start = LocalDateTime.now();
@@ -932,7 +1005,7 @@ class AssessmentServiceTest {
         assertThat(csv).contains("ID,Name,Status");
         assertThat(csv).contains(testAssessment.getId());
         assertThat(csv).contains(testAssessment.getName());
-        assertThat(csv).contains("DRAFT");
+        assertThat(csv).contains("New");
     }
 
     @Test
@@ -945,7 +1018,7 @@ class AssessmentServiceTest {
                 .assessmentTypeId(testAssessmentType.getId())
                 .organizationId(testOrganization.getId())
                 .reportTemplateId(testTemplate.getId())
-                .status("DRAFT")
+                .status("New")
                 .fieldDefinitions(new ArrayList<>())
                 .fieldValues(new HashMap<>())
                 .createdBy("user\"with\"quotes")
@@ -970,7 +1043,7 @@ class AssessmentServiceTest {
         // Given
         UpdateAssessmentRequest request = UpdateAssessmentRequest.builder()
                 .name("Updated Assessment")
-                .status("IN_PROGRESS")
+                .status("Testing")
                 .assessorIds(List.of(testUser.getId(), "user-2"))
                 .remediationManagerId("user-3")
                 .scope("Updated scope")
@@ -987,7 +1060,7 @@ class AssessmentServiceTest {
                 .organizationId(testAssessment.getOrganizationId())
                 .reportTemplateId(testAssessment.getReportTemplateId())
                 .reportTemplateVersion(testAssessment.getReportTemplateVersion())
-                .status("IN_PROGRESS")
+                .status("Testing")
                 .assessorIds(List.of(testUser.getId(), "user-2"))
                 .remediationManagerId("user-3")
                 .scope("Updated scope")
@@ -1007,7 +1080,7 @@ class AssessmentServiceTest {
 
         // Then
         assertThat(result.getName()).isEqualTo("Updated Assessment");
-        assertThat(result.getStatus()).isEqualTo("IN_PROGRESS");
+        assertThat(result.getStatus()).isEqualTo("Testing");
         assertThat(result.getAssessorIds()).hasSize(2);
         assertThat(result.getRemediationManagerId()).isEqualTo("user-3");
         assertThat(result.getScope()).isEqualTo("Updated scope");
@@ -1019,7 +1092,7 @@ class AssessmentServiceTest {
     void testUpdateAssessment_CompletionAnnouncedInApplicationChat() {
         // Given
         UpdateAssessmentRequest request = UpdateAssessmentRequest.builder()
-                .status("COMPLETED")
+                .status("Completed")
                 .build();
 
         when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId()))
@@ -1045,7 +1118,7 @@ class AssessmentServiceTest {
     void testUpdateAssessment_NonCompletionStatusChangeNotAnnounced() {
         // Given
         UpdateAssessmentRequest request = UpdateAssessmentRequest.builder()
-                .status("IN_PROGRESS")
+                .status("Testing")
                 .build();
 
         when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId()))
@@ -1159,7 +1232,7 @@ class AssessmentServiceTest {
                 .assessmentTypeId(testAssessmentType.getId())
                 .organizationId(testOrganization.getId())
                 .reportTemplateId(testTemplate.getId())
-                .status("DRAFT")
+                .status("New")
                 .assessorId(testUser.getId())
                 .assessorIds(null) // Legacy has null list
                 .fieldDefinitions(new ArrayList<>())
@@ -1218,7 +1291,7 @@ class AssessmentServiceTest {
                 .assessmentTypeId(testAssessmentType.getId())
                 .organizationId(testOrganization.getId())
                 .reportTemplateId(testTemplate.getId())
-                .status("IN_PROGRESS")
+                .status("Testing")
                 .plannedEndDate(LocalDateTime.now().minusDays(1))
                 .fieldDefinitions(new ArrayList<>())
                 .fieldValues(new HashMap<>())
@@ -1245,7 +1318,7 @@ class AssessmentServiceTest {
                 .assessmentTypeId(testAssessmentType.getId())
                 .organizationId(testOrganization.getId())
                 .reportTemplateId(testTemplate.getId())
-                .status("IN_PROGRESS")
+                .status("Testing")
                 .plannedEndDate(LocalDateTime.now().plusDays(7))
                 .fieldDefinitions(new ArrayList<>())
                 .fieldValues(new HashMap<>())
@@ -1437,7 +1510,7 @@ class AssessmentServiceTest {
                 .reportTemplateId(updatedTemplate.getId())
                 .reportTemplateVersion(1) // behind template
                 .templateName(updatedTemplate.getName())
-                .status("IN_PROGRESS")
+                .status("Testing")
                 .fieldDefinitions(new ArrayList<>())
                 .fieldValues(new HashMap<>())
                 .createdAt(LocalDateTime.now())
@@ -1488,7 +1561,7 @@ class AssessmentServiceTest {
                 .reportTemplateId(templateWithFile.getId())
                 .reportTemplateVersion(1) // same version — only the file sync should fire
                 .templateFileId(null)
-                .status("IN_PROGRESS")
+                .status("Testing")
                 .fieldDefinitions(new ArrayList<>())
                 .fieldValues(new HashMap<>())
                 .createdAt(LocalDateTime.now())
@@ -1523,7 +1596,7 @@ class AssessmentServiceTest {
                 .assessmentTypeId(testAssessmentType.getId())
                 .organizationId(testOrganization.getId())
                 .reportTemplateId(testTemplate.getId())
-                .status("COMPLETED")
+                .status("Completed")
                 .plannedEndDate(LocalDateTime.now().minusDays(1))
                 .fieldDefinitions(new ArrayList<>())
                 .fieldValues(new HashMap<>())
@@ -1541,71 +1614,10 @@ class AssessmentServiceTest {
     }
 
     @Test
-    void testUpdateAssessment_SetsPeerReviewedAtWhenStatusChangesToPendingReview() {
-        // Given
-        UpdateAssessmentRequest request = UpdateAssessmentRequest.builder()
-                .status("PENDING_REVIEW")
-                .build();
-
-        when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId()))
-                .thenReturn(Optional.of(testAssessment));
-
-        ArgumentCaptor<Assessment> savedCaptor = ArgumentCaptor.forClass(Assessment.class);
-        when(assessmentRepository.save(savedCaptor.capture()))
-                .thenAnswer(inv -> inv.getArgument(0));
-
-        // When
-        assessmentService.updateAssessment(testAssessment.getId(), request, "testuser");
-
-        // Then - peerReviewedAt must be set
-        Assessment saved = savedCaptor.getValue();
-        assertThat(saved.getPeerReviewedAt()).isNotNull();
-        assertThat(saved.getStatus()).isEqualTo("PENDING_REVIEW");
-    }
-
-    @Test
-    void testUpdateAssessment_DoesNotOverwritePeerReviewedAtOnRepeatedTransition() {
-        // Given - already in PENDING_REVIEW with a prior timestamp
-        LocalDateTime originalPeerReviewedAt = LocalDateTime.now().minusHours(2);
-        Assessment alreadyPendingAssessment = Assessment.builder()
-                .id(testAssessment.getId())
-                .name(testAssessment.getName())
-                .applicationId(testAssessment.getApplicationId())
-                .assessmentTypeId(testAssessment.getAssessmentTypeId())
-                .organizationId(testAssessment.getOrganizationId())
-                .reportTemplateId(testAssessment.getReportTemplateId())
-                .reportTemplateVersion(testAssessment.getReportTemplateVersion())
-                .status("PENDING_REVIEW")
-                .peerReviewedAt(originalPeerReviewedAt)
-                .fieldDefinitions(new ArrayList<>())
-                .fieldValues(new HashMap<>())
-                .createdAt(testAssessment.getCreatedAt())
-                .build();
-
-        UpdateAssessmentRequest request = UpdateAssessmentRequest.builder()
-                .status("PENDING_REVIEW")
-                .build();
-
-        when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId()))
-                .thenReturn(Optional.of(alreadyPendingAssessment));
-
-        ArgumentCaptor<Assessment> savedCaptor = ArgumentCaptor.forClass(Assessment.class);
-        when(assessmentRepository.save(savedCaptor.capture()))
-                .thenAnswer(inv -> inv.getArgument(0));
-
-        // When
-        assessmentService.updateAssessment(testAssessment.getId(), request, "testuser");
-
-        // Then - peerReviewedAt must NOT be overwritten
-        Assessment saved = savedCaptor.getValue();
-        assertThat(saved.getPeerReviewedAt()).isEqualTo(originalPeerReviewedAt);
-    }
-
-    @Test
     void testUpdateAssessment_SetsOpenedAtOnVulnsWhenFinalized() {
-        // Given - assessment transitions from DRAFT to COMPLETED
+        // Given - assessment transitions from New to Completed
         UpdateAssessmentRequest request = UpdateAssessmentRequest.builder()
-                .status("COMPLETED")
+                .status("Completed")
                 .build();
 
         when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId()))
@@ -1646,7 +1658,7 @@ class AssessmentServiceTest {
         testAssessment.setRemediationManagerId("user-rem");
 
         UpdateAssessmentRequest request = UpdateAssessmentRequest.builder()
-                .status("COMPLETED")
+                .status("Completed")
                 .build();
 
         when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId()))
@@ -1692,7 +1704,7 @@ class AssessmentServiceTest {
 
     @Test
     void testUpdateAssessment_DoesNotSetOpenedAtWhenAlreadyCompleted() {
-        // Given - assessment is already COMPLETED, status stays COMPLETED
+        // Given - assessment is already Completed, status stays Completed
         Assessment alreadyCompleted = Assessment.builder()
                 .id(testAssessment.getId())
                 .name(testAssessment.getName())
@@ -1701,7 +1713,7 @@ class AssessmentServiceTest {
                 .organizationId(testAssessment.getOrganizationId())
                 .reportTemplateId(testAssessment.getReportTemplateId())
                 .reportTemplateVersion(testAssessment.getReportTemplateVersion())
-                .status("COMPLETED")
+                .status("Completed")
                 .completedDate(LocalDateTime.now().minusDays(1))
                 .fieldDefinitions(new ArrayList<>())
                 .fieldValues(new HashMap<>())
@@ -1709,7 +1721,7 @@ class AssessmentServiceTest {
                 .build();
 
         UpdateAssessmentRequest request = UpdateAssessmentRequest.builder()
-                .status("COMPLETED")
+                .status("Completed")
                 .build();
 
         when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId()))
@@ -1847,7 +1859,7 @@ class AssessmentServiceTest {
                 .organizationId(testAssessment.getOrganizationId())
                 .reportTemplateId(testAssessment.getReportTemplateId())
                 .reportTemplateVersion(testAssessment.getReportTemplateVersion())
-                .status("COMPLETED")
+                .status("Completed")
                 .completedDate(completedDate)
                 .fieldDefinitions(new ArrayList<>())
                 .fieldValues(new HashMap<>())
@@ -1872,7 +1884,7 @@ class AssessmentServiceTest {
                 UpdateAssessmentRequest.builder().completedDate(corrected).build(), "root", superAdmin);
 
         assertThat(result.getCompletedDate()).isEqualTo(corrected);
-        assertThat(result.getStatus()).isEqualTo("COMPLETED");
+        assertThat(result.getStatus()).isEqualTo("Completed");
         // Correcting the date is not a fresh completion: findings are not re-opened.
         verify(vulnerabilityRepository, never()).saveAll(any());
     }
@@ -1888,7 +1900,7 @@ class AssessmentServiceTest {
 
         // Re-sending the completed status alongside the date used to slip through; it must not.
         UpdateAssessmentRequest request = UpdateAssessmentRequest.builder()
-                .status("COMPLETED")
+                .status("Completed")
                 .completedDate(LocalDateTime.of(2025, 12, 1, 17, 30))
                 .build();
 
@@ -1913,7 +1925,7 @@ class AssessmentServiceTest {
                 List.of(new SimpleGrantedAuthority(Permission.ASSESSMENTS_EDIT_ALL.getPermission())));
 
         AssessmentDto result = assessmentService.updateAssessment(testAssessment.getId(),
-                UpdateAssessmentRequest.builder().status("COMPLETED").completedDate(historical).build(),
+                UpdateAssessmentRequest.builder().status("Completed").completedDate(historical).build(),
                 "importer", editor);
 
         assertThat(result.getCompletedDate()).isEqualTo(historical);
@@ -1938,5 +1950,399 @@ class AssessmentServiceTest {
         assertThat(saved.getValue().getReportTemplateId()).isEqualTo(testTemplate.getId());
         assertThat(saved.getValue().getTemplateName()).isEqualTo(testTemplate.getName());
         verify(reportTemplateRepository, never()).findByIdAndDeletedAtIsNull(any());
+    }
+
+    // ── Per-assessment workflow ─────────────────────────────────────────────
+
+    @Test
+    void aNewAssessmentTakesItsTypesWorkflowAndThatWorkflowsNewStatus() {
+        // Given as in testCreateAssessment_Success, and:
+        secondWorkflowInCatalog();
+        testAssessmentType.setWorkflowId(TestWorkflows.SECOND_ID);
+        CreateAssessmentRequest request = CreateAssessmentRequest.builder()
+                .name("New Assessment")
+                .applicationId(testApplication.getId())
+                .assessmentTypeId(testAssessmentType.getId())
+                .reportTemplateId(testTemplate.getId())
+                .assessorIds(List.of(testUser.getId()))
+                .engagementManagerId(testUser.getId())
+                .startDate(LocalDateTime.now())
+                .plannedEndDate(LocalDateTime.now().plusDays(7))
+                .scope("Assessment scope")
+                .initialFieldValues(new HashMap<>())
+                .build();
+
+        when(applicationRepository.findById(testApplication.getId()))
+                .thenReturn(Optional.of(testApplication));
+        when(assessmentTypeRepository.findById(testAssessmentType.getId()))
+                .thenReturn(Optional.of(testAssessmentType));
+        when(reportTemplateRepository.findByIdAndDeletedAtIsNull(testTemplate.getId()))
+                .thenReturn(Optional.of(testTemplate));
+        when(assessmentRepository.save(any(Assessment.class)))
+                .thenReturn(testAssessment);
+
+        // When: the same createAssessment call as testCreateAssessment_Success
+        assessmentService.createAssessment(request, "testuser");
+
+        // Then
+        ArgumentCaptor<Assessment> saved = ArgumentCaptor.forClass(Assessment.class);
+        verify(assessmentRepository, atLeastOnce()).save(saved.capture());
+        assertThat(saved.getAllValues().get(0).getWorkflowId()).isEqualTo(TestWorkflows.SECOND_ID);
+        assertThat(saved.getAllValues().get(0).getStatus()).isEqualTo("Draft");
+    }
+
+    @Test
+    void completingUsesTheAssessmentsOwnCompletedStatusAndSlas() {
+        AssessmentWorkflow second = secondWorkflowInCatalog();
+        testAssessment.setWorkflowId(TestWorkflows.SECOND_ID);
+        testAssessment.setStatus("Fieldwork");
+        UpdateAssessmentRequest request = UpdateAssessmentRequest.builder().status("Signed Off").build();
+        Vulnerability unopened = Vulnerability.builder().id("v-1").assessmentId(testAssessment.getId())
+                .severity(com.faction.clientportal.model.VulnerabilitySeverity.HIGH).status("None").build();
+        when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId())).thenReturn(Optional.of(testAssessment));
+        when(assessmentRepository.save(any(Assessment.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(vulnerabilityRepository.findByAssessmentIdAndDeletedAtIsNull(testAssessment.getId()))
+                .thenReturn(new ArrayList<>(List.of(unopened)));
+        when(assessmentChecklistRepository.findByAssessmentId(testAssessment.getId())).thenReturn(List.of());
+
+        assessmentService.updateAssessment(testAssessment.getId(), request, "testuser");
+
+        assertThat(testAssessment.getCompletedDate()).isNotNull();
+        assertThat(unopened.getStatus()).isEqualTo("Open");
+        verify(slaService).refreshAll(anyList(), eq(second));
+        verify(applicationService).addSystemComment(eq(testApplication.getId()), contains("**Assessment completed**"), eq("testuser"));
+    }
+
+    @Test
+    void anotherWorkflowsCompletedStatusDoesNotCompleteTheAssessment() {
+        secondWorkflowInCatalog();
+        testAssessment.setWorkflowId(TestWorkflows.SECOND_ID);
+        testAssessment.setStatus("Fieldwork");
+        UpdateAssessmentRequest request = UpdateAssessmentRequest.builder().status("Completed").build();
+        when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId())).thenReturn(Optional.of(testAssessment));
+        when(assessmentRepository.save(any(Assessment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        assessmentService.updateAssessment(testAssessment.getId(), request, "testuser");
+
+        assertThat(testAssessment.getCompletedDate()).isNull();
+        verify(applicationService, never()).addSystemComment(any(), contains("**Assessment completed**"), any());
+    }
+
+    @Test
+    void theReopenWindowAppliesToTheAssessmentsOwnCompletedStatus() {
+        secondWorkflowInCatalog();
+        Assessment signedOff = Assessment.builder().workflowId(TestWorkflows.SECOND_ID)
+                .status("Signed Off").completedDate(LocalDateTime.now().minusHours(1)).build();
+        Assessment completedOnSecond = Assessment.builder().workflowId(TestWorkflows.SECOND_ID)
+                .status("Completed").completedDate(LocalDateTime.now().minusHours(1)).build();
+
+        assertThat(assessmentService.withinReopenWindow(signedOff)).isTrue();
+        assertThat(assessmentService.withinReopenWindow(completedOnSecond)).isFalse();
+    }
+
+    @Test
+    void thePastDueFlagIgnoresAnAssessmentCompletedInItsOwnWorkflow() {
+        // Given as in testIsPastDue_Calculation (the planned end date is in the past), and:
+        secondWorkflowInCatalog();
+        testAssessment.setWorkflowId(TestWorkflows.SECOND_ID);
+        testAssessment.setStatus("Signed Off");
+        testAssessment.setPlannedEndDate(LocalDateTime.now().minusDays(1));
+        when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId()))
+                .thenReturn(Optional.of(testAssessment));
+
+        // Then: the same call returns isPastDue false for "Signed Off"...
+        AssessmentDto dto = assessmentService.getAssessment(testAssessment.getId());
+        assertThat(dto.getIsPastDue()).isFalse();
+
+        // ...and, repeating it with testAssessment.setStatus("Completed"), isPastDue true:
+        testAssessment.setStatus("Completed");
+        dto = assessmentService.getAssessment(testAssessment.getId());
+        assertThat(dto.getIsPastDue()).isTrue();
+    }
+
+    @Test
+    void theDateWindowMovesAnAssessmentToItsOwnWorkflowsInProgressStatus() {
+        secondWorkflowInCatalog();
+        testAssessment.setWorkflowId(TestWorkflows.SECOND_ID);
+        testAssessment.setStatus("Draft");
+        testAssessment.setStartDate(LocalDateTime.now().minusDays(1));
+        testAssessment.setPlannedEndDate(LocalDateTime.now().plusDays(5));
+        when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId()))
+                .thenReturn(Optional.of(testAssessment));
+        when(assessmentRepository.save(any(Assessment.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        assessmentService.getAssessment(testAssessment.getId(), null);
+
+        assertThat(testAssessment.getStatus()).isEqualTo("Fieldwork");
+    }
+
+    @Test
+    void reopeningASignedOffAssessmentOutsideTheWindowIsRefused() {
+        secondWorkflowInCatalog();
+        testAssessment.setWorkflowId(TestWorkflows.SECOND_ID);
+        testAssessment.setStatus("Signed Off");
+        testAssessment.setCompletedDate(LocalDateTime.now().minusYears(5));
+        UpdateAssessmentRequest request = UpdateAssessmentRequest.builder().status("Fieldwork").build();
+        when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId())).thenReturn(Optional.of(testAssessment));
+
+        assertThatThrownBy(() -> assessmentService.updateAssessment(testAssessment.getId(), request, "testuser"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("can no longer be reopened");
+    }
+
+    @Test
+    void anotherWorkflowsCompletedStatusIsNotAReopen() {
+        secondWorkflowInCatalog();
+        testAssessment.setWorkflowId(TestWorkflows.SECOND_ID);
+        testAssessment.setStatus("Completed");  // not completed on the second workflow
+        testAssessment.setCompletedDate(LocalDateTime.now().minusYears(5));
+        UpdateAssessmentRequest request = UpdateAssessmentRequest.builder().status("Fieldwork").build();
+        when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId())).thenReturn(Optional.of(testAssessment));
+        when(assessmentRepository.save(any(Assessment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        assessmentService.updateAssessment(testAssessment.getId(), request, "testuser");
+
+        assertThat(testAssessment.getStatus()).isEqualTo("Fieldwork");
+    }
+
+    @Test
+    void searchAssessmentsAdvanced_bindsEveryWorkflowsCompletedStatusFromOneCatalogLoad() {
+        secondWorkflowInCatalog();
+        var auth = new UsernamePasswordAuthenticationToken("org-user", null,
+                List.of(new SimpleGrantedAuthority(Permission.ASSESSMENTS_READ_ORG.getPermission())));
+        when(accessScopeService.resolveAssessmentScope(auth)).thenReturn(
+                new AccessScopeService.AssessmentScope(
+                        AccessScopeService.AssessmentScopeKind.ORG, java.util.Set.of("org-A"), java.util.Set.of(), null, null));
+        when(assessmentRepository.searchAdvanced(any(), any())).thenReturn(Page.empty());
+
+        assessmentService.searchAssessmentsAdvanced(
+                null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, PageRequest.of(0, 20), auth);
+
+        var captor = ArgumentCaptor.forClass(AssessmentSearchCriteria.class);
+        verify(assessmentRepository).searchAdvanced(captor.capture(), any());
+        CompletedStatusFilter completed = captor.getValue().completed();
+        assertThat(completed.workflowIds()).containsExactly("default", TestWorkflows.SECOND_ID);
+        assertThat(completed.completedStatuses()).containsExactly("Completed", "Signed Off");
+        assertThat(completed.knownWorkflowIds()).containsExactly("default", TestWorkflows.SECOND_ID);
+        assertThat(completed.defaultWorkflowId()).isEqualTo("default");
+        verify(workflowCatalogService, times(1)).load();
+    }
+
+    @Test
+    void getMetrics_pastDueUsesEachAssessmentsOwnWorkflowsCompletedStatus() {
+        secondWorkflowInCatalog();
+        Assessment secondDone = lateAssessment("m-second-done", TestWorkflows.SECOND_ID, "Signed Off");
+        Assessment secondDoneToo = lateAssessment("m-second-done-too", TestWorkflows.SECOND_ID, "Signed Off");
+        Assessment secondCompleted = lateAssessment("m-second-completed", TestWorkflows.SECOND_ID, "Completed");
+        Assessment defaultDone = lateAssessment("m-default-done", "default", "Completed");
+        Assessment unknownDone = lateAssessment("m-unknown-done", "gone-workflow", "Completed");
+        List<Assessment> all = List.of(secondDone, secondDoneToo, secondCompleted, defaultDone, unknownDone);
+        when(assessmentRepository.findAll()).thenReturn(all);
+        when(assessmentRepository.findPastDue(any(LocalDateTime.class))).thenReturn(all);
+
+        AssessmentMetricsDto metrics = assessmentService.getMetrics(null);
+
+        // Only the second-workflow assessment sitting in Default Workflow's completed status is still open
+        // (the Default-only check counted the two "Signed Off" ones instead).
+        assertThat(metrics.getPastDueCount()).isEqualTo(1L);
+        verify(workflowCatalogService, times(1)).load();
+    }
+
+    @Test
+    void updateAssessment_moveToTypeWorkflowLoadsTheCatalogOnlyOnce() {
+        AssessmentWorkflow second = secondWorkflowInCatalog();
+        testAssessment.setWorkflowId("default");
+        when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId()))
+                .thenReturn(Optional.of(testAssessment));
+        when(assessmentRepository.findById(testAssessment.getId())).thenReturn(Optional.of(testAssessment));
+        when(assessmentRepository.save(any(Assessment.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(assessmentTypeRepository.findById(testAssessmentType.getId())).thenReturn(Optional.of(
+                AssessmentType.builder().id(testAssessmentType.getId()).name(testAssessmentType.getName())
+                        .workflowId(second.getId()).createdAt(LocalDateTime.now()).build()));
+
+        var superAdmin = new UsernamePasswordAuthenticationToken("root", null,
+                List.of(new SimpleGrantedAuthority(
+                        com.faction.clientportal.security.RequiresPermissionAuthorizationManager.SUPER_ADMIN)));
+
+        assessmentService.updateAssessment(testAssessment.getId(),
+                UpdateAssessmentRequest.builder().moveToTypeWorkflow(true).build(), "root", superAdmin);
+
+        // One catalog load for the whole request: the pre-save validation (checkMove) and the
+        // post-save move both take the same already-loaded catalog rather than loading their own.
+        verify(workflowCatalogService, times(1)).load();
+        verify(workflowMoveService).checkMove(eq(testAssessment), eq(second.getId()), any());
+        verify(workflowMoveService).move(eq(testAssessment.getId()), eq(second.getId()), eq(false), any());
+    }
+
+    private static Assessment lateAssessment(String id, String workflowId, String status) {
+        return Assessment.builder()
+                .id(id)
+                .workflowId(workflowId)
+                .status(status)
+                .plannedEndDate(LocalDateTime.now().minusDays(1))
+                .fieldDefinitions(new ArrayList<>())
+                .fieldValues(new HashMap<>())
+                .createdAt(LocalDateTime.now())
+                .build();
+    }
+
+    // ── which saves are worth an email ───────────────────────────────────────
+
+    private void stubUpdate() {
+        when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId()))
+                .thenReturn(Optional.of(testAssessment));
+        when(assessmentRepository.save(any(Assessment.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    private com.faction.clientportal.model.EmailNotificationEvent emailedEvent() {
+        ArgumentCaptor<com.faction.clientportal.service.email.EventNotificationEmailSender.Event> captor =
+                ArgumentCaptor.forClass(
+                        com.faction.clientportal.service.email.EventNotificationEmailSender.Event.class);
+        verify(eventEmailSender).send(captor.capture());
+        return captor.getValue().getEvent();
+    }
+
+    /**
+     * The assessment screen saves as you type, so a stakeholder list was getting an "Assessment
+     * changed" email for every edit to a custom field — and for every keystroke's worth of autosave
+     * behind it. Nothing in that mail told the reader what changed, because nothing they care about
+     * had.
+     */
+    @Test
+    void updateAssessment_fieldValueEditSendsNoEmail() {
+        com.faction.clientportal.model.UserDefinedField summary =
+                com.faction.clientportal.model.UserDefinedField.builder()
+                        .id("f-1").variableName("summary1").displayName("Executive Summary")
+                        .fieldType(com.faction.clientportal.model.FieldType.RICH_TEXT)
+                        .build();
+        testAssessment.getFieldDefinitions().add(summary);
+        stubUpdate();
+
+        assessmentService.updateAssessment(testAssessment.getId(),
+                UpdateAssessmentRequest.builder()
+                        .fieldValues(java.util.Map.of("f-1", "Rewritten summary"))
+                        .build(),
+                "testuser");
+
+        verify(eventEmailSender, never()).send(any());
+    }
+
+    @Test
+    void updateAssessment_renamingOrRescopingSendsNoEmail() {
+        stubUpdate();
+
+        assessmentService.updateAssessment(testAssessment.getId(),
+                UpdateAssessmentRequest.builder()
+                        .name("Renamed assessment")
+                        .scope("A wider scope")
+                        .build(),
+                "testuser");
+
+        verify(eventEmailSender, never()).send(any());
+    }
+
+    /** Assessor changes are announced to the person assigned, not to the whole stakeholder list. */
+    @Test
+    void updateAssessment_assessorChangeSendsNoEmail() {
+        stubUpdate();
+
+        assessmentService.updateAssessment(testAssessment.getId(),
+                UpdateAssessmentRequest.builder()
+                        .assessorIds(List.of("user-2"))
+                        .build(),
+                "testuser");
+
+        verify(eventEmailSender, never()).send(any());
+    }
+
+    @Test
+    void updateAssessment_statusChangeSendsTheChangedEmail() {
+        stubUpdate();
+
+        assessmentService.updateAssessment(testAssessment.getId(),
+                UpdateAssessmentRequest.builder().status("Testing").build(),
+                "testuser");
+
+        assertThat(emailedEvent())
+                .isEqualTo(com.faction.clientportal.model.EmailNotificationEvent.ASSESSMENT_CHANGED);
+    }
+
+    @Test
+    void updateAssessment_startDateChangeSendsTheChangedEmail() {
+        stubUpdate();
+
+        assessmentService.updateAssessment(testAssessment.getId(),
+                UpdateAssessmentRequest.builder()
+                        .startDate(testAssessment.getStartDate().plusDays(3))
+                        .build(),
+                "testuser");
+
+        assertThat(emailedEvent())
+                .isEqualTo(com.faction.clientportal.model.EmailNotificationEvent.ASSESSMENT_CHANGED);
+    }
+
+    @Test
+    void updateAssessment_plannedEndDateChangeSendsTheChangedEmail() {
+        stubUpdate();
+
+        assessmentService.updateAssessment(testAssessment.getId(),
+                UpdateAssessmentRequest.builder()
+                        .plannedEndDate(testAssessment.getPlannedEndDate().plusDays(7))
+                        .build(),
+                "testuser");
+
+        assertThat(emailedEvent())
+                .isEqualTo(com.faction.clientportal.model.EmailNotificationEvent.ASSESSMENT_CHANGED);
+    }
+
+    /** Re-saving the same dates is not a date change. */
+    @Test
+    void updateAssessment_resendingTheSameDatesSendsNoEmail() {
+        stubUpdate();
+
+        assessmentService.updateAssessment(testAssessment.getId(),
+                UpdateAssessmentRequest.builder()
+                        .startDate(testAssessment.getStartDate())
+                        .plannedEndDate(testAssessment.getPlannedEndDate())
+                        .build(),
+                "testuser");
+
+        verify(eventEmailSender, never()).send(any());
+    }
+
+    // ── announceNewAssessment ─────────────────────────────────────────────────
+
+    /**
+     * Upstream asserts the extension event still fires here, which was the whole point of
+     * announcing without notifying. This fork has no extension runtime, so the quiet path is
+     * genuinely quiet — worth pinning, because an email or a notification leaking out of it
+     * is exactly what the CSV import relies on not happening per row.
+     */
+    @Test
+    void announceNewAssessment_withoutNotify_doesNothing() {
+        Assessment assessment = Assessment.builder()
+                .id("a-1").name("Quiet").assessorIds(List.of("u-1"))
+                .engagementManagerId("u-2").build();
+
+        assessmentService.announceNewAssessment(assessment, false);
+
+        verifyNoInteractions(eventEmailSender);
+        verify(userRepository, never()).findById(any());
+    }
+
+    @Test
+    void announceNewAssessment_withNotify_notifiesAndEmails() {
+        Assessment assessment = Assessment.builder()
+                .id("a-2").name("Loud").assessorIds(List.of("u-1")).build();
+        when(userRepository.findById("u-1")).thenReturn(Optional.of(
+                User.builder().id("u-1").username("jane").build()));
+
+        assessmentService.announceNewAssessment(assessment, true);
+
+        verify(userRepository).findById("u-1");
+        verify(eventEmailSender).send(any());
     }
 }

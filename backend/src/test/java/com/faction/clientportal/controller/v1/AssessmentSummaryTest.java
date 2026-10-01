@@ -9,10 +9,13 @@ import com.faction.clientportal.model.Permission;
 import com.faction.clientportal.model.User;
 import com.faction.clientportal.repository.ApplicationRepository;
 import com.faction.clientportal.repository.AssessmentRepository;
+import com.faction.clientportal.repository.AssessmentWorkflowRepository;
 import com.faction.clientportal.repository.UserRepository;
 import com.faction.clientportal.security.RequiresPermissionAuthorizationManager;
 import com.faction.clientportal.service.AssessmentService;
 import com.faction.clientportal.service.JwtService;
+import com.faction.clientportal.testsupport.TestWorkflows;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,6 +55,7 @@ class AssessmentSummaryTest extends TestContainersConfig {
     @Autowired private AssessmentRepository assessmentRepository;
     @Autowired private ApplicationRepository applicationRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private AssessmentWorkflowRepository workflowRepository;
 
     private static final String ORG_A = "org-A";
     private static final String ORG_B = "org-B";
@@ -63,29 +67,101 @@ class AssessmentSummaryTest extends TestContainersConfig {
         userRepository.deleteAll();
     }
 
+    @AfterEach
+    void removeSecondWorkflow() {
+        workflowRepository.deleteById(TestWorkflows.SECOND_ID);
+    }
+
     // ── Rollup ────────────────────────────────────────────────────────────────
 
     @Test
     void summary_rollsUpActiveAndTotal() {
-        assessment(ORG_A, "app-1", "IN_PROGRESS", null);
-        assessment(ORG_A, "app-1", "SCHEDULED", null);
-        assessment(ORG_A, "app-1", "COMPLETED", null);
-        assessment(ORG_A, "app-1", "APPROVED", null);
-        assessment(ORG_A, "app-1", "ARCHIVED", null);
-        assessment(ORG_A, "app-1", "IN_PROGRESS", LocalDateTime.now()); // soft-deleted (excluded)
+        assessment(ORG_A, "app-1", "Testing", null);
+        assessment(ORG_A, "app-1", "Scheduling", null);
+        assessment(ORG_A, "app-1", "Completed", null);
+        assessment(ORG_A, "app-1", "Testing", LocalDateTime.now()); // soft-deleted (excluded)
 
         var s = assessmentService.assessmentSummary(superAdmin());
 
-        assertThat(s.getTotal()).isEqualTo(5L);  // all non-deleted
-        assertThat(s.getActive()).isEqualTo(2L); // IN_PROGRESS + SCHEDULED
+        assertThat(s.getTotal()).isEqualTo(3L);  // all non-deleted
+        assertThat(s.getActive()).isEqualTo(2L); // Testing + Scheduling
+    }
+
+    /**
+     * Per-type counts back the sidebar's assessment type menu, where each entry's badge must count
+     * exactly what that entry opens. They come from the same grouped rows as the overall figures —
+     * one more GROUP BY column, not another query — and mean the same thing: active, judged by each
+     * assessment's own workflow.
+     */
+    @Test
+    void summary_breaksTheActiveCountDownByAssessmentType() {
+        ofType("type-web", "Testing");
+        ofType("type-web", "Scheduling");
+        ofType("type-web", "Completed");   // finished: counted in total, not in the badge
+        ofType("type-mobile", "Testing");
+
+        var s = assessmentService.assessmentSummary(superAdmin());
+
+        assertThat(s.getActive()).isEqualTo(3L);
+        assertThat(s.getActiveByType())
+                .containsEntry("type-web", 2L)
+                .containsEntry("type-mobile", 1L);
+    }
+
+    /** A type whose assessments are all finished reports zero rather than going missing. */
+    @Test
+    void summary_reportsZeroForATypeWithNothingActive() {
+        ofType("type-web", "Completed");
+
+        assertThat(assessmentService.assessmentSummary(superAdmin()).getActiveByType())
+                .containsEntry("type-web", 0L);
+    }
+
+    /**
+     * The assigned tier reads through a native query rather than the JPQL the other scopes share,
+     * so it is the one that silently drifts when the grouped projection changes — and it is the
+     * tier an ordinary pentester falls into.
+     */
+    @Test
+    void summary_assignedScopedUser_countsAndBreaksDownOnlyTheirOwnAssessments() {
+        User pentester = user("assigned-user", ORG_A);
+        assignedTo(pentester.getId(), "type-web", "Testing");
+        assignedTo(pentester.getId(), "type-web", "Completed");
+        assignedTo("someone-else", "type-mobile", "Testing");
+
+        var s = assessmentService.assessmentSummary(
+                auth("assigned-user", Permission.ASSESSMENTS_READ_ASSIGNED.getPermission()));
+
+        assertThat(s.getTotal()).isEqualTo(2L);
+        assertThat(s.getActive()).isEqualTo(1L);
+        assertThat(s.getActiveByType())
+                .containsEntry("type-web", 1L)
+                .doesNotContainKey("type-mobile");
+    }
+
+    @Test
+    void summary_countsAnAssessmentAsActiveUntilItsOwnWorkflowsCompletedStatus() {
+        // Start from a fresh Default Workflow (the catalog recreates it) so no other test's edits leak in.
+        workflowRepository.deleteAll();
+        TestWorkflows.saveSecondWorkflow(workflowRepository);
+        onWorkflow("default", "Completed");                  // completed
+        onWorkflow("default", "Signed Off");                 // active: not Default Workflow's completed status
+        onWorkflow(TestWorkflows.SECOND_ID, "Signed Off");   // completed
+        onWorkflow(TestWorkflows.SECOND_ID, "Completed");    // active
+        onWorkflow("gone-workflow", "Completed");            // completed: unknown ids use Default Workflow
+
+        var s = assessmentService.assessmentSummary(superAdmin());
+
+        assertThat(s.getTotal()).isEqualTo(5L);
+        assertThat(s.getActive()).isEqualTo(2L);
     }
 
     // ── Scope ─────────────────────────────────────────────────────────────────
 
     @Test
     void summary_orgScopedUser_seesOnlyTheirOrg() {
-        assessment(ORG_A, "app-a", "IN_PROGRESS", null);
-        assessment(ORG_B, "app-b", "IN_PROGRESS", null);
+        assessment(ORG_A, "app-a", "Testing", null);
+        assessment(ORG_B, "app-b", "Testing", null);
         user("org-user", ORG_A);
 
         var s = assessmentService.assessmentSummary(
@@ -97,8 +173,8 @@ class AssessmentSummaryTest extends TestContainersConfig {
 
     @Test
     void summary_orgScopedUserWithNoResolvableOrg_failsClosed() {
-        assessment(ORG_A, "app-a", "IN_PROGRESS", null);
-        assessment(ORG_B, "app-b", "IN_PROGRESS", null);
+        assessment(ORG_A, "app-a", "Testing", null);
+        assessment(ORG_B, "app-b", "Testing", null);
         // "ghost" has no user record → resolveOrgId returns null; must see nothing, not everything.
 
         var s = assessmentService.assessmentSummary(
@@ -113,8 +189,8 @@ class AssessmentSummaryTest extends TestContainersConfig {
         var u = user("owned-user", ORG_A);
         var appX = ownedApp(ORG_A, "Owned App X", u.getId()).getId();
         var appY = application(ORG_A, "Unowned App Y").getId();
-        assessment(ORG_A, appX, "IN_PROGRESS", null);
-        assessment(ORG_A, appY, "IN_PROGRESS", null);
+        assessment(ORG_A, appX, "Testing", null);
+        assessment(ORG_A, appY, "Testing", null);
 
         var s = assessmentService.assessmentSummary(
                 auth("owned-user", Permission.ASSESSMENTS_READ_OWNED.getPermission()));
@@ -125,8 +201,8 @@ class AssessmentSummaryTest extends TestContainersConfig {
 
     @Test
     void summary_readAll_isUnrestricted() {
-        assessment(ORG_A, "app-a", "IN_PROGRESS", null);
-        assessment(ORG_B, "app-b", "IN_PROGRESS", null);
+        assessment(ORG_A, "app-a", "Testing", null);
+        assessment(ORG_B, "app-b", "Testing", null);
 
         assertThat(assessmentService.assessmentSummary(
                 auth("all-user", Permission.ASSESSMENTS_READ_ALL.getPermission())).getTotal()).isEqualTo(2L);
@@ -136,8 +212,8 @@ class AssessmentSummaryTest extends TestContainersConfig {
     void summary_teamScopedUser_countsOnlyTheirTeamsAssessments() {
         // :read:team used to be unrestricted (the tier wasn't enforced anywhere). It now counts
         // only the caller's teams — and a user in no team counts nothing rather than everything.
-        assessment(ORG_A, "app-a", "IN_PROGRESS", null);
-        assessment(ORG_B, "app-b", "IN_PROGRESS", null);
+        assessment(ORG_A, "app-a", "Testing", null);
+        assessment(ORG_B, "app-b", "Testing", null);
         user("team-user", ORG_A);
 
         assertThat(assessmentService.assessmentSummary(
@@ -185,6 +261,41 @@ class AssessmentSummaryTest extends TestContainersConfig {
                 .organizationId(orgId)
                 .status(status)
                 .deletedAt(deletedAt)
+                .createdAt(LocalDateTime.now())
+                .build());
+    }
+
+    private void ofType(String assessmentTypeId, String status) {
+        assessmentRepository.save(Assessment.builder()
+                .name("Typed " + assessmentTypeId + "-" + System.nanoTime())
+                .applicationId("app-1")
+                .assessmentTypeId(assessmentTypeId)
+                .organizationId(ORG_A)
+                .status(status)
+                .createdAt(LocalDateTime.now())
+                .build());
+    }
+
+    private void assignedTo(String assessorId, String assessmentTypeId, String status) {
+        assessmentRepository.save(Assessment.builder()
+                .name("Assigned " + assessorId + "-" + System.nanoTime())
+                .applicationId("app-1")
+                .assessmentTypeId(assessmentTypeId)
+                .organizationId(ORG_A)
+                .assessorIds(List.of(assessorId))
+                .status(status)
+                .createdAt(LocalDateTime.now())
+                .build());
+    }
+
+    private void onWorkflow(String workflowId, String status) {
+        assessmentRepository.save(Assessment.builder()
+                .name("Workflow " + workflowId + "-" + System.nanoTime())
+                .applicationId("app-1")
+                .assessmentTypeId("type-1")
+                .organizationId(ORG_A)
+                .workflowId(workflowId)
+                .status(status)
                 .createdAt(LocalDateTime.now())
                 .build());
     }

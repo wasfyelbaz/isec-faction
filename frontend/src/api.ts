@@ -1,10 +1,23 @@
 import axios from 'axios';
 
-import type { MentionableUser, AssessorAvailability, RetestCompletionLog, RetestActivitySummary, LoginRequest, LoginResponse, User, Role, ResourcePermissions, ApiResponse, PagedApiResponse, CreateUserRequest, UpdateUserRequest, Team, CreateTeamRequest, UpdateTeamRequest, CreateRoleRequest, UpdateRoleRequest, ApiKey, CreateApiKeyRequest, CreateApiKeyResponse, AssessmentType, CreateAssessmentTypeRequest, UpdateAssessmentTypeRequest, Organization, CreateOrganizationRequest, UpdateOrganizationRequest, Application, ApplicationStatus, ApplicationComment, ApplicationImportResult, CreateApplicationRequest, UpdateApplicationRequest, ApplicationConnection, CreateApplicationConnectionRequest, UpdateApplicationConnectionRequest, ReportTemplate, ReportTemplateSummary, CreateReportTemplateRequest, UpdateReportTemplateRequest, Assessment, CreateAssessmentRequest, UpdateAssessmentRequest, AssessmentMetrics, VulnerabilityCategory, CreateVulnerabilityCategoryRequest, UpdateVulnerabilityCategoryRequest, DefaultVulnerability, CreateDefaultVulnerabilityRequest, UpdateDefaultVulnerabilityRequest, DefaultVulnerabilityImportResult, UserDefinedField, Vulnerability, VulnerabilityListItem, VulnerabilityComment, CreateVulnerabilityRequest, UpdateVulnerabilityRequest, UpdateVulnerabilityExceptionRequest, AssessmentFile, EntityFieldConfig, FieldScope, PeerReview, UpdatePeerReviewRequest, AcceptPeerReviewRequest, AssessmentWorkflowConfig, ChecklistTemplate, CreateChecklistTemplateRequest, UpdateChecklistTemplateRequest, AssessmentChecklist, AddAssessmentChecklistRequest, UpdateAssessmentChecklistRequest, AssignedUser, AssignUserRequest, UserApplicationAssignment, SsoConfig, SsoStatus, AzureDirectoryUser, NotebookNode, NotebookSearchResult, CreateNotebookNodeRequest, UpdateNotebookNodeRequest, MoveNotebookNodeRequest, NotebookAttachment, Retest, CreateRetestRequest, UpdateRetestRequest, CompleteRetestRequest, EmailConfig, UpdateEmailConfigRequest, TestEmailRequest, TestEmailResponse, InboundEmailConfig, UpdateInboundEmailConfigRequest, Branding, BrandingAssetSlot, UpdateBrandingSizesRequest, EmailNotificationConfig, UpdateEmailNotificationConfigRequest, NotificationPreference, UpdateNotificationPreferencesRequest, AiProviderConfig, SaveAiProviderConfigRequest, TestAiProviderRequest, TestAiProviderResponse, AiPromptTemplate, SaveAiPromptTemplateRequest, AiPromptSummary, AiPromptScope, ExecuteAiPromptRequest, AskAiRequest, AiGenerationResponse, SuggestAiTitleRequest, WebSearchConfig, UpdateWebSearchConfigRequest, AiAnonymizationConfig, UpdateAiAnonymizationConfigRequest, AiLogConfig, UpdateAiLogConfigRequest, AiRequestLog, AiTokenUsageDay, Notification, NotificationTargetType, SurveyTemplate, CreateSurveyTemplateRequest, UpdateSurveyTemplateRequest, AssessmentSurvey, AddAssessmentSurveyRequest, UpdateAssessmentSurveyRequest, ApplicationIdConfig, ReportDocuments, Campaign, CreateCampaignRequest, UpdateCampaignRequest, ManagerDashboardSummary, ManagerDashboardStats, ManagerDashboardAssessment, ManagerDashboardVulnerability, ManagerDashboardVulnerabilityDetail, ManagerDashboardFilters, VulnerabilityTrendSummary, RemediationQueueRow, RemediationQueueSummary, AssignableUser, SubOrganization, SubOrganizationRequest, VulnerabilityStageCompletion, EditionStatus, UpgradeRequired, ContentTemplate, ContentTemplateScope, SaveContentTemplateRequest,
+import type { MentionableUser, AssessorAvailability, RetestCompletionLog, RetestActivitySummary, LoginRequest, LoginResponse, User, Role, ResourcePermissions, ApiResponse, PagedApiResponse, CreateUserRequest, UpdateUserRequest, Team, CreateTeamRequest, UpdateTeamRequest, CreateRoleRequest, UpdateRoleRequest, ApiKey, CreateApiKeyRequest, CreateApiKeyResponse, AssessmentType, CreateAssessmentTypeRequest, UpdateAssessmentTypeRequest, Organization, CreateOrganizationRequest, UpdateOrganizationRequest, Application, ApplicationStatus, ApplicationComment, ApplicationImportResult, CreateApplicationRequest, UpdateApplicationRequest, ApplicationConnection, CreateApplicationConnectionRequest, UpdateApplicationConnectionRequest, ReportTemplate, ReportTemplateSummary, CreateReportTemplateRequest, UpdateReportTemplateRequest, Assessment, CreateAssessmentRequest, UpdateAssessmentRequest, AssessmentMetrics, VulnerabilityCategory, CreateVulnerabilityCategoryRequest, UpdateVulnerabilityCategoryRequest, DefaultVulnerability, CreateDefaultVulnerabilityRequest, UpdateDefaultVulnerabilityRequest, DefaultVulnerabilityImportResult, UserDefinedField, Vulnerability, VulnerabilityListItem, VulnerabilityComment, CreateVulnerabilityRequest, UpdateVulnerabilityRequest, UpdateVulnerabilityExceptionRequest, AssessmentFile, EntityFieldConfig, FieldScope, PeerReview, UpdatePeerReviewRequest, AcceptPeerReviewRequest, AssessmentWorkflowConfig, ChecklistTemplate, CreateChecklistTemplateRequest, UpdateChecklistTemplateRequest, AssessmentChecklist, AddAssessmentChecklistRequest, UpdateAssessmentChecklistRequest, AssignedUser, AssignUserRequest, UserApplicationAssignment, SsoConfig, SsoStatus, AzureDirectoryUser, NotebookNode, NotebookSearchResult, CreateNotebookNodeRequest, UpdateNotebookNodeRequest, MoveNotebookNodeRequest, NotebookAttachment, Retest, CreateRetestRequest, UpdateRetestRequest, CompleteRetestRequest, EmailConfig, UpdateEmailConfigRequest, TestEmailRequest, TestEmailResponse, InboundEmailConfig, UpdateInboundEmailConfigRequest, Branding, BrandingAssetSlot, UpdateBrandingSizesRequest, EmailNotificationConfig, UpdateEmailNotificationConfigRequest, NotificationPreference, UpdateNotificationPreferencesRequest, AiProviderConfig, SaveAiProviderConfigRequest, TestAiProviderRequest, TestAiProviderResponse, AiPromptTemplate, SaveAiPromptTemplateRequest, AiPromptSummary, AiPromptScope, ExecuteAiPromptRequest, AskAiRequest, AiGenerationResponse, SuggestAiTitleRequest, WebSearchConfig, UpdateWebSearchConfigRequest, AiAnonymizationConfig, UpdateAiAnonymizationConfigRequest, AiLogConfig, UpdateAiLogConfigRequest, AiRequestLog, AiTokenUsageDay, McpServerConfig, McpStatus, McpToolCallLog, Notification, NotificationTargetType, SurveyTemplate, CreateSurveyTemplateRequest, UpdateSurveyTemplateRequest, AssessmentSurvey, AddAssessmentSurveyRequest, UpdateAssessmentSurveyRequest, ApplicationIdConfig, ReportDocuments, Campaign, CreateCampaignRequest, UpdateCampaignRequest, AssessmentImportPreview, AssessmentImportResult, ManagerDashboardSummary, ManagerDashboardStats, ManagerDashboardAssessment, ManagerDashboardVulnerability, ManagerDashboardVulnerabilityDetail, ManagerDashboardFilters, VulnerabilityTrendSummary, RemediationQueueRow, RemediationQueueSummary, AssignableUser, SubOrganization, SubOrganizationRequest, VulnerabilityStageCompletion, EditionStatus, UpgradeRequired, ContentTemplate, ContentTemplateScope, SaveContentTemplateRequest,
   PasswordPolicy,
   TerminologyConfig,
   ClientImage,
   ReportFont,
+  Workflow,
+  WorkflowUsage,
+  CreateWorkflowRequest,
+  UpdateWorkflowRequest,
+  WorkflowMovePreview,
+  HolidayRegion,
+  TimeOffEntry,
+  UserAvailability,
+  ScheduleBlock,
+  ScheduleBlockRequest,
+  RegionHolidays,
+  Unavailability,
+  HolidayEntry,
 } from './types';
 
 const api = axios.create({
@@ -478,12 +491,15 @@ export const managerDashboardApi = {
   },
 
   searchAssessments: async (
-    filters: ManagerDashboardFilters, page = 0, size = 25, sort = 'startDate,desc'
+    filters: ManagerDashboardFilters, page = 0, size = 25, sort?: string
   ): Promise<PagedApiResponse<ManagerDashboardAssessment[]>> => {
     const params = managerDashboardParams(filters);
     params.append('page', page.toString());
     params.append('size', size.toString());
-    params.append('sort', sort);
+    // No sort means the endpoint's own default, newest first. Defaulting to a start-date sort
+    // here sank every assessment without a start date — most of them — below the few that have
+    // one, so work finished yesterday sat pages behind assessments years old.
+    if (sort) params.append('sort', sort);
     const response = await api.get<PagedApiResponse<ManagerDashboardAssessment[]>>(
       `/manager-dashboard/assessments?${params.toString()}`);
     return response.data;
@@ -972,6 +988,31 @@ export const assessmentsApi = {
     return response.data;
   },
 
+  /** The CSV layout the assessment import accepts, with an example row. */
+  importTemplate: async (): Promise<Blob> => {
+    const response = await api.get('/assessments/import/template', { responseType: 'blob' });
+    return response.data;
+  },
+
+  /** Dry run of an assessment CSV import — writes nothing. */
+  previewImport: async (file: File): Promise<ApiResponse<AssessmentImportPreview>> => {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await api.post<ApiResponse<AssessmentImportPreview>>(
+      '/assessments/import/preview', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return response.data;
+  },
+
+  /** All-or-nothing import. A 400 whose data is a preview means rows had errors. */
+  importCsv: async (file: File, notifyStakeholders: boolean): Promise<ApiResponse<AssessmentImportResult>> => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('notifyStakeholders', String(notifyStakeholders));
+    const response = await api.post<ApiResponse<AssessmentImportResult>>(
+      '/assessments/import', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return response.data;
+  },
+
   update: async (id: string, assessment: UpdateAssessmentRequest): Promise<ApiResponse<Assessment>> => {
     const response = await api.put<ApiResponse<Assessment>>(`/assessments/${id}`, assessment);
     return response.data;
@@ -979,6 +1020,18 @@ export const assessmentsApi = {
 
   updateStatus: async (id: string, status: string): Promise<ApiResponse<Assessment>> => {
     const response = await api.put<ApiResponse<Assessment>>(`/assessments/${id}`, { status });
+    return response.data;
+  },
+
+  /**
+   * Moves the assessment and its findings to another workflow. With `dryRun` nothing is written and the
+   * result previews what would change. Needs config:write.
+   */
+  moveWorkflow: async (id: string, workflowId: string, dryRun: boolean): Promise<ApiResponse<WorkflowMovePreview>> => {
+    const response = await api.post<ApiResponse<WorkflowMovePreview>>(
+      `/assessments/${id}/move-workflow`,
+      { workflowId, dryRun }
+    );
     return response.data;
   },
 
@@ -995,9 +1048,11 @@ export const assessmentsApi = {
     return response.data;
   },
 
-  getMetrics: async (organizationId?: string): Promise<ApiResponse<AssessmentMetrics>> => {
+  getMetrics: async (organizationId?: string, assessmentTypeIds?: string[]): Promise<ApiResponse<AssessmentMetrics>> => {
     const params: Record<string, string> = {};
     if (organizationId) params.organizationId = organizationId;
+    // Comma-joined, as the list endpoint takes a multi-select. Omitted when empty: no types counts every type.
+    if (assessmentTypeIds && assessmentTypeIds.length > 0) params.assessmentTypeIds = assessmentTypeIds.join(',');
     const response = await api.get<ApiResponse<AssessmentMetrics>>('/assessments/metrics', { params });
     return response.data;
   },
@@ -1059,6 +1114,7 @@ export const assessmentsApi = {
     completedDateTo?: string;
     pastDue?: boolean;
     showCompleted?: boolean;
+    onlyCompleted?: boolean;
     assignedToMe?: boolean;
     status?: string;
     /** Multi-select status filter; ORed with each other, ANDed with the rest. */
@@ -1088,6 +1144,7 @@ export const assessmentsApi = {
     if (filters.completedDateTo) params.completedDateTo = filters.completedDateTo;
     if (filters.pastDue !== undefined) params.pastDue = filters.pastDue;
     if (filters.showCompleted !== undefined) params.showCompleted = filters.showCompleted;
+    if (filters.onlyCompleted !== undefined) params.onlyCompleted = filters.onlyCompleted;
     if (filters.assignedToMe !== undefined) params.assignedToMe = filters.assignedToMe;
     if (filters.status) params.status = filters.status;
     // Comma-joined so Spring binds it to List<String> statuses.
@@ -1595,6 +1652,49 @@ export const workflowConfigApi = {
   },
 };
 
+/** Assessment workflows. Reads need a signed-in user; usage and every write need config:write. */
+export const workflowsApi = {
+  list: async (includeArchived = false): Promise<ApiResponse<Workflow[]>> => {
+    const response = await api.get<ApiResponse<Workflow[]>>('/workflows', { params: { includeArchived } });
+    return response.data;
+  },
+
+  usage: async (): Promise<ApiResponse<WorkflowUsage[]>> => {
+    const response = await api.get<ApiResponse<WorkflowUsage[]>>('/workflows/usage');
+    return response.data;
+  },
+
+  get: async (id: string): Promise<ApiResponse<Workflow>> => {
+    const response = await api.get<ApiResponse<Workflow>>(`/workflows/${encodeURIComponent(id)}`);
+    return response.data;
+  },
+
+  create: async (request: CreateWorkflowRequest): Promise<ApiResponse<Workflow>> => {
+    const response = await api.post<ApiResponse<Workflow>>('/workflows', request);
+    return response.data;
+  },
+
+  update: async (id: string, request: UpdateWorkflowRequest): Promise<ApiResponse<Workflow>> => {
+    const response = await api.put<ApiResponse<Workflow>>(`/workflows/${encodeURIComponent(id)}`, request);
+    return response.data;
+  },
+
+  archive: async (id: string): Promise<ApiResponse<Workflow>> => {
+    const response = await api.post<ApiResponse<Workflow>>(`/workflows/${encodeURIComponent(id)}/archive`);
+    return response.data;
+  },
+
+  unarchive: async (id: string): Promise<ApiResponse<Workflow>> => {
+    const response = await api.post<ApiResponse<Workflow>>(`/workflows/${encodeURIComponent(id)}/unarchive`);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await api.delete<ApiResponse<void>>(`/workflows/${encodeURIComponent(id)}`);
+    return response.data;
+  },
+};
+
 export const reportsApi = {
   generate: async (assessmentId: string): Promise<ApiResponse<void>> => {
     const response = await api.post<ApiResponse<void>>(`/reports/${assessmentId}/generate`);
@@ -1819,6 +1919,17 @@ export const queueCountsApi = {
   activeAssessments: (): Promise<number> =>
     api.get('/assessments/summary')
       .then(r => (r.data?.data?.active as number | undefined) ?? 0),
+
+  /**
+   * The same summary, keeping the per-type breakdown as well: one call serves the Your Assessments
+   * badge and every assessment type's badge, because the server derives both from one grouped
+   * query. Scoped to the caller like the overall count, so each badge matches the page it opens.
+   */
+  assessmentSummary: (): Promise<{ active: number; activeByType: Record<string, number> }> =>
+    api.get('/assessments/summary').then(r => ({
+      active: (r.data?.data?.active as number | undefined) ?? 0,
+      activeByType: (r.data?.data?.activeByType as Record<string, number> | undefined) ?? {},
+    })),
 
   peerReviewQueue: (): Promise<number> =>
     api.get('/peer-reviews/queue', { params: { page: 0, size: 1 } })
@@ -2046,6 +2157,13 @@ export const inboundEmailConfigApi = {
     api.post<ApiResponse<TestEmailResponse>>('/admin/inbound-email-config/test').then(r => r.data),
 };
 
+export const mcpApi = {
+  getConfig: () => api.get<ApiResponse<McpServerConfig>>('/admin/mcp-config').then(r => r.data),
+  updateConfig: (data: { enabled?: boolean }) =>
+    api.put<ApiResponse<McpServerConfig>>('/admin/mcp-config', data).then(r => r.data),
+  getStatus: () => api.get<ApiResponse<McpStatus>>('/mcp/status').then(r => r.data),
+};
+
 export const aiConfigApi = {
   getProviders: () =>
     api.get<ApiResponse<AiProviderConfig[]>>('/admin/ai-config').then(r => r.data),
@@ -2115,6 +2233,16 @@ export const auditLogsApi = {
 
   getAiLog: (id: string) =>
     api.get<ApiResponse<AiRequestLog>>(`/admin/logs/ai/${id}`).then(r => r.data),
+
+  getMcpLogs: (page: number, size: number,
+               filters: { username?: string; toolName?: string; success?: boolean } = {}, sort?: string) => {
+    const params = new URLSearchParams({ page: String(page), size: String(size) });
+    if (filters.username) params.set('username', filters.username);
+    if (filters.toolName) params.set('toolName', filters.toolName);
+    if (filters.success !== undefined) params.set('success', String(filters.success));
+    if (sort) params.set('sort', sort);
+    return api.get<PagedApiResponse<McpToolCallLog[]>>(`/admin/logs/mcp?${params.toString()}`).then(r => r.data);
+  },
 
   /** Retests verified in a window — `from`/`to` are ISO dates, inclusive. */
   getRetestLog: (params: {
@@ -2246,4 +2374,31 @@ export const statusApi = {
     const response = await api.get<ServiceStatus>('/status');
     return response.data;
   },
+};
+
+export const availabilityApi = {
+  me: () => api.get<ApiResponse<UserAvailability>>('/availability/me').then(r => r.data),
+  setMyRegion: (region: string | null) => api.put<ApiResponse<UserAvailability>>('/availability/me/region', { region }).then(r => r.data),
+  addMyTimeOff: (b: { startDate: string; endDate: string; note?: string }) => api.post<ApiResponse<TimeOffEntry>>('/availability/me/time-off', b).then(r => r.data),
+  updateMyTimeOff: (id: string, b: { startDate: string; endDate: string; note?: string }) => api.put<ApiResponse<TimeOffEntry>>(`/availability/me/time-off/${id}`, b).then(r => r.data),
+  deleteMyTimeOff: (id: string) => api.delete<ApiResponse<void>>(`/availability/me/time-off/${id}`).then(r => r.data),
+  user: (userId: string) => api.get<ApiResponse<UserAvailability>>(`/availability/users/${userId}`).then(r => r.data),
+  setUserRegion: (userId: string, region: string | null) => api.put<ApiResponse<UserAvailability>>(`/availability/users/${userId}/region`, { region }).then(r => r.data),
+  addUserTimeOff: (userId: string, b: { startDate: string; endDate: string; note?: string }) => api.post<ApiResponse<TimeOffEntry>>(`/availability/users/${userId}/time-off`, b).then(r => r.data),
+  updateUserTimeOff: (userId: string, id: string, b: { startDate: string; endDate: string; note?: string }) => api.put<ApiResponse<TimeOffEntry>>(`/availability/users/${userId}/time-off/${id}`, b).then(r => r.data),
+  deleteUserTimeOff: (userId: string, id: string) => api.delete<ApiResponse<void>>(`/availability/users/${userId}/time-off/${id}`).then(r => r.data),
+  regions: () => api.get<ApiResponse<HolidayRegion[]>>('/availability/regions').then(r => r.data),
+  blocks: () => api.get<ApiResponse<ScheduleBlock[]>>('/availability/blocks').then(r => r.data),
+  createBlock: (b: ScheduleBlockRequest) => api.post<ApiResponse<ScheduleBlock>>('/availability/blocks', b).then(r => r.data),
+  updateBlock: (id: string, b: ScheduleBlockRequest) => api.put<ApiResponse<ScheduleBlock>>(`/availability/blocks/${id}`, b).then(r => r.data),
+  deleteBlock: (id: string) => api.delete<ApiResponse<void>>(`/availability/blocks/${id}`).then(r => r.data),
+  calendar: (start: string, end: string) => api.get<ApiResponse<Unavailability[]>>('/availability/calendar', { params: { start, end } }).then(r => r.data),
+  orgCalendar: (start: string, end: string) => api.get<ApiResponse<HolidayEntry[]>>('/availability/org-calendar', { params: { start, end } }).then(r => r.data),
+  config: () => api.get<ApiResponse<{ defaultHolidayRegion: string | null }>>('/availability/config').then(r => r.data),
+  setConfig: (defaultHolidayRegion: string | null) => api.put<ApiResponse<{ defaultHolidayRegion: string | null }>>('/availability/config', { defaultHolidayRegion }).then(r => r.data),
+  regionHolidays: (region: string, year: number) => api.get<ApiResponse<RegionHolidays>>('/availability/regions/holidays', { params: { region, year } }).then(r => r.data),
+  disableHoliday: (region: string, holidayKey: string) => api.post<ApiResponse<unknown>>('/availability/regions/overrides', { region, kind: 'DISABLED', holidayKey }).then(r => r.data),
+  enableHoliday: (region: string, holidayKey: string) => api.delete<ApiResponse<void>>('/availability/regions/overrides', { params: { region, holidayKey } }).then(r => r.data),
+  addCompanyDay: (region: string, startDate: string, endDate: string, name: string) => api.post<ApiResponse<unknown>>('/availability/regions/overrides', { region, kind: 'ADDED', date: startDate, endDate, name }).then(r => r.data),
+  removeCompanyDay: (id: string) => api.delete<ApiResponse<void>>(`/availability/regions/overrides/${id}`).then(r => r.data),
 };

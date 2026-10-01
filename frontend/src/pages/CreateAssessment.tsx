@@ -10,7 +10,6 @@ import {
   teamsApi,
   campaignsApi,
   inlineImagesApi,
-  workflowConfigApi,
   surveyTemplatesApi,
   assessmentSurveysApi,
   uploadFileContent,
@@ -20,20 +19,32 @@ import type {
   AssessmentType,
   AssessorAvailability,
   AssessmentFile,
-  AssessmentWorkflowConfig,
   Campaign,
   Team,
   User,
   SurveyTemplate,
   AssessmentSurvey,
+  UserDefinedField,
+  Application,
+  AssessmentPrefill,
 } from '../types';
 import { Button, FormLabel, Input, Select, Badge, RichTextEditor, DualListBox, ConfirmDialog } from '../components';
 import SearchableApplicationSelect from '../components/SearchableApplicationSelect';
 import type { RichTextEditorRef } from '../components';
 import AssessmentCalendar from '../components/AssessmentCalendar';
 import SurveyDrawer from '../components/SurveyDrawer';
+import CreateAssessmentVariables from './CreateAssessmentVariables';
+import { AssessmentPrefillAction } from '@enterprise';
 import Page from '../components/Page';
 import { usePageTitle } from '../context/PageTitleContext';
+import { PaidBadge } from '../components/PaidFeature';
+import { useEdition } from '../context/EditionContext';
+import { DEFAULT_WORKFLOW_ID, useWorkflow } from '../hooks/useWorkflow';
+import { useWorkflowsContext } from '../context/WorkflowsContext';
+import { AvailabilityBadge } from '../components/AvailabilityBadge';
+import { findUnavailability, UnavailabilityList } from '../components/UnavailabilityWarning';
+import { isSchedulableDate } from '../utils/unavailability';
+import type { Unavailability } from '../types';
 import './CreateAssessment.css';
 
 // Planned end date is picked as a duration from the start date; "custom" falls back to a
@@ -120,6 +131,19 @@ function inferDuration(start: string, end: string): string {
     : CUSTOM_DURATION;
 }
 
+/** An assessment's variable values re-keyed from field id to variable name. */
+function variableValuesByName(
+  fields: UserDefinedField[] | undefined,
+  values: Record<string, string> | undefined
+): Record<string, string> {
+  const byName: Record<string, string> = {};
+  for (const field of fields || []) {
+    const value = values?.[field.id];
+    if (value) byName[field.variableName] = value;
+  }
+  return byName;
+}
+
 function getEmptyFormData() {
   return {
     name: '',
@@ -128,7 +152,8 @@ function getEmptyFormData() {
     campaignId: '',
     reportTemplateId: '',
     teamId: '',
-    status: 'DRAFT',
+    // Filled from the workflow's newAssessmentStatus once the config loads (create mode).
+    status: '',
     startDate: '',
     plannedEndDate: '',
     engagementManagerId: '',
@@ -156,12 +181,19 @@ export default function CreateAssessment() {
 
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(!!id);
-  const [workflowConfig, setWorkflowConfig] = useState<AssessmentWorkflowConfig | null>(null);
+  // Edit mode: the workflow the assessment is on. Create mode uses the selected type's workflow instead.
+  const [assessmentWorkflowId, setAssessmentWorkflowId] = useState<string | null>(null);
+  // Edit mode, type changed to one on another workflow: move the assessment there too when saving.
+  const customWorkflows = useEdition().hasFeature('custom_workflows');
   const [error, setError] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [unavailableWarning, setUnavailableWarning] = useState<{ entries: Unavailability[]; shouldClose: boolean } | null>(null);
+  // True only for the pre-save availability round trip — folded into the Save buttons'
+  // disabled state so a rapid double-click can't fire two saves while it's in flight.
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [initialFormData, setInitialFormData] = useState<string>('');
   const [initialUrls, setInitialUrls] = useState<string>('');
   const [initialStakeholders, setInitialStakeholders] = useState<string>('');
@@ -220,11 +252,64 @@ export default function CreateAssessment() {
   // edit mode overwrites this from the saved dates once the assessment loads.
   const [duration, setDuration] = useState<string>(DEFAULT_DURATION);
 
+  // Statuses come from the workflow the assessment is on (edit), or the one it will be created under:
+  // the selected type's workflow, or Default Workflow until a type is chosen (create).
+  //
+  // Every workflow, already loaded for the whole app. Create mode reads the selected type's from
+  // here, and a pre-fill resolves the workflow of the type it is about to select from here too —
+  // neither can wait for a fetch that only starts once the selection has already been made.
+  const { workflows } = useWorkflowsContext();
+  const selectedType = assessmentTypes.find((t) => t.id === formData.assessmentTypeId);
+  const typeWorkflowId = selectedType ? (selectedType.workflowId || DEFAULT_WORKFLOW_ID) : null;
+  // Edit mode fetches the assessment's own workflow. Create mode takes the selected type's from the
+  // set already loaded for the whole app, rather than fetching it: useWorkflow keeps the previous
+  // workflow in place until the next one arrives, and in that gap an effect would judge a just-set
+  // status against the outgoing type's statuses and reset it.
+  const fetchedWorkflow = useWorkflow(mode === 'create' ? null : assessmentWorkflowId);
+  const workflow = mode === 'create'
+    ? (workflows.find((w) => w.id === (typeWorkflowId ?? DEFAULT_WORKFLOW_ID)) ?? null)
+    : fetchedWorkflow;
+  // Edit mode: the chosen type is on another workflow, so saving can also move the assessment there.
+  const moveTargetId = mode === 'edit' && typeWorkflowId && assessmentWorkflowId && typeWorkflowId !== assessmentWorkflowId
+    ? typeWorkflowId
+    : null;
+  const moveTarget = useWorkflow(moveTargetId);
+  const moveGated = !!moveTargetId && !customWorkflows && moveTargetId !== DEFAULT_WORKFLOW_ID;
+
+  // A new assessment starts in its workflow's New status. That replaces a blank status, or one the
+  // workflow doesn't have because the type changed to another workflow. A status already chosen or
+  // pre-filled from this workflow is kept. Keying on formData.status re-applies it after Clear Form.
+  useEffect(() => {
+    if (mode !== 'create' || !workflow?.newAssessmentStatus) return;
+    const initialStatus = workflow.newAssessmentStatus;
+    const statuses = workflow.statuses;
+    setFormData((prev) => (prev.status && statuses.includes(prev.status) ? prev : { ...prev, status: initialStatus }));
+  }, [mode, workflow, formData.status]);
+
   const [engagementUrls, setEngagementUrls] = useState<Array<{ url: string; description: string }>>([]);
   const [newUrl, setNewUrl] = useState({ url: '', description: '' });
 
   const [stakeholders, setStakeholders] = useState<Array<{ name: string; email: string; role?: string }>>([]);
   const [newStakeholder, setNewStakeholder] = useState({ name: '', email: '', role: '' });
+
+  // Assessment variables, keyed by variable name rather than field id: the id differs between
+  // templates (and between a template and an assessment's snapshot of it) while the name does
+  // not, so values carry across from a previous assessment. Ids come back in at save time.
+  const [variableFields, setVariableFields] = useState<UserDefinedField[]>([]);
+  const [variableValues, setVariableValues] = useState<Record<string, string>>({});
+  // Edit mode: the assessment's own field snapshot, the template it came from, and the values
+  // as loaded — the update endpoint validates against that snapshot, not the live template.
+  const [savedVariableFields, setSavedVariableFields] = useState<UserDefinedField[]>([]);
+  const [savedTemplateId, setSavedTemplateId] = useState('');
+  const [initialVariableValues, setInitialVariableValues] = useState<Record<string, string>>({});
+  // Which template variableFields was loaded from — until it matches the selection, a pre-filled
+  // variable can't yet be told apart from one the template doesn't offer.
+  const [loadedFieldsTemplateId, setLoadedFieldsTemplateId] = useState('');
+
+  // A pre-fill from an outside source (see applyPrefill): what it couldn't place, and the
+  // variables it brought, by display name, waiting for the template's fields to load.
+  const [prefillNotes, setPrefillNotes] = useState<string[]>([]);
+  const [pendingPrefillVariables, setPendingPrefillVariables] = useState<Record<string, string>>({});
 
   // Calendar preview assessment
   const calendarPreview: Assessment | null = formData.name && formData.startDate && formData.plannedEndDate
@@ -240,6 +325,7 @@ export default function CreateAssessment() {
         fieldDefinitions: [],
         fieldValues: {},
         status: formData.status,
+        completed: false,
         startDate: toApiDate(formData.startDate),
         plannedEndDate: toApiDate(formData.plannedEndDate),
         assessorIds: formData.assessorIds,
@@ -279,9 +365,6 @@ export default function CreateAssessment() {
         .then(r => { if (r.success && r.data) setAssessmentSurveys(r.data); })
         .catch(() => {});
     }
-    workflowConfigApi.getConfig()
-      .then(r => { if (r.success && r.data) setWorkflowConfig(r.data); })
-      .catch(() => {});
     if (!id) {
       assessmentsApi.getAll(0, 1000)
         .then(r => { if (r.success && r.data) setAllPreviousAssessments(r.data); })
@@ -305,6 +388,219 @@ export default function CreateAssessment() {
       loadReportTemplates(formData.assessmentTypeId);
     }
   }, [formData.assessmentTypeId]);
+
+  // The selected template's variables that are ticked "Show in Scheduling". Edit mode shows the
+  // assessment's own snapshot while the template is unchanged; a template being switched has no
+  // variables on the assessment yet. Only these are ever saved from this form, so a carried-forward
+  // value for a hidden variable never reaches the new assessment.
+  useEffect(() => {
+    const templateId = formData.reportTemplateId;
+    if (mode === 'edit') {
+      setVariableFields(templateId === savedTemplateId
+        ? savedVariableFields.filter((f) => f.showInScheduling)
+        : []);
+      return;
+    }
+    if (!templateId) {
+      setVariableFields([]);
+      return;
+    }
+    let cancelled = false;
+    reportTemplatesApi.getById(templateId)
+      .then((res) => {
+        if (cancelled || !res.success || !res.data) return;
+        setVariableFields((res.data.userDefinedFields || [])
+          .filter((f) => (!f.fieldScope || f.fieldScope === 'ASSESSMENT') && f.showInScheduling));
+        setLoadedFieldsTemplateId(templateId);
+      })
+      .catch(() => { if (!cancelled) setVariableFields([]); });
+    return () => { cancelled = true; };
+  }, [formData.reportTemplateId, mode, savedTemplateId, savedVariableFields]);
+
+  // Pre-filled variables arrive by display name, possibly before the selected template's fields
+  // have loaded. Apply them once those fields are known; what the template doesn't offer is noted.
+  useEffect(() => {
+    const pending = Object.entries(pendingPrefillVariables);
+    if (pending.length === 0 || !formData.reportTemplateId
+        || loadedFieldsTemplateId !== formData.reportTemplateId) return;
+    const byDisplayName = new Map(variableFields.map((f) => [f.displayName.trim().toLowerCase(), f]));
+    const applied: Record<string, string> = {};
+    const missing: string[] = [];
+    for (const [displayName, value] of pending) {
+      const field = byDisplayName.get(displayName.trim().toLowerCase());
+      if (field) applied[field.variableName] = value;
+      else missing.push(displayName);
+    }
+    setVariableValues((prev) => ({ ...prev, ...applied }));
+    setPendingPrefillVariables({});
+    if (missing.length > 0) {
+      setPrefillNotes((prev) => [...prev, ...missing.map((name) =>
+        `"${name}" isn't shown in scheduling on this template — tick Show in Scheduling on it in the Report Designer.`)]);
+    }
+  }, [pendingPrefillVariables, variableFields, loadedFieldsTemplateId, formData.reportTemplateId]);
+
+  const variablesHint =
+    mode === 'edit' && formData.reportTemplateId !== savedTemplateId
+      ? 'Save to switch templates, then edit its variables'
+      : !formData.reportTemplateId
+        ? 'Choose a template to fill in variables'
+        : undefined;
+
+  /** Fills empty variables from a previous assessment; anything already typed is kept. */
+  const carryForwardVariables = (source: Assessment) => {
+    const carried = variableValuesByName(source.fieldDefinitions, source.fieldValues);
+    setVariableValues((prev) => {
+      const next = { ...prev };
+      for (const [name, value] of Object.entries(carried)) {
+        if (!next[name]) next[name] = value;
+      }
+      return next;
+    });
+  };
+
+  /**
+   * An existing application picked — by the user, or by a pre-fill that matched its Application Id.
+   * Its most recent assessment supplies the type, template and empty variables.
+   */
+  const handleApplicationSelected = (id: string, appId: string, name: string) => {
+    const source = id
+      ? allPreviousAssessments
+          .filter(a => a.applicationId === id && a.assessmentTypeId)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+      : undefined;
+    setFormData((prev) => ({
+      ...prev,
+      applicationId: id,
+      // On selection, fill the assessment name if it's blank or still
+      // holds the auto-filled search text (a deliberate name is kept)
+      name: id && (!prev.name || prev.name === applicationName) ? name : prev.name,
+      ...(source ? {
+        assessmentTypeId: source.assessmentTypeId,
+        reportTemplateId: source.reportTemplateId || '',
+      } : {}),
+    }));
+    setApplicationName(name);
+    if (source) {
+      loadReportTemplates(source.assessmentTypeId);
+      // The list entry has no variables; the full assessment does.
+      assessmentsApi.getById(source.id)
+        .then((r) => { if (r.success && r.data) carryForwardVariables(r.data); })
+        .catch(() => {});
+    }
+    // Only sync the Application Id field when a concrete existing
+    // application was actually selected — free typing here shouldn't
+    // clobber a custom Application Id the user already entered.
+    if (id) {
+      setApplicationAppId(appId);
+      loadApplicationStakeholders(id);
+    }
+  };
+
+  /**
+   * Fills the form from an outside source, via the AssessmentPrefillAction slot. Names are matched
+   * against the form's own lists, and anything that doesn't match is listed above the form rather
+   * than silently dropped. Nothing is saved.
+   */
+  const applyPrefill = async (prefill: AssessmentPrefill): Promise<void> => {
+    const notes: string[] = [];
+    const lower = (s: string) => s.trim().toLowerCase();
+
+    if (prefill.appId) {
+      let existing: Application | undefined;
+      try {
+        const res = await applicationsApi.getAll(0, 50, prefill.appId);
+        existing = (res.data || []).find((a) => a.appId && lower(a.appId) === lower(prefill.appId!));
+      } catch { /* looked up again by Application Id when the assessment is saved */ }
+      if (existing) {
+        handleApplicationSelected(existing.id, existing.appId || '', existing.name);
+      } else {
+        setFormData((prev) => ({ ...prev, applicationId: '' }));
+        setApplicationAppId(prefill.appId);
+        setApplicationName(prefill.applicationName || '');
+        notes.push(`No application has Application Id ${prefill.appId}, so a new one will be created when you save.`);
+      }
+    } else if (prefill.applicationName) {
+      setApplicationName(prefill.applicationName);
+    }
+
+    const team = prefill.teamName ? teams.find((t) => lower(t.name) === lower(prefill.teamName!)) : undefined;
+    if (prefill.teamName && !team) {
+      notes.push(`There is no "${prefill.teamName}" team. Create it, then choose it under Contacts.`);
+    }
+
+    const assessmentType = prefill.assessmentTypeName
+      ? assessmentTypes.find((t) => lower(t.name) === lower(prefill.assessmentTypeName!))
+      : undefined;
+    if (prefill.assessmentTypeName && !assessmentType) {
+      notes.push(`There is no "${prefill.assessmentTypeName}" assessment type. Create it, then choose it above.`);
+    }
+
+    // "In Progress" and "inprogress" are the same status.
+    const squash = (s: string) => s.replace(/\s/g, '').toLowerCase();
+    // Matched against the workflow the pre-filled type runs on. `workflow` describes the type that
+    // was selected when this render happened, and the type is only changed by the update below, so
+    // reading it here would judge the status against the outgoing type. Two types' workflows rarely
+    // share status names, so a perfectly legal status would be reported as invalid and dropped.
+    const targetWorkflow = assessmentType
+      ? workflows.find((w) => w.id === (assessmentType.workflowId || DEFAULT_WORKFLOW_ID)) ?? workflow
+      : workflow;
+    const status = prefill.status
+      ? targetWorkflow?.statuses.find((s) => squash(s) === squash(prefill.status!))
+      : undefined;
+    if (prefill.status && !status) {
+      notes.push(`"${prefill.status}" isn't one of the ${targetWorkflow?.name ?? 'workflow'} statuses.`);
+    }
+
+    const assessorIds: string[] = [];
+    for (const email of prefill.assessorEmails || []) {
+      const user = users.find((u) => u.email && lower(u.email) === lower(email));
+      if (!user) notes.push(`No user has the email ${email}.`);
+      else if (!user.isInternal) notes.push(`${email} isn't an internal user, so can't be an assessor.`);
+      else assessorIds.push(user.id);
+    }
+
+    const presetDuration = prefill.duration && DURATION_OPTIONS.some((o) => o.value === prefill.duration)
+      ? prefill.duration
+      : undefined;
+    if (presetDuration) setDuration(presetDuration);
+    const span = presetDuration ?? duration;
+
+    setFormData((prev) => ({
+      ...prev,
+      ...(prefill.assessmentName ? { name: prefill.assessmentName } : {}),
+      ...(prefill.startDate ? {
+        startDate: prefill.startDate,
+        plannedEndDate: span !== CUSTOM_DURATION
+          ? addBusinessDays(prefill.startDate, Number(span))
+          : prev.plannedEndDate,
+      } : {}),
+      ...(team ? { teamId: team.id } : {}),
+      ...(assessmentType ? { assessmentTypeId: assessmentType.id } : {}),
+      ...(status ? { status } : {}),
+      ...(assessorIds.length ? { assessorIds: Array.from(new Set([...prev.assessorIds, ...assessorIds])) } : {}),
+    }));
+
+    setPendingPrefillVariables(prefill.variables || {});
+    setPrefillNotes(notes);
+    if (notes.length > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  /**
+   * Create sends every filled-in variable. Edit sends only the ones changed on this form, so a
+   * value a tester changed on the assessment page since it loaded is not overwritten.
+   */
+  const variablesPayload = (): { initialFieldValues?: Record<string, string>; fieldValues?: Record<string, string> } => {
+    const values: Record<string, string> = {};
+    for (const field of variableFields) {
+      const value = variableValues[field.variableName] ?? '';
+      const include = mode === 'create'
+        ? value !== ''
+        : value !== (initialVariableValues[field.variableName] ?? '');
+      if (include) values[field.id] = value;
+    }
+    if (Object.keys(values).length === 0) return {};
+    return mode === 'create' ? { initialFieldValues: values } : { fieldValues: values };
+  };
 
   useEffect(() => {
     if (formData.applicationId && !id) {
@@ -338,7 +634,7 @@ export default function CreateAssessment() {
 
   useEffect(() => {
     const candidateIds = assessorCandidateKey ? assessorCandidateKey.split(',') : [];
-    if (!formData.startDate || !formData.plannedEndDate || candidateIds.length === 0) {
+    if (!isSchedulableDate(formData.startDate) || !isSchedulableDate(formData.plannedEndDate) || candidateIds.length === 0) {
       setAssessorAvailability({});
       return;
     }
@@ -387,6 +683,8 @@ export default function CreateAssessment() {
           formData.remediationManagerId ||
           formData.assessorIds.length > 0 ||
           formData.scope ||
+          // What would be saved, so a carried-forward value for a hidden variable isn't an edit.
+          Object.keys(variablesPayload()).length > 0 ||
           engagementUrls.length > 0 ||
           stakeholders.length > 0
         );
@@ -396,11 +694,13 @@ export default function CreateAssessment() {
         const hasChanges =
           currentFormData !== initialFormData ||
           currentUrls !== initialUrls ||
-          currentStakeholders !== initialStakeholders;
+          currentStakeholders !== initialStakeholders ||
+          Object.keys(variablesPayload()).length > 0;
         setIsDirty(hasChanges);
       }
     }
-  }, [formData, engagementUrls, stakeholders, initialLoading, mode, initialFormData, initialUrls, initialStakeholders]);
+  }, [formData, engagementUrls, stakeholders, initialLoading, mode, initialFormData, initialUrls, initialStakeholders,
+    variableValues, initialVariableValues, variableFields]);
 
  const loadReferenceData = async () => {
     try {
@@ -454,10 +754,17 @@ export default function CreateAssessment() {
         const loadedUrls = assessment.engagementUrls || [];
         const loadedStakeholders = assessment.stakeholders || [];
 
- setFormData(loadedFormData);
+        setFormData(loadedFormData);
+        setAssessmentWorkflowId(assessment.workflowId || DEFAULT_WORKFLOW_ID);
         setEngagementUrls(loadedUrls);
         setStakeholders(loadedStakeholders);
         setAttachments(assessment.attachments || []);
+
+        const loadedVariables = variableValuesByName(assessment.fieldDefinitions, assessment.fieldValues);
+        setSavedVariableFields(assessment.fieldDefinitions || []);
+        setSavedTemplateId(loadedFormData.reportTemplateId);
+        setVariableValues(loadedVariables);
+        setInitialVariableValues(loadedVariables);
 
         if (assessment.applicationId) {
           // Use the appId/name already enriched on the assessment DTO rather than a
@@ -528,10 +835,11 @@ export default function CreateAssessment() {
       );
 
       if (response.success && response.data) {
-        // Filter out the current assessment being edited
-        const otherAssessments = id
-          ? response.data.filter((a) => a.id !== id)
-          : response.data;
+        // Filter out the current assessment being edited, and anything with nobody
+        // assigned yet — an unassigned assessment isn't a scheduling conflict for anyone.
+        const otherAssessments = response.data
+          .filter((a) => a.id !== id)
+          .filter((a) => a.assessorIds?.length);
         setTeamAssessments(otherAssessments);
       }
     } catch (err) {
@@ -599,6 +907,8 @@ export default function CreateAssessment() {
       setApplicationName(full.applicationName || '');
       setEngagementUrls(full.engagementUrls || []);
       setStakeholders(full.stakeholders || []);
+      // A copy of that assessment, like everything above — not just its empty fields.
+      setVariableValues(variableValuesByName(full.fieldDefinitions, full.fieldValues));
       setEditorKey(k => k + 1);
 
       if (full.attachments?.length) {
@@ -782,8 +1092,8 @@ export default function CreateAssessment() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent, shouldClose: boolean = true) => {
-    e.preventDefault();
+  const performSave = async (e: React.FormEvent | null, shouldClose: boolean = true) => {
+    e?.preventDefault();
     setLoading(true);
     setError('');
 
@@ -810,6 +1120,7 @@ export default function CreateAssessment() {
         scope: scopeContent || undefined,
         engagementUrls,
         stakeholders,
+        ...variablesPayload(),
       };
 
       if (mode === 'create') {
@@ -851,7 +1162,39 @@ export default function CreateAssessment() {
           }
         }
       } else {
-        await assessmentsApi.update(id!, payload);
+        const updated = await assessmentsApi.update(id!, payload);
+        // A switched template's variables only exist once the save has re-synced them.
+        if (updated.success && updated.data) {
+          const savedVariables = variableValuesByName(updated.data.fieldDefinitions, updated.data.fieldValues);
+          setSavedVariableFields(updated.data.fieldDefinitions || []);
+          setSavedTemplateId(updated.data.reportTemplateId || '');
+          setVariableValues(savedVariables);
+          setInitialVariableValues(savedVariables);
+          // The move ran after the update was saved. Staying on the form, re-read only what the move
+          // changed: the workflow the statuses come from, and the status mapped onto it.
+          if (moveTargetId) {
+            if (!shouldClose) {
+              try {
+                const fresh = await assessmentsApi.getById(id!);
+                if (fresh.success && fresh.data) {
+                  const moved = fresh.data;
+                  setAssessmentWorkflowId(moved.workflowId || DEFAULT_WORKFLOW_ID);
+                  setFormData((prev) => ({ ...prev, status: moved.status }));
+                  // Keep the mapped status out of the unsaved-changes comparison.
+                  setInitialFormData((prev) => {
+                    try {
+                      return JSON.stringify({ ...JSON.parse(prev), status: moved.status });
+                    } catch {
+                      return prev;
+                    }
+                  });
+                }
+              } catch {
+                // The move is saved; until the page is reloaded the form keeps showing the old workflow's statuses.
+              }
+            }
+          }
+        }
       }
 
       setIsDirty(false);
@@ -867,6 +1210,34 @@ export default function CreateAssessment() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Checks the chosen assessors' availability first; an unavailable one asks before saving.
+   * The availability round trip runs before `performSave` sets `loading`, so a synchronous
+   * ref guard (rather than state, which updates a render late) closes the double-click window
+   * a rapid double-submit would otherwise slip through.
+   */
+  const submitInFlightRef = useRef(false);
+  const handleSubmit = async (e: React.FormEvent, shouldClose: boolean = true) => {
+    e.preventDefault();
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    setCheckingAvailability(true);
+    try {
+      if (formData.startDate && formData.plannedEndDate && formData.assessorIds.length > 0) {
+        const entries = await findUnavailability(
+          id || null, formData.assessorIds, toApiDate(formData.startDate), toApiDate(formData.plannedEndDate));
+        if (entries.length > 0) {
+          setUnavailableWarning({ entries, shouldClose });
+          return;
+        }
+      }
+      await performSave(null, shouldClose);
+    } finally {
+      submitInFlightRef.current = false;
+      setCheckingAvailability(false);
     }
   };
 
@@ -910,6 +1281,9 @@ export default function CreateAssessment() {
     setNewUrl({ url: '', description: '' });
     setStakeholders([]);
     setNewStakeholder({ name: '', email: '', role: '' });
+    setVariableValues({});
+    setPrefillNotes([]);
+    setPendingPrefillVariables({});
     setAttachments([]);
     setPendingFiles([]);
     setUploadError('');
@@ -960,40 +1334,24 @@ export default function CreateAssessment() {
    * Free/busy mark for one candidate. Nothing until both dates are set: with no window
    * chosen, an "Available" badge would be an answer to a question nobody asked.
    */
-  const assessorBadge = (userId: string) => {
-    if (!formData.startDate || !formData.plannedEndDate) return null;
-    const availability = assessorAvailability[userId];
-    if (!availability) return null;
-
-    if (!availability.busy) {
-      return <Badge variant="success" size="sm">Free</Badge>;
-    }
-
-    const clashes = availability.conflicts;
-    // The names go in a title rather than the badge: the picker is a narrow column, and
-    // "why" is a follow-up question, not the thing being scanned for.
-    const summary = clashes
-      .map((c) => `${c.name} (${new Date(c.startDate).toLocaleDateString()} – ${new Date(c.plannedEndDate).toLocaleDateString()})`)
-      .join('\n');
-    return (
-      <span title={`Already booked:\n${summary}`}>
-        <Badge variant="danger" size="sm">
-          Busy{clashes.length > 1 ? ` (${clashes.length})` : ''}
-        </Badge>
-      </span>
-    );
-  };
+  const assessorBadge = (userId: string) => (
+    <AvailabilityBadge
+      availability={assessorAvailability[userId]}
+      windowStart={formData.startDate}
+      windowEnd={formData.plannedEndDate}
+    />
+  );
 
   return (
     <Page variant="flush" fill className="create-assessment-page">
       {/* Workflow Timeline */}
       <div className="workflow-timeline-bar">
         <span className="wt-page-title">{mode === 'edit' ? 'Assessment View' : 'Create Assessment'}</span>
-        {workflowConfig && workflowConfig.statuses.length > 0 && (
+        {workflow && workflow.statuses.length > 0 && (
           <>
             <div className="wt-bar-divider" />
-            {workflowConfig.statuses.map((status, index) => {
-              const statuses = workflowConfig.statuses;
+            {workflow.statuses.map((status, index) => {
+              const statuses = workflow.statuses;
               const currentIndex = statuses.indexOf(formData.status);
               const isPast = currentIndex > index;
               const isActive = formData.status === status;
@@ -1018,6 +1376,16 @@ export default function CreateAssessment() {
         </div>
       )}
 
+      {prefillNotes.length > 0 && (
+        <div className="alert alert-warning alert-dismissible fade show mb-4" role="alert">
+          <strong>Some pasted values need attention:</strong>
+          <ul className="mb-0">
+            {prefillNotes.map((note) => <li key={note}>{note}</li>)}
+          </ul>
+          <button type="button" className="btn-close" onClick={() => setPrefillNotes([])}></button>
+        </div>
+      )}
+
       <div className="split-view">
         {/* Left Side - Form */}
         <div className="form-panel">
@@ -1027,10 +1395,13 @@ export default function CreateAssessment() {
               <div className="attachments-header">
                 <h5 className="section-title mb-0">Basic Information</h5>
                 {mode === 'create' && (
-                  <button type="button" className="wt-back-btn" onClick={handleClear}>
-                    <Eraser size={14} />
-                    Clear Form
-                  </button>
+                  <div className="d-flex align-items-center gap-2">
+                    <AssessmentPrefillAction onPrefill={applyPrefill} />
+                    <button type="button" className="wt-back-btn" onClick={handleClear}>
+                      <Eraser size={14} />
+                      Clear Form
+                    </button>
+                  </div>
                 )}
               </div>
               <div className="row g-3">
@@ -1055,35 +1426,7 @@ export default function CreateAssessment() {
                     appId={applicationAppId}
                     applicationName={applicationName}
                     primaryField="name"
-                    onChange={(id, appId, name) => {
-                      // Prefill assessment type + report template from this application's
-                      // most recent assessment (apps with no history leave them untouched)
-                      const source = id
-                        ? allPreviousAssessments
-                            .filter(a => a.applicationId === id && a.assessmentTypeId)
-                            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
-                        : undefined;
-                      setFormData((prev) => ({
-                        ...prev,
-                        applicationId: id,
-                        // On selection, fill the assessment name if it's blank or still
-                        // holds the auto-filled search text (a deliberate name is kept)
-                        name: id && (!prev.name || prev.name === applicationName) ? name : prev.name,
-                        ...(source ? {
-                          assessmentTypeId: source.assessmentTypeId,
-                          reportTemplateId: source.reportTemplateId || '',
-                        } : {}),
-                      }));
-                      setApplicationName(name);
-                      if (source) loadReportTemplates(source.assessmentTypeId);
-                      // Only sync the Application Id field when a concrete existing
-                      // application was actually selected — free typing here shouldn't
-                      // clobber a custom Application Id the user already entered.
-                      if (id) {
-                        setApplicationAppId(appId);
-                        loadApplicationStakeholders(id);
-                      }
-                    }}
+                    onChange={handleApplicationSelected}
                     onClear={() => {
                       setFormData((prev) => ({ ...prev, applicationId: '' }));
                       setApplicationName('');
@@ -1149,6 +1492,16 @@ export default function CreateAssessment() {
                       </option>
                     ))}
                   </Select>
+                  {moveTargetId && (
+                    <div className="mt-1">
+                      <small className="text-muted d-block">
+                        Saving moves this assessment to{' '}
+                        {moveTarget?.name ?? "the type's workflow"}, because that is the workflow
+                        this type runs on. Its status and findings are mapped onto it.
+                        {moveGated && <PaidBadge />}
+                      </small>
+                    </div>
+                  )}
                 </div>
                 <div className="col-md-4">
                   <FormLabel>Start Date</FormLabel>
@@ -1193,8 +1546,8 @@ export default function CreateAssessment() {
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                   >
-                    {workflowConfig
-                      ? workflowConfig.statuses.map(s => <option key={s} value={s}>{s}</option>)
+                    {workflow
+                      ? workflow.statuses.map(s => <option key={s} value={s}>{s}</option>)
                       : <option value={formData.status}>{formData.status}</option>
                     }
                   </Select>
@@ -1254,6 +1607,16 @@ export default function CreateAssessment() {
                 ) : null}
               </div>
             </div>
+
+            {(variablesHint || variableFields.length > 0) && (
+              <CreateAssessmentVariables
+                fields={variableFields}
+                values={variableValues}
+                onChange={(name, value) => setVariableValues((prev) => ({ ...prev, [name]: value }))}
+                onImageUpload={handleInlineImageUpload}
+                hint={variablesHint}
+              />
+            )}
 
             {/* Contacts */}
             <div className="form-section">
@@ -1728,11 +2091,11 @@ export default function CreateAssessment() {
                   Cancel
                 </Button>
                 {mode === 'edit' && (
-                  <Button type="button" variant="primary" onClick={handleSave} disabled={loading}>
+                  <Button type="button" variant="primary" onClick={handleSave} disabled={loading || checkingAvailability}>
                     {loading ? 'Saving...' : 'Save'}
                   </Button>
                 )}
-                <Button type="button" variant="primary" onClick={handleSaveAndClose} disabled={loading}>
+                <Button type="button" variant="primary" onClick={handleSaveAndClose} disabled={loading || checkingAvailability}>
                   {loading ? 'Saving...' : 'Save & Close'}
                 </Button>
               </div>
@@ -1753,16 +2116,14 @@ export default function CreateAssessment() {
                     {calendarPreview.plannedEndDate && new Date(calendarPreview.plannedEndDate).toLocaleDateString()}
                   </div>
                 </div>
-                <div className="calendar-frame">
-                  <AssessmentCalendar
-                    assessments={[calendarPreview, ...teamAssessments]}
-                    loading={false}
-                    onEventClick={() => {}}
-                    onEventDrop={handleCalendarDrop}
-                    onEventResize={handleCalendarDrop}
-                    currentAssessmentId={id || 'preview'}
-                  />
-                </div>
+                <AssessmentCalendar
+                  assessments={[calendarPreview, ...teamAssessments]}
+                  loading={false}
+                  onEventClick={() => {}}
+                  onEventDrop={handleCalendarDrop}
+                  onEventResize={handleCalendarDrop}
+                  currentAssessmentId={id || 'preview'}
+                />
                 <div className="mt-3 p-3 bg-info bg-opacity-10 rounded">
                   <small className="text-muted">
                     <strong>💡 Tip:</strong> Drag the calendar event to move it, or drag the edges to resize and adjust start/end dates. Changes update the form automatically.
@@ -1813,6 +2174,28 @@ export default function CreateAssessment() {
         confirmText="Delete"
         cancelText="Cancel"
         variant="danger"
+        isLoading={loading}
+      />
+
+      {/* Assessor Unavailability Warning */}
+      <ConfirmDialog
+        isOpen={!!unavailableWarning}
+        onClose={() => setUnavailableWarning(null)}
+        onConfirm={() => {
+          const shouldClose = unavailableWarning?.shouldClose ?? true;
+          setUnavailableWarning(null);
+          performSave(null, shouldClose);
+        }}
+        title="Assessors Unavailable"
+        message={unavailableWarning ? (
+          <UnavailabilityList
+            entries={unavailableWarning.entries}
+            names={Object.fromEntries(users.map((u) => [u.id, `${u.firstName} ${u.lastName}`]))}
+          />
+        ) : ''}
+        confirmText="Save Anyway"
+        cancelText="Cancel"
+        variant="warning"
         isLoading={loading}
       />
       </div>{/* end create-assessment-content */}

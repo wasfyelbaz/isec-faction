@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -58,6 +59,15 @@ public class Assessment {
     private String assessmentTypeId;
 
     /**
+     * The workflow this assessment was created under (its type's workflow at the time). It keeps it
+     * when the type later changes workflow; only an explicit move changes it.
+     */
+    @Builder.Default
+    @Column(name = "workflow_id", nullable = false)
+    @ColumnDefault("'default'")
+    private String workflowId = AssessmentWorkflow.DEFAULT_ID;
+
+    /**
      * Reference to the Organization that owns this assessment
      */
     private String organizationId;
@@ -100,6 +110,16 @@ public class Assessment {
     private String templateFont;
 
     /**
+     * Snapshot of the template's colour palette — what each painted colour sentinel resolves to.
+     *
+     * <p>Snapshotted for the same reason the CSS is: the template can be deleted while assessments
+     * still reference it, and {@code applyLiveTemplateStyling} returns early on a null template.
+     * Without a copy here those reports would render every sentinel as black on white.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    private ReportPalette templatePalette;
+
+    /**
      * Snapshot of template scoring type (NATIVE, CVSS_31, CVSS_40)
      */
     private String scoringType;
@@ -137,10 +157,10 @@ public class Assessment {
     // Assessment metadata
 
     /**
-     * Current status of the assessment (free-form string; see AssessmentWorkflowConfig)
+     * Current status of the assessment (free-form string; one of its workflow's statuses)
      */
     @Builder.Default
-    private String status = "DRAFT";
+    private String status = AssessmentWorkflow.DEFAULT_NEW_STATUS;
 
     /**
      * User ID of the assessor conducting this assessment (legacy - use assessorIds)
@@ -249,7 +269,7 @@ public class Assessment {
     private LocalDateTime deletedAt;
 
     /**
-     * Peer review sub-status (independent of the main AssessmentStatus).
+     * Peer review sub-status (independent of the assessment's workflow status).
      */
     @Builder.Default
     private AssessmentPeerReviewStatus peerReviewStatus = AssessmentPeerReviewStatus.IN_PROGRESS;

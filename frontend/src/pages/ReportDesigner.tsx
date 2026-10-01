@@ -7,9 +7,10 @@ import Page from '../components/Page';
 import Modal from '../components/Modal';
 import CssEditor from '../components/CssEditor';
 import ReportFontsPanel, { REPORT_FONT_FAMILIES_LIST_ID } from '../components/ReportFontsPanel';
+import FindingColours from '../components/FindingColours';
 import './ReportDesigner.css';
 import { reportTemplatesApi, assessmentTypesApi } from '../api';
-import type { ReportTemplate, ReportTemplateSummary, UserDefinedField, FieldType, FieldScope, AssessmentType, ScoringType } from '../types';
+import type { ReportTemplate, ReportTemplateSummary, UserDefinedField, FieldType, FieldScope, AssessmentType, ScoringType, ReportPalette } from '../types';
 
 /** Returns an error message if the CSS has obvious syntax issues, null if it looks valid. */
 function validateCSS(css: string): string | null {
@@ -115,6 +116,10 @@ export default function ReportDesigner() {
   const [cloning, setCloning] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
   const [localCss, setLocalCss] = useState('');
+  // Held locally for the same reason as localCss: updateTemplate deliberately never touches
+  // selectedTemplate (see the comment there about focus loss), so a control rendered straight from
+  // it would not move until something refetched the template.
+  const [localPalette, setLocalPalette] = useState<ReportPalette | undefined>(undefined);
   const [isDragging, setIsDragging] = useState(false);
   const [assessmentTypeSearch, setAssessmentTypeSearch] = useState('');
   const [assessmentTypeDropdownOpen, setAssessmentTypeDropdownOpen] = useState(false);
@@ -193,6 +198,7 @@ export default function ReportDesigner() {
       if (response.success && response.data) {
         setSelectedTemplate(response.data);
         setLocalCss(response.data.css || '');
+        setLocalPalette(response.data.reportPalette);
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to load template details';
@@ -439,9 +445,9 @@ export default function ReportDesigner() {
     // so re-rendering never remounts them and leaves the typed text and caret alone.
     setSelectedTemplate({ ...currentTemplate, userDefinedFields: updatedFields });
 
-    // Structural changes (fieldType) toggle conditional UI, so persist them right away;
-    // text edits debounce.
-    updateTemplate({ userDefinedFields: updatedFields }, 'fieldType' in updates);
+    // Structural changes (fieldType) toggle conditional UI, and a checkbox has no typing to wait
+    // for, so persist those right away; text edits debounce.
+    updateTemplate({ userDefinedFields: updatedFields }, 'fieldType' in updates || 'showInScheduling' in updates);
   };
 
   const deleteUserDefinedField = (id: string) => {
@@ -1074,6 +1080,25 @@ export default function ReportDesigner() {
               </div>
             </div>
 
+            {/* ── Finding Colors ──────────────────────────────────────── */}
+            <div className="rd-section">
+              <div className="rd-section-header">
+                <span>Finding Colors{isDirty && <span className="unsaved-indicator"> *</span>}</span>
+              </div>
+              <div className="rd-body">
+                <FindingColours
+                  key={`palette-${selectedTemplate.id}`}
+                  palette={localPalette}
+                  fields={selectedTemplate.userDefinedFields ?? []}
+                  onChange={(reportPalette) => {
+                    setLocalPalette(reportPalette);
+                    updateTemplate({ reportPalette });
+                  }}
+                  disabled={saving}
+                />
+              </div>
+            </div>
+
             {/* ── Sections ─────────────────────────────────────────────── */}
             <div className="rd-section">
               <div className="rd-section-header">
@@ -1219,18 +1244,36 @@ export default function ReportDesigner() {
                           <option value="STRING">String</option>
                           <option value="DROPDOWN">Dropdown</option>
                           <option value="RICH_TEXT">Rich Text</option>
+                          <option value="HYPERLINK">Hyperlink</option>
                         </Select>
                       </div>
                     </div>
+                    {(field.fieldScope ?? 'ASSESSMENT') === 'ASSESSMENT' && (
+                      <div className="rd-row">
+                        <div className="rd-label">Show in Scheduling</div>
+                        <div className="rd-value">
+                          <input
+                            type="checkbox"
+                            className="form-check-input"
+                            checked={!!field.showInScheduling}
+                            onChange={(e) => updateUserDefinedField(field.id, { showInScheduling: e.target.checked })}
+                            disabled={saving}
+                            aria-label="Show in Scheduling"
+                          />
+                        </div>
+                      </div>
+                    )}
                     <div className="rd-row rd-row--top">
                       <div className="rd-label">Default Value</div>
                       <div className="rd-value">
-                        {field.fieldType === 'STRING' && (
+                        {(field.fieldType === 'STRING' || field.fieldType === 'HYPERLINK') && (
                           <Input
                             key={`default-${field.id}`}
                             defaultValue={field.defaultValue || ''}
                             onChange={(e) => updateUserDefinedField(field.id, { defaultValue: e.target.value })}
-                            placeholder="Enter default value"
+                            placeholder={field.fieldType === 'HYPERLINK'
+                              ? 'Email or URL — separate several with commas'
+                              : 'Enter default value'}
                           />
                         )}
                         {field.fieldType === 'RICH_TEXT' && (
