@@ -89,27 +89,35 @@ public class AssessmentService {
      * @param catalog the workflow catalog, loaded once by the caller — a batch shares one
      */
     public Assessment persistNewAssessment(CreateAssessmentRequest request, String userId, WorkflowCatalog catalog) {
+        // Every assessment hangs off a target, and every target off a client. Upstream also
+        // auto-creates a target from the assessment's own name when neither id is given; that
+        // path is gone, because the target it made carried no client and so was unreachable from
+        // the client the work was actually for.
         Application application;
         if (org.springframework.util.StringUtils.hasText(request.getApplicationId())) {
             application = applicationRepository.findById(request.getApplicationId())
                 .orElseThrow(() -> new ResourceNotFoundException("Application not found with id: " + request.getApplicationId()));
-        } else if (org.springframework.util.StringUtils.hasText(request.getAppId())) {
-            application = applicationRepository.findByAppId(request.getAppId()).orElse(null);
+        } else if (org.springframework.util.StringUtils.hasText(request.getAppId())
+                || org.springframework.util.StringUtils.hasText(request.getApplicationName())) {
+            // The bulk import's path. It resolves a target by appId or by name first and sets
+            // applicationId when it matched one, so reaching here means it intends to create —
+            // which it previews, per row, before anything is committed.
+            application = org.springframework.util.StringUtils.hasText(request.getAppId())
+                ? applicationRepository.findByAppId(request.getAppId()).orElse(null)
+                : null;
             if (application == null) {
+                if (!org.springframework.util.StringUtils.hasText(request.getOrganizationId())) {
+                    throw new IllegalArgumentException("Creating a target needs a client.");
+                }
                 String appName = org.springframework.util.StringUtils.hasText(request.getApplicationName())
                     ? request.getApplicationName()
                     : request.getName();
-                application = createApplicationFromAssessment(request.getAppId(), appName, userId);
+                application = createApplicationFromAssessment(
+                    request.getAppId(), appName, request.getOrganizationId(), userId);
             }
         } else {
-            if (org.springframework.util.StringUtils.hasText(request.getName())) {
-                String appName = org.springframework.util.StringUtils.hasText(request.getApplicationName())
-                    ? request.getApplicationName()
-                    : request.getName();
-                application = createApplicationFromAssessment(null, appName, userId);
-            } else {
-                throw new IllegalArgumentException("Either applicationId or appId must be provided, or assessment name must be set for auto-creation");
-            }
+            throw new IllegalArgumentException(
+                "An assessment needs a target: give applicationId, or a target to create with its client.");
         }
 
         // Verify assessment type exists, and resolve the workflow it takes at creation
@@ -1786,10 +1794,12 @@ public class AssessmentService {
             dto.getTeamName(), dto.getAssessorNames());
     }
 
-    private Application createApplicationFromAssessment(String appId, String appName, String userId) {
+    private Application createApplicationFromAssessment(String appId, String appName,
+                                                        String organizationId, String userId) {
         Application application = Application.builder()
                 .appId(appId)
                 .name(appName)
+                .organizationId(organizationId)
                 .status(ApplicationStatus.PRODUCTION)
                 .region("Global")
                 .createdBy(userId)

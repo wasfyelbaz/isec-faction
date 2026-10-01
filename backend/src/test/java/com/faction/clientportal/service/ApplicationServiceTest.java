@@ -69,9 +69,16 @@ class ApplicationServiceTest {
     @InjectMocks
     private ApplicationService applicationService;
 
+    private static final String CLIENT_ID = "org-1";
+
     @BeforeEach
     void setUp() {
         lenient().when(entityFieldConfigRepository.findByScope(any())).thenReturn(Optional.empty());
+        // A target belongs to a client, always — createApplication resolves it rather than
+        // accepting whatever it was handed.
+        lenient().when(organizationRepository.findById(CLIENT_ID)).thenReturn(
+                Optional.of(com.faction.clientportal.model.Organization.builder()
+                        .id(CLIENT_ID).name("Acme").build()));
         lenient().when(applicationRepository.save(any(Application.class))).thenAnswer(inv -> {
             Application app = inv.getArgument(0);
             if (app.getId() == null) {
@@ -87,6 +94,7 @@ class ApplicationServiceTest {
         when(applicationIdConfigService.generateNextAppId()).thenReturn("ASMT-1");
 
         CreateApplicationRequest request = CreateApplicationRequest.builder()
+                .organizationId(CLIENT_ID)
                 .name("My App")
                 .build();
 
@@ -101,6 +109,7 @@ class ApplicationServiceTest {
         when(applicationIdConfigService.isEnabled()).thenReturn(false);
 
         CreateApplicationRequest request = CreateApplicationRequest.builder()
+                .organizationId(CLIENT_ID)
                 .name("My App")
                 .build();
 
@@ -115,6 +124,7 @@ class ApplicationServiceTest {
         when(applicationRepository.findByAppId("CUSTOM-7")).thenReturn(Optional.empty());
 
         CreateApplicationRequest request = CreateApplicationRequest.builder()
+                .organizationId(CLIENT_ID)
                 .name("My App")
                 .appId("CUSTOM-7")
                 .build();
@@ -131,6 +141,7 @@ class ApplicationServiceTest {
                 .thenReturn(Optional.of(Application.builder().id("other").appId("ASMT-1").build()));
 
         CreateApplicationRequest request = CreateApplicationRequest.builder()
+                .organizationId(CLIENT_ID)
                 .name("My App")
                 .appId("ASMT-1")
                 .build();
@@ -148,6 +159,7 @@ class ApplicationServiceTest {
         when(applicationIdConfigService.generateNextAppId()).thenReturn("ASMT-2");
 
         CreateApplicationRequest request = CreateApplicationRequest.builder()
+                .organizationId(CLIENT_ID)
                 .name("Duplicate Name")
                 .build();
 

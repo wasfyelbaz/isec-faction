@@ -49,7 +49,12 @@ public class CreateApplicationRequest {
     // Application Status
     private ApplicationStatus status;
 
-    // Organization relationship
+    /**
+     * The client this target belongs to. Required: an engagement traces to a client through its
+     * target, so a target with no client is unreachable from the client it was actually for, and
+     * silently pads every list it appears in.
+     */
+    @NotBlank(message = "Client is required")
     private String organizationId;
 
     /** Optional division within the organization; attribution only, not an access boundary. */

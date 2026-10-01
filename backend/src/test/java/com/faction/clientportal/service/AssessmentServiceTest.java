@@ -425,6 +425,7 @@ class AssessmentServiceTest {
                 .name("New Assessment")
                 .appId("CUSTOM-9")
                 .applicationName("Brand New App")
+                .organizationId("org-1")
                 .assessmentTypeId(testAssessmentType.getId())
                 .reportTemplateId(testTemplate.getId())
                 .initialFieldValues(new HashMap<>())
@@ -453,13 +454,21 @@ class AssessmentServiceTest {
         verify(applicationRepository).save(appCaptor.capture());
         assertThat(appCaptor.getValue().getAppId()).isEqualTo("CUSTOM-9");
         assertThat(appCaptor.getValue().getName()).isEqualTo("Brand New App");
+        // The client comes with it. A target created on the way to an assessment used to get
+        // none, which left it unreachable from the client the work was for.
+        assertThat(appCaptor.getValue().getOrganizationId()).isEqualTo("org-1");
         // Typed appId is used as-is — no generation
         verify(applicationIdConfigService, never()).generateNextAppId();
     }
 
+    /**
+     * Upstream invents a target here, named after the assessment, with no client on it. That is
+     * where this installation's orphan targets came from — unreachable from the client the work
+     * was for, and padding every list they appeared in. An assessment now has to say what it runs
+     * against.
+     */
     @Test
-    void testCreateAssessment_AutoCreatesApplicationFromAssessmentName() {
-        // Given — neither applicationId nor appId; assessment name doubles as app name
+    void testCreateAssessment_RefusesToInventATargetFromTheAssessmentName() {
         CreateAssessmentRequest request = CreateAssessmentRequest.builder()
                 .name("Quarterly Pentest")
                 .assessmentTypeId(testAssessmentType.getId())
@@ -467,36 +476,21 @@ class AssessmentServiceTest {
                 .initialFieldValues(new HashMap<>())
                 .build();
 
-        when(applicationIdConfigService.isEnabled()).thenReturn(true);
-        when(applicationIdConfigService.generateNextAppId()).thenReturn("ASMT-7");
-        when(applicationRepository.save(any(Application.class)))
-                .thenAnswer(inv -> {
-                    Application app = inv.getArgument(0);
-                    app.setId("new-app-id");
-                    return app;
-                });
-        when(assessmentTypeRepository.findById(testAssessmentType.getId()))
-                .thenReturn(Optional.of(testAssessmentType));
-        when(reportTemplateRepository.findByIdAndDeletedAtIsNull(testTemplate.getId()))
-                .thenReturn(Optional.of(testTemplate));
-        when(assessmentRepository.save(any(Assessment.class)))
-                .thenReturn(testAssessment);
+        assertThatThrownBy(() -> assessmentService.createAssessment(request, "testuser"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("needs a target");
 
-        // When
-        assessmentService.createAssessment(request, "testuser");
-
-        // Then — application auto-created with generated appId and assessment name
-        ArgumentCaptor<Application> appCaptor = ArgumentCaptor.forClass(Application.class);
-        verify(applicationRepository).save(appCaptor.capture());
-        assertThat(appCaptor.getValue().getAppId()).isEqualTo("ASMT-7");
-        assertThat(appCaptor.getValue().getName()).isEqualTo("Quarterly Pentest");
+        verify(applicationRepository, never()).save(any(Application.class));
+        verify(assessmentRepository, never()).save(any(Assessment.class));
     }
 
     @Test
     void testCreateAssessment_NoAppIdGeneratedWhenConfigDisabled() {
-        // Given — auto-creation path with appId generation disabled
+        // Given — a target created on the way, with appId generation disabled
         CreateAssessmentRequest request = CreateAssessmentRequest.builder()
                 .name("Quarterly Pentest")
+                .applicationName("Quarterly Pentest")
+                .organizationId("org-1")
                 .assessmentTypeId(testAssessmentType.getId())
                 .reportTemplateId(testTemplate.getId())
                 .initialFieldValues(new HashMap<>())
@@ -538,7 +532,7 @@ class AssessmentServiceTest {
         // When/Then
         assertThatThrownBy(() -> assessmentService.createAssessment(request, "testuser"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("applicationId or appId");
+                .hasMessageContaining("needs a target");
         verify(assessmentRepository, never()).save(any(Assessment.class));
     }
 

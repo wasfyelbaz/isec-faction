@@ -61,11 +61,11 @@ public class ApplicationService {
     }
 
     public ApplicationDto createApplication(CreateApplicationRequest request, String userId, Authentication authentication) {
-        // Verify organization exists if provided
-        if (request.getOrganizationId() != null) {
-            organizationRepository.findById(request.getOrganizationId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + request.getOrganizationId()));
-        }
+        // The client is required on a target, and has to be a real one: @NotBlank catches a
+        // missing id, this catches one that does not resolve. Update keeps the "if provided"
+        // form below, so an edit that does not mention the client still works.
+        organizationRepository.findById(request.getOrganizationId())
+                .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + request.getOrganizationId()));
 
         // Auto-generate appId if not provided and generation is enabled
         if (!org.springframework.util.StringUtils.hasText(request.getAppId())) {

@@ -14,6 +14,7 @@ import Page from '../components/Page';
 import {
   Modal,
   Button,
+  ConfirmDialog,
   IconButton,
   ActionButtons,
   Badge,
@@ -54,7 +55,7 @@ const TABLE_KEY = 'applications';
 
 export default function Applications() {
   const { organizationLower, organizationPlural, organizationsLower, organizationSingular,
-    subOrganizationPlural } = useTerminology();
+    subOrganizationPlural, targetSingular, targetPlural, targetLower, targetsLower } = useTerminology();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -65,6 +66,8 @@ export default function Applications() {
   );
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<Application | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -162,7 +165,7 @@ export default function Applications() {
         });
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load applications');
+      setError(err.response?.data?.message || `Failed to load ${targetsLower}`);
     } finally {
       setLoading(false);
     }
@@ -227,14 +230,17 @@ export default function Applications() {
     navigate(`/applications/${application.id}/edit`);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this application?')) return;
-
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      await applicationsApi.delete(id);
+      await applicationsApi.delete(pendingDelete.id);
+      setPendingDelete(null);
       await loadApplications();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to delete application');
+      setError(err.response?.data?.message || `Failed to delete ${targetLower}`);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -299,7 +305,7 @@ export default function Applications() {
     try {
       const requestData: CreateApplicationRequest | UpdateApplicationRequest = {
         ...formData,
-        organizationId: formData.organizationId || undefined, // Convert empty string to undefined
+        organizationId: formData.organizationId,
         urls: urls.length > 0 ? urls : undefined,
         stakeHolders: stakeholders.length > 0 ? stakeholders : undefined,
         technologies: technologies.length > 0 ? technologies : undefined,
@@ -312,7 +318,7 @@ export default function Applications() {
       setShowModal(false);
       await loadApplications();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create application');
+      setError(err.response?.data?.message || `Failed to create ${targetLower}`);
     }
   };
 
@@ -388,7 +394,7 @@ export default function Applications() {
         .then((res) => setSubOrganizations(res.data || []))
         .catch(() => {});
     } catch (err: any) {
-      setImportError(err.response?.data?.message || 'Failed to sync applications');
+      setImportError(err.response?.data?.message || `Failed to sync ${targetsLower}`);
     } finally {
       setImporting(false);
     }
@@ -525,7 +531,7 @@ export default function Applications() {
               title="View"
             />
           )}
-          {canDelete && <IconButton icon={Trash2} onClick={() => handleDelete(app.id)} variant="delete" title="Delete" />}
+          {canDelete && <IconButton icon={Trash2} onClick={() => setPendingDelete(app)} variant="delete" title="Delete" />}
           <IconButton icon={Network} onClick={() => {/* TODO: View connections */}} title="View Connections" />
         </ActionButtons>
       ),
@@ -544,7 +550,7 @@ export default function Applications() {
           className={`app-tab-btn${activeTab === 'applications' ? ' active' : ''}`}
           onClick={() => setActiveTab('applications')}
         >
-          All Applications
+          All {targetPlural}
         </button>
         <button
           className={`app-tab-btn${activeTab === 'assessments' ? ' active' : ''}`}
@@ -582,8 +588,8 @@ export default function Applications() {
           onPageSizeChange={handlePageSizeChange}
           onSearchChange={handleSearchChange}
           initialSearch={searchQuery}
-          searchPlaceholder={`Search name, app ID, ${organizationLower}, status, technology or owner`}
-          emptyMessage="No applications found"
+          searchPlaceholder={`Search name, ID, ${organizationLower}, status, technology or owner`}
+          emptyMessage={`No ${targetsLower} found`}
           idAccessor="id"
           sort={sort}
           onSortChange={handleSortChange}
@@ -750,7 +756,7 @@ export default function Applications() {
               <FormGroup>
                 <FormLabel required>Name</FormLabel>
                 <Input
-                  placeholder="Application Name"
+                  placeholder={`${targetSingular} name`}
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
@@ -783,12 +789,13 @@ export default function Applications() {
             </FormRow>
             <FormRow columns={2}>
               <FormGroup>
-                <FormLabel>{organizationSingular}</FormLabel>
+                <FormLabel required>{organizationSingular}</FormLabel>
                 <Select
                   value={formData.organizationId}
                   onChange={(e) => setFormData({ ...formData, organizationId: e.target.value })}
+                  required
                 >
-                  <option value="">None</option>
+                  <option value="">{`Select a ${organizationLower}`}</option>
                   {organizations.map((org) => (
                     <option key={org.id} value={org.id}>
                       {org.name}
@@ -986,20 +993,6 @@ export default function Applications() {
             <h3 className="form-section-title">Assessment Information</h3>
             <FormRow columns={2}>
               <FormGroup>
-                <FormLabel>Application Type</FormLabel>
-                <Select
-                  value={formData.applicationType}
-                  onChange={(e) => setFormData({ ...formData, applicationType: e.target.value })}
-                >
-                  <option value="">Select type</option>
-                  <option value="Web Application">Web Application</option>
-                  <option value="Mobile Application">Mobile Application</option>
-                  <option value="API">API</option>
-                  <option value="Thick Client">Thick Client</option>
-                  <option value="Other">Other</option>
-                </Select>
-              </FormGroup>
-              <FormGroup>
                 <FormLabel>Assessment Frequency</FormLabel>
                 <Select
                   value={formData.assessmentFrequency}
@@ -1083,6 +1076,17 @@ export default function Applications() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={handleDelete}
+        title={`Delete ${targetSingular}`}
+        message={`Delete "${pendingDelete?.name}"? This cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+        isLoading={deleting}
+      />
     </Page>
   );
 }

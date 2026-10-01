@@ -28,6 +28,13 @@ public class CreateAssessmentRequest {
 
     private String applicationId;
 
+    /**
+     * The client, needed only on the {@code appId} path when no target with that id exists yet and
+     * one has to be created — the bulk CSV import is the caller that does this. Ignored when
+     * {@code applicationId} names an existing target, which already carries its client.
+     */
+    private String organizationId;
+
     private String appId;
 
     private String applicationName;

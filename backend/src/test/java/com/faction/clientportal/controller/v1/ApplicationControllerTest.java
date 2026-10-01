@@ -200,9 +200,10 @@ class ApplicationControllerTest extends TestContainersConfig {
         String requestBody = String.format("""
                 {
                     "name": "Long Description App",
-                    "description": "%s"
+                    "description": "%s",
+                    "organizationId": "%s"
                 }
-                """, longDescription);
+                """, longDescription, testOrganization1.getId());
 
         mockMvc.perform(post("/api/v1/applications")
                         .header("Authorization", "Bearer " + token)

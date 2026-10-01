@@ -37,6 +37,7 @@ import CreateAssessmentVariables from './CreateAssessmentVariables';
 import { AssessmentPrefillAction } from '@enterprise';
 import Page from '../components/Page';
 import { usePageTitle } from '../context/PageTitleContext';
+import { useTerminology } from '../context/TerminologyContext';
 import { PaidBadge } from '../components/PaidFeature';
 import { useEdition } from '../context/EditionContext';
 import { DEFAULT_WORKFLOW_ID, useWorkflow } from '../hooks/useWorkflow';
@@ -168,6 +169,7 @@ export default function CreateAssessment() {
   const navigate = useNavigate();
   const mode = id ? 'edit' : 'create';
   const { setBreadcrumbs } = usePageTitle();
+  const { targetSingular, targetLower, targetsLower } = useTerminology();
 
   useEffect(() => {
     setBreadcrumbs([
@@ -1103,9 +1105,9 @@ export default function CreateAssessment() {
 
   const payload: any = {
         name: formData.name,
+        // Always an existing target: the picker no longer offers to create one, and the API
+        // refuses a target without a client behind it.
         ...(formData.applicationId ? { applicationId: formData.applicationId } : {}),
-        ...(applicationAppId && !formData.applicationId ? { appId: applicationAppId } : {}),
-        ...(!formData.applicationId && applicationName ? { applicationName } : {}),
         assessmentTypeId: formData.assessmentTypeId,
         // On update an empty string clears the assignment; on create omit it entirely
         campaignId: formData.campaignId || (mode === 'edit' ? '' : undefined),
@@ -1406,7 +1408,7 @@ export default function CreateAssessment() {
               </div>
               <div className="row g-3">
                 <div className="col-md-4">
-                  <FormLabel>Application Id</FormLabel>
+                  <FormLabel>{targetSingular} Id</FormLabel>
                   <Input
                     type="text"
                     value={applicationAppId}
@@ -1416,11 +1418,11 @@ export default function CreateAssessment() {
                       // existing application — fall back to appId-based lookup/create.
                       setFormData((prev) => (prev.applicationId ? { ...prev, applicationId: '' } : prev));
                     }}
-                    placeholder="Optional — custom application ID"
+                    placeholder={`Optional — ${targetLower} ID`}
                   />
                 </div>
                 <div className="col-md-4">
-                  <FormLabel required>Application Name</FormLabel>
+                  <FormLabel required>{targetSingular}</FormLabel>
                   <SearchableApplicationSelect
                     value={formData.applicationId}
                     appId={applicationAppId}
@@ -1432,8 +1434,11 @@ export default function CreateAssessment() {
                       setApplicationName('');
                     }}
                     onBlur={fillAssessmentNameFromApplicationName}
-                    allowCreate={true}
-                    placeholder="Search or enter application name..."
+                    // An engagement runs against something that already exists and belongs to a
+                    // client. Typing a new name here used to create one with no client attached,
+                    // which the API now refuses — so the choice is removed rather than left to 400.
+                    allowCreate={false}
+                    placeholder={`Search ${targetsLower}...`}
                   />
                 </div>
                 <div className="col-md-4">
