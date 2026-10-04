@@ -1,22 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Edit2, Trash2, Plus } from 'lucide-react';
-import { organizationsApi, entityFieldsApi } from '../api';
-import type { Organization, CreateOrganizationRequest, UserDefinedField } from '../types';
-import RichTextEditor from '../components/RichTextEditor';
+import { organizationsApi } from '../api';
+import type { Organization } from '../types';
 import DataTable, { Column, PaginationInfo, SortState, sortParam } from '../components/DataTable';
 import { usePersistedState } from '../hooks/usePersistedState';
 import Page from '../components/Page';
 import {
-  Modal,
   Button,
   IconButton,
   ActionButtons,
-  FormGroup,
-  FormLabel,
-  Input,
-  Select,
-  Textarea,
   ErrorMessage,
   ConfirmDialog,
 } from '../components';
@@ -32,7 +25,6 @@ export default function Organizations() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [showModal, setShowModal] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Organization | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -47,14 +39,6 @@ export default function Organizations() {
   const [searchQuery, setSearchQuery] = usePersistedState(TABLE_KEY, 'searchQuery', '');
   const [sort, setSort] = usePersistedState<SortState | null>(TABLE_KEY, 'sort', null);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-  });
-
-  const [fieldDefinitions, setFieldDefinitions] = useState<UserDefinedField[]>([]);
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-
   // Get user permissions
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const authorities = user.authorities || [];
@@ -64,7 +48,6 @@ export default function Organizations() {
 
   useEffect(() => {
     loadOrganizations();
-    loadFieldDefinitions();
   }, [pagination.page, pagination.pageSize, searchQuery, sort]);
 
   const loadOrganizations = async () => {
@@ -88,29 +71,7 @@ export default function Organizations() {
     }
   };
 
-  const loadFieldDefinitions = async () => {
-    try {
-      const response = await entityFieldsApi.getConfig('ORGANIZATION');
-      if (response.data) {
-        const sorted = [...(response.data.fieldDefinitions || [])].sort(
-          (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
-        );
-        setFieldDefinitions(sorted);
-      }
-    } catch (err: any) {
-      console.error('Failed to load organization field definitions:', err);
-    }
-  };
-
-  const handleCreate = () => {
-    setFormData({
-      name: '',
-      description: '',
-    });
-    setFieldValues({});
-    setError('');
-    setShowModal(true);
-  };
+  const handleCreate = () => navigate('/organizations/new');
 
   const handleEdit = (organization: Organization) => {
     navigate(`/organizations/${organization.id}/edit`);
@@ -130,25 +91,6 @@ export default function Organizations() {
       setPendingDelete(null);
     } finally {
       setDeleting(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    try {
-      const createData: CreateOrganizationRequest = {
-        name: formData.name,
-        description: formData.description,
-        fieldValues: Object.keys(fieldValues).length > 0 ? fieldValues : undefined,
-      };
-      await organizationsApi.create(createData);
-
-      setShowModal(false);
-      await loadOrganizations();
-    } catch (err: any) {
-      setError(err.response?.data?.message || `Failed to save ${organizationLower}`);
     }
   };
 
@@ -184,19 +126,6 @@ export default function Organizations() {
       accessor: 'description',
     },
     {
-      header: 'Remediation Owners',
-      sortKey: 'remediationOwners',
-      render: (organization) => {
-        const owners = organization.remediationOwners || [];
-        if (owners.length === 0) return <span className="text-muted">—</span>;
-        return (
-          <span title={owners.map((o) => `${o.displayName} (${o.email})`).join('\n')}>
-            {owners.map((o) => o.displayName).join(', ')}
-          </span>
-        );
-      },
-    },
-    {
       header: 'Actions',
       width: '120px',
       render: (organization) => (
@@ -228,11 +157,12 @@ export default function Organizations() {
         <div />
         {canCreate && (
           <Button onClick={handleCreate} icon={Plus}>
-            Create {organizationSingular}
+            Add {organizationSingular}
           </Button>
         )}
       </div>
 
+      {error && <ErrorMessage>{error}</ErrorMessage>}
       {deleteError && <ErrorMessage>{deleteError}</ErrorMessage>}
 
       <DataTable
@@ -250,110 +180,6 @@ export default function Organizations() {
         sort={sort}
         onSortChange={handleSortChange}
       />
-
-      {/* Create/Edit Modal */}
-      <Modal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title={`Create ${organizationSingular}`}
-        closeOnOverlayClick={false}
-      >
-        <form onSubmit={handleSubmit} className="organization-form">
-            {error && <ErrorMessage>{error}</ErrorMessage>}
-
-            <FormGroup>
-              <FormLabel htmlFor="name" required>
-                Name
-              </FormLabel>
-              <Input
-                id="name"
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder={`${organizationSingular} name`}
-                required
-              />
-            </FormGroup>
-
-            <FormGroup>
-              <FormLabel htmlFor="description">Description</FormLabel>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder={`${organizationSingular} description`}
-                rows={4}
-              />
-            </FormGroup>
-
-            {fieldDefinitions.length > 0 && (
-              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1rem', marginTop: '0.5rem' }}>
-                <div style={{ fontWeight: 600, marginBottom: '0.75rem', fontSize: '0.9375rem' }}>Additional Information</div>
-                {(() => {
-                  const regularFields = fieldDefinitions.filter((f) => f.fieldType !== 'RICH_TEXT');
-                  const richTextFields = fieldDefinitions.filter((f) => f.fieldType === 'RICH_TEXT');
-                  return (
-                    <>
-                      {regularFields.length > 0 && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                          {regularFields.map((field) => (
-                            <FormGroup key={field.id}>
-                              <FormLabel>
-                                {field.displayName}
-                                {field.required && <span style={{ color: 'var(--color-danger)', marginLeft: 2 }}>*</span>}
-                              </FormLabel>
-                              {field.fieldType === 'DROPDOWN' ? (
-                                <Select
-                                  value={fieldValues[field.id] || ''}
-                                  onChange={(e) => setFieldValues({ ...fieldValues, [field.id]: e.target.value })}
-                                >
-                                  <option value="">Select...</option>
-                                  {(field.dropdownOptions || []).map((opt) => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                  ))}
-                                </Select>
-                              ) : (
-                                <Input
-                                  value={fieldValues[field.id] || ''}
-                                  onChange={(e) => setFieldValues({ ...fieldValues, [field.id]: e.target.value })}
-                                  placeholder={field.helpText || `Enter ${field.displayName}`}
-                                />
-                              )}
-                              {field.helpText && (
-                                <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
-                                  {field.helpText}
-                                </p>
-                              )}
-                            </FormGroup>
-                          ))}
-                        </div>
-                      )}
-                      {richTextFields.map((field) => (
-                        <FormGroup key={field.id}>
-                          <FormLabel>
-                            {field.displayName}
-                            {field.required && <span style={{ color: 'var(--color-danger)', marginLeft: 2 }}>*</span>}
-                          </FormLabel>
-                          <RichTextEditor
-                            value={fieldValues[field.id] || ''}
-                            onChange={(val) => setFieldValues({ ...fieldValues, [field.id]: val })}
-                          />
-                        </FormGroup>
-                      ))}
-                    </>
-                  );
-                })()}
-              </div>
-            )}
-
-            <div className="modal-actions">
-              <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>
-                Cancel
-              </Button>
-              <Button type="submit">Create</Button>
-            </div>
-          </form>
-      </Modal>
 
       <ConfirmDialog
         isOpen={!!pendingDelete}

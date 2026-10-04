@@ -3,13 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { organizationsApi, entityFieldsApi } from '../api';
 import { usePageTitle } from '../context/PageTitleContext';
-import type { ClientContact, UpdateOrganizationRequest, UserDefinedField } from '../types';
+import type { ClientContact, CreateOrganizationRequest, UpdateOrganizationRequest, UserDefinedField } from '../types';
 import type { AssignedUser } from '../types';
 import RichTextEditor from '../components/RichTextEditor';
 import Page from '../components/Page';
 import ClientImagesPanel from '../components/ClientImagesPanel';
 import SubOrganizationsPanel from '../components/SubOrganizationsPanel';
-import UserSelector from '../components/UserSelector';
 import {
   Button,
   FormGroup,
@@ -30,15 +29,20 @@ const MAX_DISTRIBUTION_LIST = 50;
 export default function OrganizationEdit() {
   const { organizationLower, organizationPlural, organizationSingular } = useTerminology();
   const { id } = useParams<{ id: string }>();
+  // The same page adds a client (/organizations/new, no id) and edits one, so both show every
+  // field a client has.
+  const isNew = !id;
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({ name: '', description: '' });
   const [fieldDefinitions, setFieldDefinitions] = useState<UserDefinedField[]>([]);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [assignedUsers, setAssignedUsers] = useState<AssignedUser[]>([]);
+  // Not shown on this page: iSec does not use per-client remediation owners. Still loaded and sent
+  // back unchanged on save, so editing a client never clears owners set some other way (API, import).
   const [remediationOwnerIds, setRemediationOwnerIds] = useState<string[]>([]);
   const [distributionList, setDistributionList] = useState<ClientContact[]>([]);
   const { setBreadcrumbs } = usePageTitle();
@@ -46,7 +50,7 @@ export default function OrganizationEdit() {
   useEffect(() => {
     setBreadcrumbs([
       { label: organizationPlural, to: '/organizations' },
-      { label: formData.name || organizationSingular },
+      { label: isNew ? `Add ${organizationSingular}` : (formData.name || organizationSingular) },
     ]);
     return () => setBreadcrumbs(null);
   }, [formData.name]);
@@ -57,6 +61,7 @@ export default function OrganizationEdit() {
   const hasEditAll = authorities.includes('organizations:edit:all');
   const hasReadOwned = authorities.includes('organizations:read:owned');
   const canWrite =
+    (isNew && authorities.includes('organizations:create:all')) ||
     isSuperAdmin ||
     hasEditAll ||
     (hasReadOwned &&
@@ -65,6 +70,8 @@ export default function OrganizationEdit() {
       ));
 
   useEffect(() => {
+    // Custom fields are needed by both modes; the record itself only when editing.
+    loadFieldDefinitions();
     if (!id) return;
 
     organizationsApi
@@ -85,6 +92,9 @@ export default function OrganizationEdit() {
         setLoading(false);
       });
 
+  }, [id]);
+
+  function loadFieldDefinitions() {
     entityFieldsApi
       .getConfig('ORGANIZATION')
       .then((fieldsRes) => {
@@ -98,23 +108,42 @@ export default function OrganizationEdit() {
       .catch(() => {
         // Field definitions are optional; ignore failures
       });
-  }, [id]);
+  }
+
+  // Rows the author left entirely blank are dropped rather than sent: an empty row is an add they
+  // thought better of, and the server would refuse it for a missing name.
+  const filledContacts = () => distributionList.filter(
+    (c) => (c.name || '').trim() || (c.title || '').trim() || (c.email || '').trim());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!id) return;
     setSaving(true);
     setError('');
+    if (!id) {
+      try {
+        const createData: CreateOrganizationRequest = {
+          name: formData.name,
+          description: formData.description,
+          fieldValues: Object.keys(fieldValues).length > 0 ? fieldValues : undefined,
+          distributionList: filledContacts(),
+        };
+        const created = await organizationsApi.create(createData);
+        // Reopen on the new client: its logo and sub-clients can only be added once it exists.
+        navigate(created.data?.id ? `/organizations/${created.data.id}/edit` : '/organizations',
+          { replace: true });
+      } catch (err: any) {
+        setError(err.response?.data?.message || `Failed to add ${organizationLower}`);
+        setSaving(false);
+      }
+      return;
+    }
     try {
       const updateData: UpdateOrganizationRequest = {
         name: formData.name,
         description: formData.description,
         fieldValues: Object.keys(fieldValues).length > 0 ? fieldValues : undefined,
         remediationOwnerIds,
-        // Rows the author left entirely blank are dropped rather than sent: an empty row is an
-        // add they thought better of, and the server would refuse it for a missing name.
-        distributionList: distributionList.filter(
-          (c) => (c.name || '').trim() || (c.title || '').trim() || (c.email || '').trim()),
+        distributionList: filledContacts(),
       };
       await organizationsApi.update(id, updateData);
       navigate('/organizations');
@@ -254,23 +283,6 @@ export default function OrganizationEdit() {
           </div>
         )}
 
-        <div className="form-panel">
-          <h3 className="form-section-title">Remediation Owners</h3>
-          <FormHint>
-            Staff responsible for fixing and tracking every finding under this {organizationLower}'s
-            applications. They are copied on each finding's alerts, see every comment, and are told when a
-            finding's status or owner changes. Internal users only.
-          </FormHint>
-          <UserSelector
-            label="Remediation owners"
-            placeholder="Search staff..."
-            selectedUserIds={remediationOwnerIds}
-            onChange={setRemediationOwnerIds}
-            disabled={!canWrite}
-            internalOnly
-          />
-        </div>
-
         {/* Part of this form's save, unlike the divisions panel below: these rows are plain
             columns on the organization, so they go with the rest of the record. */}
         <div className="form-panel">
@@ -357,6 +369,17 @@ export default function OrganizationEdit() {
 
         {id && <SubOrganizationsPanel organizationId={id} canWrite={canWrite} />}
 
+        {isNew && (
+          <div className="form-panel">
+            <h3 className="form-section-title">Images and Sub-{organizationPlural}</h3>
+            <FormHint>
+              The logo and other images, and any sub-{organizationLower}s, are added once the
+              {' '}{organizationLower} exists. Click <strong>Add {organizationSingular}</strong> and this page reopens on the new
+              {' '}{organizationLower}, ready for them.
+            </FormHint>
+          </div>
+        )}
+
         <div className="modal-actions">
           {canWrite && (
             <Button type="button" variant="secondary" onClick={() => navigate('/organizations')}>
@@ -365,7 +388,7 @@ export default function OrganizationEdit() {
           )}
           {canWrite && (
             <Button type="submit" disabled={saving}>
-              {saving ? 'Saving...' : 'Update'}
+              {saving ? 'Saving...' : isNew ? `Add ${organizationSingular}` : 'Update'}
             </Button>
           )}
         </div>
