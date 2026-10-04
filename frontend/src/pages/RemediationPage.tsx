@@ -52,8 +52,8 @@ const BUCKET_BADGES: Record<RemediationAlertKind, BucketBadge[]> = {
     { bucket: 'PAST_DUE', label: 'Past Due', color: '#ef4444', count: 'pastDue' },
     { bucket: 'DUE_SOON', label: 'Due Soon', color: '#f59e0b', count: 'dueSoon' },
   ],
+  // No "Requested" badge: requests came only from client accounts, which iSec does not have.
   RETEST: [
-    { bucket: 'RETEST_REQUESTED', label: 'Requested', color: '#8b5cf6', count: 'retestRequested' },
     { bucket: 'RETEST_SCHEDULED', label: 'Scheduled', color: '#3b82f6', count: 'retestScheduled' },
     { bucket: 'RETEST_IN_PROGRESS', label: 'In Progress', color: '#0ea5e9', count: 'retestInProgress' },
   ],
@@ -79,18 +79,32 @@ const formatAssessmentLabel = (a: Assessment): SelectOption => {
   return { value: a.id, label: date ? `${a.name}: ${date}` : a.name };
 };
 
-export default function RemediationPage({ kind }: { kind: RemediationAlertKind }) {
-  // Both alert routes render this page in the same spot, so React would otherwise keep one kind's
-  // state (restored from its own saved filters) when you switch to the other. The key remounts it.
-  return <RemediationAlerts key={kind} kind={kind} />;
+// Module-level so each keeps one identity across renders: a wrapper component created inside
+// render is a new type every time, and React would rebuild the whole list on each keystroke.
+function PageWrapper({ children }: { children: React.ReactNode }) {
+  return <Page className="remediation-page">{children}</Page>;
 }
 
-function RemediationAlerts({ kind }: { kind: RemediationAlertKind }) {
+function EmbeddedWrapper({ children }: { children: React.ReactNode }) {
+  return <div className="remediation-page">{children}</div>;
+}
+
+/**
+ * `embedded` renders the list without its own Page wrapper, for a page that already has one
+ * (Retests shows the team-wide retest list as a tab).
+ */
+export default function RemediationPage({ kind, embedded = false }: { kind: RemediationAlertKind; embedded?: boolean }) {
+  // Both alert routes render this page in the same spot, so React would otherwise keep one kind's
+  // state (restored from its own saved filters) when you switch to the other. The key remounts it.
+  return <RemediationAlerts key={kind} kind={kind} embedded={embedded} />;
+}
+
+function RemediationAlerts({ kind, embedded }: { kind: RemediationAlertKind; embedded: boolean }) {
   const isRetest = kind === 'RETEST';
   const tableKey = TABLE_KEYS[kind];
   // Handed to the assessment page so its breadcrumb leads back here instead of to Your Assessments.
   const alertsCrumb = isRetest
-    ? { label: 'Retest Alerts', to: '/remediation/retests' }
+    ? { label: 'Retests', to: '/retests?tab=all' }
     : { label: 'Vuln Alerts', to: '/remediation/vulnerabilities' };
   const { severityOptions, organizationPlural, organizationSingular, targetSingular } = useTerminology();
   const navigate = useNavigate();
@@ -102,11 +116,6 @@ function RemediationAlerts({ kind }: { kind: RemediationAlertKind }) {
   // External accounts never edit a finding, whatever their role was granted — the API refuses
   // it on the account flag, so the panel must open read-only for them too.
   const canEditVulns = userPerms.canEditVulnerabilities && !isExternal;
-  // App owners and org users reach this queue to watch their own findings and manage their own
-  // retest requests. Scheduling and editing are staff actions, and the retest detail page is
-  // behind a permission they do not have — so for them a retest row opens the finding it is
-  // against. Cancelling stays: whoever may ask for a retest may call it off.
-  const requestOnly = userPerms.canRequestRetestOnly || isExternal;
 
   const [rows, setRows] = useState<RemediationQueueRow[]>([]);
   // Starts true so DataTable doesn't clamp a restored page against the empty pre-load total.
@@ -568,7 +577,7 @@ function RemediationAlerts({ kind }: { kind: RemediationAlertKind }) {
             className="remediation-action-btn"
             title="View"
             onClick={() => {
-              if (r.type === 'VULNERABILITY' || requestOnly) {
+              if (r.type === 'VULNERABILITY') {
                 openVulnDrawer(r);
               } else {
                 navigate(`/retests/${r.id}`);
@@ -577,7 +586,7 @@ function RemediationAlerts({ kind }: { kind: RemediationAlertKind }) {
           >
             <Eye size={15} />
           </button>
-          {!isCompletedRetest(r) && !(requestOnly && r.type === 'RETEST') && (
+          {!isCompletedRetest(r) && (
           <button
             type="button"
             className="remediation-action-btn"
@@ -595,7 +604,7 @@ function RemediationAlerts({ kind }: { kind: RemediationAlertKind }) {
               : r.retestStatus === 'REQUESTED' ? <CalendarRange size={15} /> : <Pencil size={15} />}
           </button>
           )}
-          {!isCompletedRetest(r) && !(requestOnly && r.type === 'VULNERABILITY') && (
+          {!isCompletedRetest(r) && (
           <button
             type="button"
             className="remediation-action-btn remediation-action-btn--danger"
@@ -716,8 +725,10 @@ function RemediationAlerts({ kind }: { kind: RemediationAlertKind }) {
     </div>
   );
 
+  const Wrapper = embedded ? EmbeddedWrapper : PageWrapper;
+
   return (
-    <Page className="remediation-page">
+    <Wrapper>
       <div className="rq-stats-bar">
         <button
           type="button"
@@ -927,6 +938,6 @@ function RemediationAlerts({ kind }: { kind: RemediationAlertKind }) {
         variant="danger"
         isLoading={deleting}
       />
-    </Page>
+    </Wrapper>
   );
 }

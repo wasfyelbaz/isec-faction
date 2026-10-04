@@ -10,7 +10,6 @@ import {
   UserCog,
   Shield,
   Calendar,
-  CheckSquare,
   Settings,
   Sliders,
   ChevronDown,
@@ -92,22 +91,25 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { name: 'Mentions', path: '/mentions', icon: AtSign },
-  { name: 'Applications', path: '/applications', icon: AppWindow },
-  { name: 'Assessments', label: 'Your Assessments', path: '/assessments', icon: GliderIcon },
-  { name: 'Retests', label: 'Your Retests', path: '/retests', icon: RefreshCw },
-  { name: 'Peer Review Queue', path: '/peer-review', icon: ClipboardCheck },
-  { name: 'Scheduling', path: '/scheduling', icon: Calendar },
   {
-    // Group key differs from every sub-item's key, which permissions and counts use.
-    name: 'Remediation Group',
-    label: 'Remediation',
-    icon: CheckSquare,
+    // Clients are day-to-day work, not administration, so they sit with the other working menus.
+    // The group key differs from its sub-items' keys, which permissions read; menuLabel gives it
+    // the configured noun ("Clients").
+    name: 'Organizations Group',
+    icon: Building2,
     subItems: [
-      { name: 'Vuln Alerts', path: '/remediation/vulnerabilities', icon: CheckSquare },
-      { name: 'Retest Alerts', path: '/remediation/retests', icon: RefreshCw },
-      { name: 'Vulnerabilities', path: '/vulnerabilities', icon: ShieldAlert },
+      { name: 'Organizations', path: '/organizations', icon: Building2 },
+      { name: 'Organization Config', path: '/org-config', icon: DatabaseZap },
     ],
   },
+  { name: 'Applications', path: '/applications', icon: AppWindow },
+  { name: 'Scheduling', path: '/scheduling', icon: Calendar },
+  { name: 'Assessments', label: 'Your Assessments', path: '/assessments', icon: GliderIcon },
+  // Retests merges Your Retests and Retest Alerts (tabs on the page); Vulnerabilities was the
+  // Remediation group's other entry, so the group is gone.
+  { name: 'Retests', path: '/retests', icon: RefreshCw },
+  { name: 'Peer Review Queue', path: '/peer-review', icon: ClipboardCheck },
+  { name: 'Vulnerabilities', path: '/vulnerabilities', icon: ShieldAlert },
   {
     name: 'Administration',
     icon: Settings,
@@ -120,11 +122,6 @@ const menuItems: MenuItem[] = [
       { name: 'Roles', path: '/roles', icon: Shield },
       { name: 'Password Policy', path: '/password-policy', icon: KeyRound },
       { name: 'SSO Config', path: '/sso-config', icon: Shield, feature: 'sso' },
-
-      // Who the work is for.
-      { name: 'Organizations', icon: Building2, heading: true },
-      { name: 'Organizations', path: '/organizations', icon: Building2 },
-      { name: 'Organization Config', path: '/org-config', icon: DatabaseZap },
 
       // What goes into a report. AI Configuration sits here for its prompt library, though the
       // same page also holds provider and API key settings — splitting the page to match this
@@ -156,8 +153,6 @@ const QUEUE_BADGE_COLORS: Record<string, string> = {
   'Peer Review Queue': 'nav-badge--blue',
   'Vulnerabilities': 'nav-badge--red',
   'Retests': 'nav-badge--green',
-  'Vuln Alerts': 'nav-badge--orange',
-  'Retest Alerts': 'nav-badge--green',
 };
 
 type Theme = 'dark' | 'light';
@@ -198,7 +193,7 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
     () => localStorage.getItem('sidebarOpen') !== 'false'
   );
   const [expandedMenus, setExpandedMenus] = useState<string[]>(
-    ['Assessments Group', 'Remediation Group', 'Administration']);
+    ['Assessments Group', 'Organizations Group', 'Administration']);
   // Only loaded when the sidebar is actually going to list them.
   const [assessmentTypes, setAssessmentTypes] = useState<AssessmentType[]>([]);
   useEffect(() => {
@@ -230,7 +225,7 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
       // The group key differs from its sub-items' key, matching Remediation: the sub-item key is
       // what permissions and counts read.
       name: 'Assessments Group',
-      label: item.label ?? item.name,
+      label: item.label ?? menuLabel(item.name),
       icon: item.icon,
       // Collapsed, the group shows the overall active count rather than the sum of its children,
       // which would add the All entry to every type again.
@@ -391,12 +386,6 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
         a === 'vulnerabilities:read:all' || a === 'vulnerabilities:read:team' || a === 'vulnerabilities:read:assessment'),
         queueCountsApi.openRetests],
       // One count per alerts page, each scoped server-side and equal to that page's Total badge.
-      ['Vuln Alerts', isAdmin || authorities.some((a: string) =>
-        a === 'vulnerabilities:read:all' || a === 'vulnerabilities:read:team'),
-        () => queueCountsApi.remediationAlerts('VULNERABILITY')],
-      ['Retest Alerts', isAdmin || authorities.some((a: string) =>
-        a === 'vulnerabilities:read:all' || a === 'vulnerabilities:read:team'),
-        () => queueCountsApi.remediationAlerts('RETEST')],
     ];
     // Assessments is fetched on its own: one summary call carries the overall badge and, when the
     // type menu is on, each type's badge — the server derives them from the same grouped query.
@@ -446,7 +435,7 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
   const countOf = (item: MenuItem): number => queueCounts[item.countKey ?? item.name] ?? 0;
 
   const menuLabel = (name: string): string => {
-    if (name === 'Organizations') return organizationPlural;
+    if (name === 'Organizations' || name === 'Organizations Group') return organizationPlural;
     // The config page for those records follows the same noun, so the two menu entries never
     // disagree about what the thing is called.
     if (name === 'Organization Config') return `${organizationSingular} Config`;
@@ -671,12 +660,12 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
                       );
                     }}
                     className={`nav-item ${isActive ? 'active' : ''}`}
-                    title={item.label ?? item.name}
+                    title={item.label ?? menuLabel(item.name)}
                   >
                     <Icon className="nav-icon" size={20} />
                     {sidebarOpen && (
                       <>
-                        <span className="nav-label">{item.label ?? item.name}</span>
+                        <span className="nav-label">{item.label ?? menuLabel(item.name)}</span>
                         <ChevronDown
                           className={`nav-arrow ${isExpanded ? 'expanded' : ''}`}
                           size={16}
@@ -733,7 +722,7 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
                       className="nav-flyout"
                       style={{ top: flyout.top, left: flyout.left }}
                     >
-                      <div className="nav-flyout-title">{item.label ?? item.name}</div>
+                      <div className="nav-flyout-title">{item.label ?? menuLabel(item.name)}</div>
                       {item.subItems.map((subItem) => {
                         const SubIcon = subItem.icon;
                         if (subItem.heading) {
@@ -775,10 +764,10 @@ function DashboardChrome({ children }: DashboardLayoutProps) {
                 key={item.path}
                 onClick={() => item.path && navigate(item.path)}
                 className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
-                title={item.label ?? item.name}
+                title={item.label ?? menuLabel(item.name)}
               >
                 <Icon className="nav-icon" size={20} />
-                {sidebarOpen && <span className="nav-label">{item.label ?? item.name}</span>}
+                {sidebarOpen && <span className="nav-label">{item.label ?? menuLabel(item.name)}</span>}
                 {queueCount > 0 && (
                   <span
                     className={`nav-badge ${QUEUE_BADGE_COLORS[item.name] ?? ''}`}

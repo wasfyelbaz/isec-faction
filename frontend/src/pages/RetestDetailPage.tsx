@@ -86,7 +86,7 @@ export default function RetestDetailPage() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: 'Your Retests', to: '/retests' },
+      { label: 'Retests', to: '/retests' },
       { label: vuln?.name || retest?.vulnerabilityName || 'Retest' },
     ]);
     return () => setBreadcrumbs(null);
@@ -510,20 +510,10 @@ export default function RetestDetailPage() {
               </div>
             )}
 
-            {application && (application.stakeHolders?.length || application.appOwner?.email) && (
+            {application && !!application.stakeHolders?.length && (
               <div className="retest-detail-field">
                 <div className="retest-detail-field-label">Stakeholders</div>
                 <div className="retest-assessors-list">
-                  {application.appOwner?.email && (
-                    <div className="retest-stakeholder-row">
-                      <span className="retest-assessor-item">
-                        {application.appOwner.fullName || application.appOwner.email} — App Owner
-                      </span>
-                      <button type="button" className="retest-copy-btn" onClick={() => handleCopyEmail(application.appOwner!.email)} title={`Copy ${application.appOwner.email}`}>
-                        {copiedEmail === application.appOwner.email ? <Check size={13} /> : <Copy size={13} />}
-                      </button>
-                    </div>
-                  )}
                   {application.stakeHolders?.map((s, i) => (
                     <div key={i} className="retest-stakeholder-row">
                       <span className="retest-assessor-item">
@@ -545,7 +535,7 @@ export default function RetestDetailPage() {
             <div className="retest-detail-card">
               <h3>Retest Requested</h3>
               <p style={{ margin: '0 0 0.75rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                This retest was requested by the application owner and is awaiting scheduling.
+                This retest was requested and is awaiting scheduling.
               </p>
               {permsCanSchedule && (
                 <button

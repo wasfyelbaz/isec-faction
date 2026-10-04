@@ -34,6 +34,7 @@ import ApplicationEdit from './pages/ApplicationEdit';
 import ReportDesigner from './pages/ReportDesigner';
 import Engagements from './pages/Engagements';
 import CreateAssessment from './pages/CreateAssessment';
+import CreateTarget from './pages/CreateTarget';
 import Assessments from './pages/Assessments';
 import AssessmentDetail from './pages/AssessmentDetail';
 import PeerReviewQueue from './pages/PeerReviewQueue';
@@ -43,7 +44,6 @@ import OrgConfig from './pages/OrgConfig';
 import RetestsPage from './pages/RetestsPage';
 import RetestDetailPage from './pages/RetestDetailPage';
 import ScheduleRetestPage from './pages/ScheduleRetestPage';
-import RemediationPage from './pages/RemediationPage';
 import EmailConfigPage from './pages/EmailConfigPage';
 import EmailNotificationsPage from './pages/EmailNotificationsPage';
 import UnsubscribePage from './pages/UnsubscribePage';
@@ -394,6 +394,21 @@ function App() {
         />
 
         <Route
+          path="/organizations/new"
+          element={
+            isAuthenticated ? (
+              <DashboardLayout>
+                <ProtectedRoute requiredPermission="canCreateOrganizations">
+                  <OrganizationEdit />
+                </ProtectedRoute>
+              </DashboardLayout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
           path="/organizations/:id/edit"
           element={
             isAuthenticated ? (
@@ -415,6 +430,21 @@ function App() {
               <DashboardLayout>
                 <ProtectedRoute requiredPermission="canViewApplications">
                   <Applications />
+                </ProtectedRoute>
+              </DashboardLayout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/applications/new"
+          element={
+            isAuthenticated ? (
+              <DashboardLayout>
+                <ProtectedRoute requiredPermission="canCreateApplications">
+                  <CreateTarget />
                 </ProtectedRoute>
               </DashboardLayout>
             ) : (
@@ -618,37 +648,14 @@ function App() {
         />
 
 
-        {/* Remediation alerts, one page per kind. The bare path is the old single queue; bookmarks and
-            the due-date digest email still link there, so it lands on Vuln Alerts. */}
-        <Route path="/remediation" element={<Navigate to="/remediation/vulnerabilities" replace />} />
-        <Route
-          path="/remediation/vulnerabilities"
-          element={
-            isAuthenticated ? (
-              <DashboardLayout>
-                <ProtectedRoute requiredPermission="canViewRemediation">
-                  <RemediationPage kind="VULNERABILITY" />
-                </ProtectedRoute>
-              </DashboardLayout>
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-        <Route
-          path="/remediation/retests"
-          element={
-            isAuthenticated ? (
-              <DashboardLayout>
-                <ProtectedRoute requiredPermission="canViewRemediation">
-                  <RemediationPage kind="RETEST" />
-                </ProtectedRoute>
-              </DashboardLayout>
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
+        {/* The Remediation alerts pages are retired. Vuln Alerts (findings near or past their fix-by
+            date) went because iSec does not track remediation deadlines; its address, which old
+            bookmarks and due-date digest emails still carry, opens the full findings list instead.
+            Retest Alerts lives on as the "All retests" tab of Retests. */}
+        <Route path="/remediation" element={<Navigate to="/retests?tab=all" replace />} />
+        <Route path="/remediation/vulnerabilities" element={<Navigate to="/vulnerabilities" replace />} />
+        {/* Retest Alerts is now the "All retests" tab of Retests. */}
+        <Route path="/remediation/retests" element={<Navigate to="/retests?tab=all" replace />} />
 
         <Route
           path="/org-config"

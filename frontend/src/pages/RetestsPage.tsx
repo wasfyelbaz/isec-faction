@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import { SeverityBadge } from '../components';
-import { useNavigate } from 'react-router-dom';
+import { Badge, SeverityBadge } from '../components';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { retestApi } from '../api';
 import type { Retest } from '../types';
 import DataTable, { Column, PaginationInfo, SortState } from '../components/DataTable';
 import { applyClientSort, SortAccessors } from '../utils/tableSort';
 import Page from '../components/Page';
 import { usePersistedState } from '../hooks/usePersistedState';
+import RemediationPage from './RemediationPage';
+import { getCurrentUser } from '../utils/permissions';
+import './Applications.css';
 import './RetestsPage.css';
 
 const columns: Column<Retest>[] = [
@@ -26,6 +29,13 @@ const columns: Column<Retest>[] = [
     render: r => r.vulnerabilitySeverity ? (
       <SeverityBadge severity={r.vulnerabilitySeverity} />
     ) : '-',
+  },
+  {
+    header: 'Status',
+    sortKey: 'status',
+    render: r => r.status === 'IN_PROGRESS'
+      ? <Badge variant="info">In Progress</Badge>
+      : <Badge variant="secondary">Scheduled</Badge>,
   },
   {
     header: 'Start Date',
@@ -49,6 +59,7 @@ const SORT_ACCESSORS: SortAccessors<Retest> = {
   vulnerabilityName: r => r.vulnerabilityName || r.vulnerabilityId,
   assessmentName: r => r.assessmentName || r.assessmentId,
   vulnerabilitySeverity: r => r.vulnerabilitySeverity,
+  status: r => r.status,
   scheduledStartDate: r => r.scheduledStartDate,
   scheduledEndDate: r => r.scheduledEndDate,
   assignedAssessorNames: r => r.assignedAssessorNames?.join(', '),
@@ -58,7 +69,46 @@ const PAGE_SIZE = 15;
 // localStorage key for this table's saved search, sort and paging.
 const TABLE_KEY = 'retests';
 
+/** Retests still to do: scheduled, or started and not finished. */
+const OPEN_STATUSES = new Set(['SCHEDULED', 'IN_PROGRESS']);
+
+type RetestsTab = 'mine' | 'all';
+
+/**
+ * Retests, one menu entry. "Assigned to me" is a tester's own open retests; "All retests" is the
+ * team-wide list with its counters, filters and actions (formerly Retest Alerts), offered only to
+ * roles that can read every finding — the list's server query refuses narrower scopes.
+ */
 export default function RetestsPage() {
+  const authorities = getCurrentUser()?.authorities ?? [];
+  const canSeeAll = authorities.some((a) =>
+    a === 'super_admin' || a === 'vulnerabilities:read:all' || a === 'vulnerabilities:read:team');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: RetestsTab = canSeeAll && searchParams.get('tab') === 'all' ? 'all' : 'mine';
+  const selectTab = (next: RetestsTab) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.set('tab', 'all'); else params.delete('tab');
+    setSearchParams(params, { replace: true });
+  };
+
+  return (
+    <Page className="retests-page">
+      {canSeeAll && (
+        <div className="app-tab-nav">
+          <button className={`app-tab-btn${tab === 'mine' ? ' active' : ''}`} onClick={() => selectTab('mine')}>
+            Assigned to me
+          </button>
+          <button className={`app-tab-btn${tab === 'all' ? ' active' : ''}`} onClick={() => selectTab('all')}>
+            All retests
+          </button>
+        </div>
+      )}
+      {tab === 'all' ? <RemediationPage kind="RETEST" embedded /> : <MyRetests />}
+    </Page>
+  );
+}
+
+function MyRetests() {
   const navigate = useNavigate();
   const [allRetests, setAllRetests] = useState<Retest[]>([]);
   // Starts true so DataTable doesn't clamp a restored page against the empty pre-load list.
@@ -73,7 +123,8 @@ export default function RetestsPage() {
     retestApi.getAll({ assignedToMe: true })
       .then(res => {
         if (res.success && res.data) {
-          setAllRetests((res.data as Retest[]).filter(r => r.status === 'SCHEDULED'));
+          // In Progress too: a retest the tester has started is exactly the one they are working on.
+          setAllRetests((res.data as Retest[]).filter(r => OPEN_STATUSES.has(r.status)));
         }
       })
       .catch(() => {})
@@ -112,7 +163,6 @@ export default function RetestsPage() {
   }, []);
 
   return (
-    <Page className="retests-page">
       <DataTable
         columns={columns}
         data={pageData}
@@ -123,12 +173,11 @@ export default function RetestsPage() {
         initialSearch={search}
         onSearchChange={handleSearchChange}
         searchPlaceholder="Search retests"
-        emptyMessage="No scheduled retests assigned to you."
+        emptyMessage="No open retests assigned to you."
         idAccessor="id"
         onRowClick={r => navigate(`/retests/${r.id}`)}
         sort={sort}
         onSortChange={next => { setSort(next); setPage(0); }}
       />
-    </Page>
   );
 }
