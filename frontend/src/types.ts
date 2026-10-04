@@ -625,6 +625,10 @@ export interface ReportTemplate {
   templateFileName?: string;
   templateFileSize?: number;
   templateFileContentType?: string;
+  retestTemplateFileId?: string;
+  retestTemplateFileName?: string;
+  retestTemplateFileSize?: number;
+  retestTemplateFileContentType?: string;
   version: number;
   scoringType?: ScoringType;
   sections: string[];
@@ -716,6 +720,7 @@ export interface AssessmentWorkflowConfig {
   /** Ordered remediation stages; the last one is terminal (closes the vulnerability). */
   remediationStages?: RemediationStage[];
   allowSelfPeerReview?: boolean;
+  allowRetestEvidenceEditAfterReport?: boolean;
 }
 
 /** One assessment workflow: its statuses, SLAs, vulnerability statuses and remediation stages. */
@@ -737,6 +742,7 @@ export interface Workflow {
   builtInVulnerabilityStatuses: string[];
   remediationStages: RemediationStage[];
   allowSelfPeerReview: boolean;
+  allowRetestEvidenceEditAfterReport: boolean;
   createdAt: string;
   updatedAt: string;
   /** Vulnerability status renames still updating findings in the background. */
@@ -781,6 +787,7 @@ export interface UpdateWorkflowRequest {
   vulnerabilityStatuses: WorkflowNamedEntry[];
   remediationStages: RemediationStage[];
   allowSelfPeerReview: boolean;
+  allowRetestEvidenceEditAfterReport: boolean;
 }
 
 /** One reason the server refused a workflow change (the `violations` of a 409). */
@@ -1774,6 +1781,8 @@ export interface Retest {
   assessmentName?: string;
   applicationId?: string;
   applicationName?: string;
+  /** The application's human-facing ID (e.g. APP-1234). */
+  applicationAppId?: string;
   scheduledStartDate: string;
   scheduledEndDate: string;
   /** When it was verified complete; written only at completion. */
@@ -1790,6 +1799,13 @@ export interface Retest {
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
+  evidence?: string;
+  evidenceUpdatedAt?: string;
+  evidenceLockedAt?: string;
+  /** Whether evidence can still be edited (false once locked by the retest report / workflow setting). */
+  evidenceEditable?: boolean;
+  /** When the assessment's retest report was last generated; null/undefined if it never was. */
+  assessmentRetestReportGeneratedAt?: string;
 }
 
 export interface CreateRetestRequest {
@@ -1817,6 +1833,7 @@ export interface UpdateRetestRequest {
   severity?: string;
   likelihood?: string;
   impact?: string;
+  evidence?: string;
 }
 
 /**
@@ -1835,6 +1852,23 @@ export interface CompleteRetestRequest {
   severity?: string;
   likelihood?: string;
   impact?: string;
+  evidence?: string;
+}
+
+/**
+ * One assessment ready to have its retest report (re)generated: it has at least one completed
+ * retest and a retest template on its report template. Backs the "ready for report" list.
+ */
+export interface RetestReportReady {
+  assessmentId: string;
+  assessmentName: string;
+  applicationId?: string;
+  applicationName?: string;
+  passedCount: number;
+  failedCount: number;
+  lastCompletedAt?: string;
+  retestReportGeneratedAt?: string;
+  hasRetestTemplate: boolean;
 }
 
 /**
@@ -2346,7 +2380,9 @@ export interface ApplicationIdConfig {
 
 // ── Report documents (Finalize panel) ──
 
-export type ReportDocumentType = 'DOCX' | 'PDF' | 'ENCRYPTED_PDF';
+export type ReportDocumentType =
+  | 'DOCX' | 'PDF' | 'ENCRYPTED_PDF'
+  | 'RETEST_DOCX' | 'RETEST_PDF' | 'RETEST_ENCRYPTED_PDF';
 export type ReportDocumentStatus = 'GENERATING' | 'COMPLETED' | 'FAILED';
 
 export interface ReportDocumentInfo {
@@ -2359,6 +2395,8 @@ export interface ReportDocumentInfo {
 
 export interface ReportDocuments {
   documents: ReportDocumentInfo[];
+  retestDocuments?: ReportDocumentInfo[];
+  retestTemplateAvailable?: boolean;
   reportPassword?: string | null;
 }
 

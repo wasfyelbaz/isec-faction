@@ -105,8 +105,8 @@ const menuItems: MenuItem[] = [
   { name: 'Applications', path: '/applications', icon: AppWindow },
   { name: 'Scheduling', path: '/scheduling', icon: Calendar },
   { name: 'Assessments', label: 'Your Assessments', path: '/assessments', icon: GliderIcon },
-  // Retests merges Your Retests and Retest Alerts (tabs on the page); Vulnerabilities was the
-  // Remediation group's other entry, so the group is gone.
+  // Retests covers Your Retests and Retest Alerts (its "Show all assessors" switch); Vulnerabilities
+  // was the Remediation group's other entry, so the group is gone.
   { name: 'Retests', path: '/retests', icon: RefreshCw },
   { name: 'Peer Review Queue', path: '/peer-review', icon: ClipboardCheck },
   { name: 'Vulnerabilities', path: '/vulnerabilities', icon: ShieldAlert },

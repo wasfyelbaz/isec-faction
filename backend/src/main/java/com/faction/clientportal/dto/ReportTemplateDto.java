@@ -37,6 +37,10 @@ public class ReportTemplateDto {
     private String templateFileName;
     private Long templateFileSize;
     private String templateFileContentType;
+    private String retestTemplateFileId;
+    private String retestTemplateFileName;
+    private Long retestTemplateFileSize;
+    private String retestTemplateFileContentType;
 
     private Integer version;
     private String scoringType;
@@ -81,6 +85,10 @@ public class ReportTemplateDto {
             .templateFileName(entity.getTemplateFileName())
             .templateFileSize(entity.getTemplateFileSize())
             .templateFileContentType(entity.getTemplateFileContentType())
+            .retestTemplateFileId(entity.getRetestTemplateFileId())
+            .retestTemplateFileName(entity.getRetestTemplateFileName())
+            .retestTemplateFileSize(entity.getRetestTemplateFileSize())
+            .retestTemplateFileContentType(entity.getRetestTemplateFileContentType())
             .version(entity.getVersion())
             .scoringType(entity.getScoringType())
             .sections(entity.getSections() != null ? new ArrayList<>(entity.getSections()) : new ArrayList<>())

@@ -651,11 +651,11 @@ function App() {
         {/* The Remediation alerts pages are retired. Vuln Alerts (findings near or past their fix-by
             date) went because iSec does not track remediation deadlines; its address, which old
             bookmarks and due-date digest emails still carry, opens the full findings list instead.
-            Retest Alerts lives on as the "All retests" tab of Retests. */}
-        <Route path="/remediation" element={<Navigate to="/retests?tab=all" replace />} />
+            Retest Alerts is covered by Retests' "Show all assessors" switch. */}
+        <Route path="/remediation" element={<Navigate to="/retests" replace />} />
         <Route path="/remediation/vulnerabilities" element={<Navigate to="/vulnerabilities" replace />} />
-        {/* Retest Alerts is now the "All retests" tab of Retests. */}
-        <Route path="/remediation/retests" element={<Navigate to="/retests?tab=all" replace />} />
+        {/* Retest Alerts is now Retests with "Show all assessors" on. */}
+        <Route path="/remediation/retests" element={<Navigate to="/retests" replace />} />
 
         <Route
           path="/org-config"

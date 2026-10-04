@@ -104,7 +104,7 @@ function RemediationAlerts({ kind, embedded }: { kind: RemediationAlertKind; emb
   const tableKey = TABLE_KEYS[kind];
   // Handed to the assessment page so its breadcrumb leads back here instead of to Your Assessments.
   const alertsCrumb = isRetest
-    ? { label: 'Retests', to: '/retests?tab=all' }
+    ? { label: 'Retests', to: '/retests' }
     : { label: 'Vuln Alerts', to: '/remediation/vulnerabilities' };
   const { severityOptions, organizationPlural, organizationSingular, targetSingular } = useTerminology();
   const navigate = useNavigate();
