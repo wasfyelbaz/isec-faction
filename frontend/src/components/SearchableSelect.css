@@ -1,6 +1,6 @@
 /* ── Searchable Select ─────────────────────────────────────
    Styles for SearchableSelect / MultiSelect. Pages that still keep a local copy of the
-   pattern (Applications, ApplicationsAssessmentsTab) import this file directly. */
+   pattern (Applications, Engagements) import this file directly. */
 
 /* The row of filter pills a DataTable renders via headerChildren. */
 .ss-filter-bar {

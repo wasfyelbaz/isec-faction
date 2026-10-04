@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit2, Trash2, Plus, Calendar, List, Download, Upload, Eye, Users } from 'lucide-react';
-import { assessmentsApi, applicationsApi, assessmentTypesApi, availabilityApi, teamsApi, usersApi, vulnerabilitiesApi } from '../api';
+import { Edit2, Trash2, Plus, Calendar, List, Download, Upload, Eye, Users, ClipboardList, FileText } from 'lucide-react';
+import { assessmentsApi, assessmentSurveysApi, applicationsApi, assessmentTypesApi, availabilityApi, teamsApi, usersApi, vulnerabilitiesApi } from '../api';
 import type {
   Assessment,
   AssessmentMetrics,
+  AssessmentSurvey,
   Application,
   AssessmentType,
   Team,
@@ -25,6 +26,8 @@ import { PaidFeature } from '../components/PaidFeature';
 import DiamondIcon from '../components/DiamondIcon';
 import { useEdition } from '../context/EditionContext';
 import AssessmentImportModal from '../components/AssessmentImportModal';
+import ReportPreviewDrawer from '../components/ReportPreviewDrawer';
+import SurveyDrawer from '../components/SurveyDrawer';
 import Page from '../components/Page';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { usePermissions } from '../utils/permissions';
@@ -54,7 +57,7 @@ const defaultCalendarWindow = (): { start: string; end: string } => {
 const TABLE_KEY = 'scheduling';
 
 export default function Engagements() {
-  const { targetSingular } = useTerminology();
+  const { targetSingular, targetLower, targetPlural } = useTerminology();
   const navigate = useNavigate();
   // The View action opens the assessment detail page, which sits behind its own permission —
   // scheduling access alone does not imply it.
@@ -130,6 +133,9 @@ export default function Engagements() {
     assessmentTypeIds: [] as string[],
     name: '',
     pastDue: false,
+    // Only assessments still waiting on a survey response (moved here from the retired Targets
+    // "All Assessments" tab, along with the Surveys column and the report preview).
+    openSurveys: false,
     ...DATE_DEFAULTS,
   });
   const [draft, setDraft] = useState(DATE_DEFAULTS);
@@ -169,7 +175,7 @@ export default function Engagements() {
   const applyAdvanced = () => applyInline({ ...draft });
   const clearAllFilters = () => {
     setDraft(DATE_DEFAULTS);
-    applyInline({ ...DATE_DEFAULTS, applicationId: '', assessmentTypeIds: [], statuses: [], pastDue: false });
+    applyInline({ ...DATE_DEFAULTS, applicationId: '', assessmentTypeIds: [], statuses: [], pastDue: false, openSurveys: false });
   };
   // Keep the panel's draft in step when an applied range is removed via its chip or clear-all.
   useEffect(() => { setDraft((d) => ({ ...d, startDateFrom: filters.startDateFrom, startDateTo: filters.startDateTo })); },
@@ -207,6 +213,9 @@ export default function Engagements() {
   const [exporting, setExporting] = useState(false);
   const [pageVulnerabilities, setPageVulnerabilities] = useState<Vulnerability[]>([]);
   const [showImport, setShowImport] = useState(false);
+  const [surveyMap, setSurveyMap] = useState<Record<string, AssessmentSurvey[]>>({});
+  const [surveyAssessment, setSurveyAssessment] = useState<Assessment | null>(null);
+  const [previewAssessment, setPreviewAssessment] = useState<Assessment | null>(null);
 
   const [showDateChangeConfirm, setShowDateChangeConfirm] = useState(false);
   const [pendingDateChange, setPendingDateChange] = useState<{
@@ -258,6 +267,21 @@ export default function Engagements() {
     ).then(results => setPageVulnerabilities(results.flat()));
   }, [assessments]);
 
+  // Surveys for just the rows on screen, for the Surveys column.
+  useEffect(() => {
+    if (view !== 'list' || assessments.length === 0) {
+      setSurveyMap({});
+      return;
+    }
+    let cancelled = false;
+    Promise.all(assessments.map(a =>
+      assessmentSurveysApi.getByAssessment(a.id)
+        .then(r => [a.id, r.data || []] as const)
+        .catch(() => [a.id, [] as AssessmentSurvey[]] as const)
+    )).then(entries => { if (!cancelled) setSurveyMap(Object.fromEntries(entries)); });
+    return () => { cancelled = true; };
+  }, [assessments, view]);
+
   const loadData = () => {
     if (view === 'list') {
       loadAssessments();
@@ -280,6 +304,7 @@ export default function Engagements() {
         statuses: filters.statuses,
         assessmentTypeIds: filters.assessmentTypeIds,
         pastDue: filters.pastDue || undefined,
+        openSurveys: filters.openSurveys || undefined,
         startDateFrom: dayStart(filters.startDateFrom),
         startDateTo: dayEnd(filters.startDateTo),
         endDateFrom: dayStart(filters.endDateFrom),
@@ -686,9 +711,38 @@ export default function Engagements() {
       },
     },
     {
+      header: 'Surveys',
+      render: (assessment) => {
+        const surveys = surveyMap[assessment.id] ?? [];
+        if (surveys.length === 0) return <span className="text-muted">—</span>;
+        const pending = surveys.filter(s => s.status !== 'COMPLETE').length;
+        return (
+          <ActionButtons>
+            <IconButton
+              icon={ClipboardList}
+              onClick={() => setSurveyAssessment(assessment)}
+              title="Open surveys"
+              variant={pending === 0 ? 'success' : 'warning'}
+            />
+            <Badge variant={pending === 0 ? 'success' : 'warning'} size="sm">
+              {pending === 0 ? 'Complete' : `${pending} pending`}
+            </Badge>
+          </ActionButtons>
+        );
+      },
+    },
+    {
       header: 'Actions',
       render: (assessment) => (
         <ActionButtons>
+          {assessment.generatedReportFileId && (
+            <IconButton
+              icon={FileText}
+              onClick={() => setPreviewAssessment(assessment)}
+              title="Preview report"
+              variant="info"
+            />
+          )}
           {permissions.canViewAssessments && (
             <IconButton
               icon={Eye}
@@ -854,7 +908,7 @@ export default function Engagements() {
             onPageSizeChange={(pageSize) => setPagination({ ...pagination, pageSize, page: 0 })}
             initialSearch={filters.name}
             onSearchChange={(q) => applyInline({ name: q })}
-            searchPlaceholder="Search by assessment or application"
+            searchPlaceholder={`Search by assessment or ${targetLower}`}
             idAccessor="id"
             advancedActiveCount={filterChips.length}
             filterChips={filterChips}
@@ -897,8 +951,16 @@ export default function Engagements() {
                   value={filters.applicationId}
                   onChange={(v) => applyInline({ applicationId: v })}
                   options={appOptions}
-                  placeholder="All Applications"
+                  placeholder={`All ${targetPlural}`}
                 />
+                <label className="eng-open-surveys">
+                  <input
+                    type="checkbox"
+                    checked={!!filters.openSurveys}
+                    onChange={(e) => applyInline({ openSurveys: e.target.checked })}
+                  />
+                  Open Surveys
+                </label>
                 <Button variant="secondary" icon={Download} onClick={handleExportCsv} disabled={exporting}>
                   {exporting ? 'Exporting…' : 'Export CSV'}
                 </Button>
@@ -947,6 +1009,21 @@ export default function Engagements() {
         confirmText={pendingDateChange?.unavailable.length ? 'Save Anyway' : 'Save Changes'}
         cancelText="Cancel"
         variant={pendingDateChange?.unavailable.length ? 'warning' : 'info'}
+      />
+
+      <ReportPreviewDrawer
+        assessment={previewAssessment}
+        onClose={() => setPreviewAssessment(null)}
+      />
+
+      <SurveyDrawer
+        assessment={surveyAssessment}
+        onClose={() => {
+          setSurveyAssessment(null);
+          // A survey may have been answered: refresh the column's counts.
+          setSurveyMap({});
+          loadAssessments();
+        }}
       />
 
       <AssessmentImportModal

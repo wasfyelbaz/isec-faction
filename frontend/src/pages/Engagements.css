@@ -213,3 +213,13 @@
   background: var(--primary-color);
   color: #fff;
 }
+
+/* "Open Surveys" checkbox in the list's filter bar */
+.eng-open-surveys {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  cursor: pointer;
+}

@@ -37,6 +37,7 @@ import AssessmentChecklistSection from './AssessmentChecklistSection';
 import AssessmentHistorySection from './AssessmentHistorySection';
 import AssessmentNotebookSection from './AssessmentNotebookSection';
 import ReportPreviewDrawer from '../components/ReportPreviewDrawer';
+import SurveyDrawer from '../components/SurveyDrawer';
 import PeerReviewDiff from './PeerReviewDiff';
 import type { RefObject } from 'react';
 import { Button, Badge, Toast } from '../components';
@@ -167,6 +168,9 @@ export default function AssessmentDetail() {
   const [navTooltip, setNavTooltip] = useState<{ label: string; top: number; left: number } | null>(null);
 
   const [assessment, setAssessment] = useState<Assessment | null>(null);
+  // "Complete the survey" links in a target's discussion land here as ?survey=<id>, opening that
+  // survey over the assessment. Read once; the param is dropped when the drawer closes.
+  const [linkedSurveyId, setLinkedSurveyId] = useState<string | null>(searchParams.get('survey'));
   // Report sections are a paid feature. An assessment can carry sections from a template that
   // once ran the overlay; in this edition they are simply not shown, and the finding list is
   // one tab again — the report generator ignores them the same way, so nothing is lost.
@@ -1580,6 +1584,19 @@ export default function AssessmentDetail() {
     {showToast && (
       <Toast key={toastKey} message={toastMessage} variant={toastVariant} onDone={() => setShowToast(false)} />
     )}
+
+    <SurveyDrawer
+      assessment={linkedSurveyId ? assessment : null}
+      initialSurveyId={linkedSurveyId ?? undefined}
+      onClose={() => {
+        setLinkedSurveyId(null);
+        if (searchParams.has('survey')) {
+          const next = new URLSearchParams(searchParams);
+          next.delete('survey');
+          setSearchParams(next, { replace: true });
+        }
+      }}
+    />
 
     <ReportPreviewDrawer
       assessment={previewOpen ? assessment : null}
