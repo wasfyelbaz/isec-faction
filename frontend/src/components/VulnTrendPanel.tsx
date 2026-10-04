@@ -3,11 +3,15 @@ import { useTerminology } from '../context/TerminologyContext';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// iSec's severity colours — the --sev-* tokens in index.css, which the report uses too. Literal
+// hex rather than var(--sev-*) because these also feed a Recharts <Cell fill>, an SVG attribute
+// where a CSS variable is not reliably resolved.
 export const SEV_COLORS: Record<string, string> = {
-  CRITICAL: '#ef4444',
-  HIGH: '#f97316',
-  MEDIUM: '#eab308',
-  LOW: '#22c55e',
+  CRITICAL: '#c00000',
+  HIGH: '#ffc000',
+  MEDIUM: '#ffff00',
+  LOW: '#00b050',
+  INFORMATIONAL: '#00b0f0',
 };
 
 export const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
@@ -46,12 +50,14 @@ function CenterLabel({ viewBox, total }: { viewBox?: { cx: number; cy: number };
  *  `reverse` flips to least-severe-first, for a card whose graphic reads that way
  *  (the pill bar builds up to Critical at its right-hand end) — the legend then runs
  *  in the same direction as the thing it labels. */
-export function SeverityLegend({ counts, reverse = false }: {
+export function SeverityLegend({ counts, reverse = false, severities = SEVERITIES }: {
   counts: Record<string, number>;
   reverse?: boolean;
+  /** Which severities, most severe first. Defaults to C/H/M/L; pass Info too where it counts. */
+  severities?: readonly string[];
 }) {
   const { severityLabel } = useTerminology();
-  const order = reverse ? [...SEVERITIES].reverse() : SEVERITIES;
+  const order = reverse ? [...severities].reverse() : severities;
   return (
     <div className="vdash-legend">
       {order.map(s => (

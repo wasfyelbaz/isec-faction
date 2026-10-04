@@ -46,28 +46,20 @@
   flex-shrink: 0;
 }
 
-.vuln-stat.critical { color: var(--sev-critical); background: rgba(var(--sev-critical-rgb), 0.1); }
-.vuln-stat.critical .vuln-dot { background: var(--sev-critical); }
+/* Solid iSec fills with the ink that reads on each, the same pairs SeverityBadge uses, so the
+   counts here look like the severity badges in the findings list and the cells in the report.
+   The earlier tint (palette colour as text on a 10% wash of itself) left yellow and amber
+   unreadable on the light theme and turned Critical into dark red on near-black. */
+.vuln-stat.critical { color: var(--sev-critical-ink); background: var(--sev-critical); }
+.vuln-stat.high     { color: var(--sev-high-ink);     background: var(--sev-high); }
+.vuln-stat.medium   { color: var(--sev-medium-ink);   background: var(--sev-medium); }
+.vuln-stat.low      { color: var(--sev-low-ink);      background: var(--sev-low); }
+.vuln-stat.info     { color: var(--sev-info-ink);     background: var(--sev-info); }
 
-.vuln-stat.high { color: var(--sev-high); background: rgba(var(--sev-high-rgb), 0.1); }
-.vuln-stat.high .vuln-dot { background: var(--sev-high); }
+/* On a solid fill the dot takes the ink, not the fill it would disappear into. */
+.vuln-stat .vuln-dot { background: currentColor; opacity: 0.7; }
 
-.vuln-stat.medium { color: var(--sev-medium); background: rgba(var(--sev-medium-rgb), 0.1); }
-.vuln-stat.medium .vuln-dot { background: var(--sev-medium); }
-
-.vuln-stat.low { color: var(--sev-low); background: rgba(var(--sev-low-rgb), 0.1); }
-.vuln-stat.low .vuln-dot { background: var(--sev-low); }
-
-.vuln-stat.info { color: var(--sev-info); background: rgba(var(--sev-info-rgb), 0.1); }
-.vuln-stat.info .vuln-dot { background: var(--sev-info); }
-
-/* Light mode badge overrides */
 [data-theme="light"] .vuln-stat { font-weight: 700; }
-[data-theme="light"] .vuln-stat.critical { color: var(--sev-critical); background: rgba(var(--sev-critical-rgb), 0.16); }
-[data-theme="light"] .vuln-stat.high { color: var(--sev-high); background: rgba(var(--sev-high-rgb), 0.16); }
-[data-theme="light"] .vuln-stat.medium { color: var(--sev-medium); background: rgba(var(--sev-medium-rgb), 0.16); }
-[data-theme="light"] .vuln-stat.low { color: var(--sev-low); background: rgba(var(--sev-low-rgb), 0.16); }
-[data-theme="light"] .vuln-stat.info { color: var(--sev-info); background: rgba(var(--sev-info-rgb), 0.16); }
 
 /* ── Workspace (two-column flex) ───────────────── */
 .assessment-workspace {

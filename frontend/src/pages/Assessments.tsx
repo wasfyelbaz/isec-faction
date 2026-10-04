@@ -267,12 +267,13 @@ export default function Assessments() {
     }
   };
 
+  // iSec's colours with the ink that reads on each (index.css), as on every other severity badge.
   const SEVERITY_CHIPS = [
-    { key: 'critical',      label: 'C', color: '#ef4444' },
-    { key: 'high',          label: 'H', color: '#f97316' },
-    { key: 'medium',        label: 'M', color: '#eab308' },
-    { key: 'low',           label: 'L', color: '#22c55e' },
-    { key: 'informational', label: 'I', color: '#9ca3af' },
+    { key: 'critical',      label: 'C', color: 'var(--sev-critical)', ink: 'var(--sev-critical-ink)' },
+    { key: 'high',          label: 'H', color: 'var(--sev-high)',     ink: 'var(--sev-high-ink)' },
+    { key: 'medium',        label: 'M', color: 'var(--sev-medium)',   ink: 'var(--sev-medium-ink)' },
+    { key: 'low',           label: 'L', color: 'var(--sev-low)',      ink: 'var(--sev-low-ink)' },
+    { key: 'informational', label: 'I', color: 'var(--sev-info)',     ink: 'var(--sev-info-ink)' },
   ] as const;
 
   const VulnerabilitySummaryCell = ({ summary }: { summary?: Record<string, number> }) => {
@@ -281,11 +282,11 @@ export default function Assessments() {
     if (!hasAny) return <span style={{ color: 'var(--text-muted)' }}>None</span>;
     return (
       <div className="vuln-summary-chips">
-        {SEVERITY_CHIPS.map(({ key, label, color }) => {
+        {SEVERITY_CHIPS.map(({ key, label, color, ink }) => {
           const count = summary[key] ?? 0;
           if (count === 0) return null;
           return (
-            <span key={key} className="vuln-summary-chip" style={{ background: color }}>
+            <span key={key} className="vuln-summary-chip" style={{ background: color, color: ink }}>
               {label}: {count}
             </span>
           );

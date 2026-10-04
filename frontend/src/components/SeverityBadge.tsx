@@ -4,8 +4,8 @@ import './SeverityBadge.css';
 // A Badge with the canonical severity COLORS — everything else (shape, size,
 // typography, text) is the standard Badge rendering via its .badge classes.
 // The palette matches the assessment page's vulnerability count pills
-// (.vuln-stat), including their darker light-mode variants, which an inline
-// customColor can't express.
+// (.vuln-stat): both paint the iSec colour as a solid fill with the ink that
+// reads on it, a pair an inline customColor can't express.
 //
 // The colour is chosen from the value the API sent, never from the rendered text.
 // An installation that renames Critical to "Sev-1" still gets the red badge;
