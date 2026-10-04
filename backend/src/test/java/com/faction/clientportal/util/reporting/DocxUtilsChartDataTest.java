@@ -163,6 +163,89 @@ class DocxUtilsChartDataTest {
         assertEquals("4", cells.get("C2"), "Vulnerable column");
     }
 
+    // ── one chart per checklist ──────────────────────────────────────────────
+
+    /** Renames the fixture's checklist marker, as a template with one chart per checklist would. */
+    private static void nameChecklistMarker(WordprocessingMLPackage pkg, String marker) {
+        for (Object o : pkg.getMainDocumentPart().getContent()) {
+            if (XmlUtils.unwrap(o) instanceof P p && paragraphText(p).equals("${chartData checklist}")) {
+                for (Object r : p.getContent()) {
+                    if (XmlUtils.unwrap(r) instanceof org.docx4j.wml.R run) {
+                        for (Object t : run.getContent()) {
+                            if (XmlUtils.unwrap(t) instanceof org.docx4j.wml.Text text) text.setValue(marker);
+                        }
+                    }
+                }
+                return;
+            }
+        }
+        throw new AssertionError("fixture has no ${chartData checklist} marker");
+    }
+
+    private static ReportData twoChecklists() {
+        return ReportData.builder()
+                .vulnerabilities(new ArrayList<>())
+                .checklistPassed(49).checklistFailed(8).checklistNotApplicable(0)
+                .checklistCountsByName(Map.of(
+                        "isec-web-penetration-testing-checklist", new ReportData.ChecklistCounts(41, 6, 0),
+                        "owasp-top-10", new ReportData.ChecklistCounts(8, 2, 0)))
+                .build();
+    }
+
+    /**
+     * The Web template's 2.4 and 2.5 each chart one checklist. Fed the sum, both would show the
+     * same numbers; named, each shows its own — in the cached values and the workbook alike.
+     */
+    @Test
+    void aNamedChecklistMarkerChartsThatChecklistAlone() throws Exception {
+        WordprocessingMLPackage pkg = fixture();
+        nameChecklistMarker(pkg, "${chartData checklist:owasp-top-10}");
+        new DocxUtils(pkg, twoChecklists()).generateDocx("");
+
+        Map<String, List<String>> s = series(chart(pkg, "chart1.xml"));
+        assertEquals(List.of("8"), s.get("Secure"));
+        assertEquals(List.of("2"), s.get("Vulnerable"));
+        Map<String, String> cells = workbookCells(chart(pkg, "chart1.xml"));
+        assertEquals("8", cells.get("B2"));
+        assertEquals("2", cells.get("C2"));
+    }
+
+    /** Matched as the checklist tables are: case and spaces do not matter. */
+    @Test
+    void theNameIsMatchedLikeTheChecklistTableToken() throws Exception {
+        WordprocessingMLPackage pkg = fixture();
+        nameChecklistMarker(pkg, "${chartData checklist: iSec Web Penetration Testing Checklist }");
+        new DocxUtils(pkg, twoChecklists()).generateDocx("");
+
+        assertEquals(List.of("41"), series(chart(pkg, "chart1.xml")).get("Secure"));
+        assertEquals(List.of("6"), series(chart(pkg, "chart1.xml")).get("Vulnerable"));
+    }
+
+    /**
+     * A checklist the assessment does not have draws an empty chart. Leaving the template's
+     * placeholder 14 / 6 in place would read as real results — the bug this marker exists to fix.
+     */
+    @Test
+    void aChecklistTheAssessmentDoesNotHaveChartsZero() throws Exception {
+        WordprocessingMLPackage pkg = fixture();
+        nameChecklistMarker(pkg, "${chartData checklist:wireless-checklist}");
+        new DocxUtils(pkg, twoChecklists()).generateDocx("");
+
+        assertEquals(List.of("0"), series(chart(pkg, "chart1.xml")).get("Secure"));
+        assertEquals(List.of("0"), series(chart(pkg, "chart1.xml")).get("Vulnerable"));
+        assertFalse(paragraphTexts(pkg).stream().anyMatch(t -> t.contains("${chartData")));
+    }
+
+    /** The unnamed marker keeps summing every checklist, so the Network template is unaffected. */
+    @Test
+    void theUnnamedMarkerStillSumsEveryChecklist() throws Exception {
+        WordprocessingMLPackage pkg = fixture();
+        new DocxUtils(pkg, twoChecklists()).generateDocx("");
+
+        assertEquals(List.of("49"), series(chart(pkg, "chart1.xml")).get("Secure"));
+        assertEquals(List.of("8"), series(chart(pkg, "chart1.xml")).get("Vulnerable"));
+    }
+
     @Test
     void markersAreRemovedAndTheRestOfTheDocumentStays() throws Exception {
         WordprocessingMLPackage pkg = fixture();

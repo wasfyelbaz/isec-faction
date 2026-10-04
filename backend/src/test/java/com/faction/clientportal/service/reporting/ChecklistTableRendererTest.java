@@ -171,6 +171,61 @@ class ChecklistTableRendererTest {
         assertThat(html).contains("Attack Type").contains("</table>");
     }
 
+    // ── the Done column and per-checklist settings (the Web template's 4.1 / 4.2) ──
+
+    /** Off unless asked for, so the Mobile template's tables keep exactly their three columns. */
+    @Test
+    void thereIsNoDoneColumnByDefault() {
+        String html = renderer.render("checklist-owasp-mobile-top-10-android", List.of(sample()), defaults);
+
+        assertThat(html).doesNotContain("<th>Done</th>");
+        assertThat(html.split("<th>", -1)).hasSize(5);   // #, Attack Type, Status, Comment
+    }
+
+    @Test
+    void theDoneColumnSaysDoneForAnAnsweredItemAndNaForAnNaOne() {
+        ChecklistRenderOptions withDone = ChecklistRenderOptions.from(Map.of("showDone", "true", "showComments", "false"));
+
+        String html = renderer.render("checklist-owasp-mobile-top-10-android", List.of(sample()), withDone);
+
+        assertThat(html).contains("<th>#</th><th>Attack Type</th><th>Done</th><th>Status</th></tr>");
+        // PASS row, NA row, FAIL row, in order
+        assertThat(html).containsSubsequence(
+                "M1: Improper Credential Usage</td><td>Done</td>",
+                "M2: Inadequate Supply Chain Security</td><td>N/A</td>",
+                "M5: Insecure Communication</td><td>Done</td>");
+    }
+
+    /**
+     * Two tables, two wordings, one template: a key prefixed with a checklist's name applies to
+     * that checklist's table alone.
+     */
+    @Test
+    void aSettingPrefixedWithAChecklistNameAppliesToThatTableOnly() {
+        AssessmentChecklist owasp = checklist("OWASP Web Top 10",
+                row(0, "A01:2025 - Broken Access Control", ChecklistResult.PASS, null));
+        AssessmentChecklist isec = checklist("iSec Web Penetration Testing Checklist",
+                row(0, "WAF Bypass", ChecklistResult.PASS, null));
+        ChecklistRenderOptions options = ChecklistRenderOptions.from(Map.of(
+                "showDone", "true", "showComments", "false",
+                "owasp-web-top-10.passText", "Passed",
+                "owasp-web-top-10.doneHeader", "Checks"));
+
+        String owaspHtml = renderer.render("checklist-owasp-web-top-10", List.of(owasp, isec), options);
+        String isecHtml = renderer.render("checklist-isec-web-penetration-testing-checklist", List.of(owasp, isec), options);
+
+        assertThat(owaspHtml).contains("<th>Checks</th>").contains(">Passed<").doesNotContain("Not Vulnerable");
+        assertThat(isecHtml).contains("<th>Done</th>").contains(">Not Vulnerable<").doesNotContain("Passed");
+    }
+
+    @Test
+    void anUnprefixedSettingStillAppliesToEveryTable() {
+        AssessmentChecklist owasp = checklist("OWASP Web Top 10", row(0, "A01", ChecklistResult.FAIL, null));
+        ChecklistRenderOptions options = ChecklistRenderOptions.from(Map.of("failText", "Exposed"));
+
+        assertThat(renderer.render("checklist-owasp-web-top-10", List.of(owasp), options)).contains(">Exposed<");
+    }
+
     @Test
     void survivesNullInput() {
         assertThat(renderer.render(null, List.of(sample()), defaults)).isNull();

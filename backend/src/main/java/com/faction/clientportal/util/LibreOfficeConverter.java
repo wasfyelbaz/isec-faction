@@ -46,7 +46,7 @@ public class LibreOfficeConverter {
      * @throws InterruptedException if the calling thread is interrupted while waiting
      */
     public byte[] convertToPdf(byte[] docxBytes) throws IOException, InterruptedException {
-        return convert(docxBytes, "pdf");
+        return convert(docxBytes, "pdf", "pdf");
     }
 
     /**
@@ -56,17 +56,25 @@ public class LibreOfficeConverter {
      * LibreOffice re-saves them in spec-compliant form.
      */
     public byte[] convertToDocx(byte[] docxBytes) throws IOException, InterruptedException {
-        return convert(docxBytes, "docx");
+        return convert(docxBytes, "docx", "docx:" + DOCX_FILTER);
     }
 
-    private byte[] convert(byte[] docxBytes, String targetFormat)
+    /**
+     * The export filter for a DOCX. LibreOffice's default for the extension, "MS Word 2007 XML",
+     * writes {@code compatibilityMode} 12 whatever the source said, so Word opens the result in
+     * Compatibility Mode and lays it out by Word 2007's rules; this one keeps the source's mode —
+     * 15 for a template saved by a current Word.
+     */
+    public static final String DOCX_FILTER = "Office Open XML Text";
+
+    private byte[] convert(byte[] docxBytes, String extension, String targetFormat)
             throws IOException, InterruptedException {
         Path tempDir = Files.createTempDirectory("lo-convert-" + UUID.randomUUID());
         // Output goes to a subdirectory so a docx → docx conversion can't
         // collide with the input file (LibreOffice keeps the base name).
         Path outDir     = Files.createDirectory(tempDir.resolve("out"));
         Path inputFile  = tempDir.resolve("input.docx");
-        Path outputFile = outDir.resolve("input." + targetFormat);
+        Path outputFile = outDir.resolve("input." + extension);
 
         try {
             Files.write(inputFile, docxBytes);
@@ -106,7 +114,7 @@ public class LibreOfficeConverter {
 
             byte[] outputBytes = Files.readAllBytes(outputFile);
             log.debug("Converted {} bytes DOCX → {} bytes {}",
-                    docxBytes.length, outputBytes.length, targetFormat.toUpperCase());
+                    docxBytes.length, outputBytes.length, extension.toUpperCase());
             return outputBytes;
 
         } finally {

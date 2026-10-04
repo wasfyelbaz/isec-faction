@@ -106,6 +106,20 @@ public class ReportData {
     private Integer checklistNotApplicable;
 
     /**
+     * The same three counts for each checklist on its own, keyed exactly as the
+     * {@code ${checklist-<name>}} table is: the checklist's title lowercased with spaces turned
+     * into hyphens. Feeds {@code ${chartData checklist:<name>}}, so a template carrying one chart
+     * per checklist — the Web template's 2.4 and 2.5 — shows each its own numbers rather than the
+     * sum of both. Null or missing entries count as zero.
+     */
+    private Map<String, ChecklistCounts> checklistCountsByName;
+
+    /** PASS / FAIL / N/A totals for one checklist. */
+    public record ChecklistCounts(int passed, int failed, int notApplicable) {
+        public static final ChecklistCounts NONE = new ChecklistCounts(0, 0, 0);
+    }
+
+    /**
      * Inline image bytes keyed by image ID.
      * Used to embed images found in rich-text field content.
      */

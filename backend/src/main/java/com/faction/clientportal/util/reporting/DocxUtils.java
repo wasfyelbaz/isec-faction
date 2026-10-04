@@ -304,6 +304,28 @@ public class DocxUtils {
      * each cell's fill is painted inside its own rectangle and the gaps between them are
      * page background. Spacing a table actually asked for is left alone.
      */
+    /**
+     * Gives an imported paragraph's line spacing its rule. The XHTML importer turns a CSS
+     * {@code line-height} into {@code <w:spacing w:line="…"/>} with no {@code w:lineRule}. The
+     * spec reads a missing rule as {@code auto} — a multiple of single spacing, so 276 is 1.15 —
+     * but LibreOffice reads it as {@code exact}, and the LibreOffice pass every report goes
+     * through writes {@code exact} back. A template asking for {@code line-height: 1.15} got
+     * "Exactly 13.8 pt" instead of "Multiple 1.15". Spacing that already names a rule is left alone.
+     */
+    private void normaliseLineSpacing(List<Object> converted) {
+        if (converted == null) return;
+        for (Object o : converted) {
+            for (Object el : getAllElementFromObject(o, P.class)) {
+                PPr pPr = ((P) el).getPPr();
+                if (pPr == null) continue;
+                PPrBase.Spacing spacing = pPr.getSpacing();
+                if (spacing != null && spacing.getLine() != null && spacing.getLineRule() == null) {
+                    spacing.setLineRule(org.docx4j.wml.STLineSpacingRule.AUTO);
+                }
+            }
+        }
+    }
+
     private void normaliseImportedTables(List<Object> converted) {
         if (converted == null) return;
         for (Object o : converted) normaliseImportedTables(o);
@@ -1016,7 +1038,6 @@ public class DocxUtils {
     private void replaceAssessment(String customCSS) throws Exception {
         SimpleDateFormat formatter = new SimpleDateFormat("MM/dd/yyyy");
 
-        String assessorsNl      = "";
         String assessorsComma   = "";
         String assessorsBullets = "<ul>";
         boolean isFirst = true;
@@ -1026,7 +1047,6 @@ public class DocxUtils {
 
         for (ReportData.ReportUser u : assessors) {
             String name = u.getFullName();
-            assessorsNl      += name + "<br/>";
             assessorsComma   += (isFirst ? "" : ", ") + name;
             assessorsBullets += "<li class='bullets'>" + name + "</li>";
             isFirst = false;
@@ -1109,11 +1129,14 @@ public class DocxUtils {
             }
         }
 
+        Map<String, List<String>> lines = new HashMap<>();
+        lines.put("${asmtAssessors_Lines}",  assessors.stream().map(ReportData.ReportUser::getFullName).toList());
+        lines.put("${clientContacts_Lines}", contacts().stream().map(DocxUtils::contactLine).toList());
+        replaceLines(mlp.getMainDocumentPart(), lines);
+
         Map<String, List<Object>> map2 = new HashMap<>();
-        map2.put("${asmtAssessors_Lines}",  wrapHTML(assessorsNl,      customCSS, ""));
         map2.put("${asmtAssessors_Bullets}", wrapHTML(assessorsBullets, customCSS, ""));
         map2.put("${asmtAssessors_Comma}",  wrapHTML(assessorsComma,    customCSS, ""));
-        map2.put("${clientContacts_Lines}",   wrapHTML(contactsLines(),   customCSS, ""));
         map2.put("${clientContacts_Bullets}", wrapHTML(contactsBullets(), customCSS, ""));
         map2.put("${clientContacts_Comma}",   wrapHTML(contactsComma(),   customCSS, ""));
         replaceHTML(mlp.getMainDocumentPart(), map2);
@@ -1168,12 +1191,6 @@ public class DocxUtils {
         StringBuilder sb = new StringBuilder(nz(c.getName()));
         if (!nz(c.getTitle()).isBlank()) sb.append(" – ").append(c.getTitle());
         if (!nz(c.getEmail()).isBlank()) sb.append(" – ").append(c.getEmail());
-        return sb.toString();
-    }
-
-    private String contactsLines() {
-        StringBuilder sb = new StringBuilder();
-        for (ReportData.ReportContact c : contacts()) sb.append(contactLine(c)).append("<br/>");
         return sb.toString();
     }
 
@@ -1974,6 +1991,7 @@ public class DocxUtils {
                 + content + "</div></body></html>",
                 null);
         normaliseImportedTables(converted);
+        normaliseLineSpacing(converted);
         return converted;
     }
 
@@ -2049,6 +2067,7 @@ public class DocxUtils {
                     + value + "</div></body></html>",
                     null);
             normaliseImportedTables(converted);
+            normaliseLineSpacing(converted);
 
             for (Object o : converted) {
                 if (o instanceof P) {
@@ -2301,6 +2320,52 @@ public class DocxUtils {
 
     // ── HTML replacement in document ─────────────────────────────────────────
 
+    /**
+     * Writes a list one entry per line into the template's own paragraph — {@code ${asmtAssessors_Lines}}
+     * and {@code ${clientContacts_Lines}}.
+     *
+     * <p>These used to go through the XHTML importer like a rich-text field, which swaps the
+     * template paragraph for a new one: left-aligned, no spacing, a fixed font and size, and a
+     * line break after the last entry. In a centred table cell — the document history's Author
+     * column — that left the names hugging the top-left corner with an empty line under them.
+     * Keeping the paragraph keeps its alignment and spacing, and the first run's formatting is
+     * reused for every line.
+     *
+     * <p>Like {@link #replaceHTML}, only a paragraph holding nothing but the token is replaced,
+     * and every such paragraph is.
+     */
+    private void replaceLines(final Object mainPart, final Map<String, List<String>> lists) {
+        if (mainPart == null) return;
+        ObjectFactory factory = Context.getWmlObjectFactory();
+        for (final P paragraph : getParagraphs(mainPart)) {
+            final StringWriter paragraphText = new StringWriter();
+            try {
+                TextUtils.extractText(paragraph, paragraphText);
+            } catch (Exception ignored) {}
+            List<String> entries = lists.get(paragraphText.toString().trim());
+            if (entries == null) continue;
+
+            RPr rPr = null;
+            for (Object o : paragraph.getContent()) {
+                if (XmlUtils.unwrap(o) instanceof R r && r.getRPr() != null) {
+                    rPr = r.getRPr();
+                    break;
+                }
+            }
+            paragraph.getContent().clear();
+            for (int i = 0; i < entries.size(); i++) {
+                R run = factory.createR();
+                if (rPr != null) run.setRPr(XmlUtils.deepCopy(rPr));
+                if (i > 0) run.getContent().add(factory.createBr());
+                Text text = factory.createText();
+                text.setValue(entries.get(i) == null ? "" : entries.get(i));
+                text.setSpace("preserve");
+                run.getContent().add(text);
+                paragraph.getContent().add(run);
+            }
+        }
+    }
+
     private void replaceHTML(final Object mainPart,
                               final Map<String, List<Object>> replacements) {
         replaceHTML(mainPart, replacements, true);
@@ -2438,10 +2503,13 @@ public class DocxUtils {
     // ── native charts fed by report data ────────────────────────────────────
 
     /**
-     * {@code ${chartData severity}} or {@code ${chartData checklist}}, alone in a paragraph
-     * placed right before the chart it feeds.
+     * {@code ${chartData severity}}, {@code ${chartData checklist}} or
+     * {@code ${chartData checklist:<name>}}, alone in a paragraph placed right before the chart it
+     * feeds. Without a name the checklist chart takes every checklist summed; with one, only that
+     * checklist, named as its {@code ${checklist-<name>}} table is.
      */
-    private static final Pattern CHART_DATA = Pattern.compile("^\\$\\{chartData\\s+(severity|checklist)\\s*\\}$");
+    private static final Pattern CHART_DATA = Pattern.compile(
+            "^\\$\\{chartData\\s+(severity|checklist)(?:\\s*:\\s*([^}\\s][^}]*?))?\\s*\\}$");
     private static final Pattern CHART_REF = Pattern.compile("<(?:\\w+:)?chart\\b[^>]*?\\b(?:\\w+:)?id=\"([^\"]+)\"");
     private static final Pattern CELL_RANGE = Pattern.compile("^(?:'?([^'!]+)'?!)?\\$?([A-Z]+)\\$?(\\d+)(?::\\$?([A-Z]+)\\$?(\\d+))?$");
 
@@ -2467,7 +2535,8 @@ public class DocxUtils {
             Chart chart = nextChart(content, i + 1);
             if (chart != null) {
                 try {
-                    feedChart(chart, "severity".equals(m.group(1)) ? severityChartValues() : checklistChartValues());
+                    feedChart(chart, "severity".equals(m.group(1)) ? severityChartValues()
+                                                                   : checklistChartValues(m.group(2)));
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -2509,10 +2578,27 @@ public class DocxUtils {
         return values;
     }
 
-    private Map<String, Integer> checklistChartValues() {
-        int passed = data.getChecklistPassed() == null ? 0 : data.getChecklistPassed();
-        int failed = data.getChecklistFailed() == null ? 0 : data.getChecklistFailed();
-        int na = data.getChecklistNotApplicable() == null ? 0 : data.getChecklistNotApplicable();
+    /**
+     * @param checklistName null for every checklist summed; otherwise one checklist's name, as its
+     *                      {@code ${checklist-<name>}} table is keyed. A name the assessment has no
+     *                      checklist for draws zeros — never the template's placeholder numbers,
+     *                      which would read as real results.
+     */
+    private Map<String, Integer> checklistChartValues(String checklistName) {
+        int passed, failed, na;
+        if (checklistName == null) {
+            passed = data.getChecklistPassed() == null ? 0 : data.getChecklistPassed();
+            failed = data.getChecklistFailed() == null ? 0 : data.getChecklistFailed();
+            na = data.getChecklistNotApplicable() == null ? 0 : data.getChecklistNotApplicable();
+        } else {
+            Map<String, ReportData.ChecklistCounts> byName = data.getChecklistCountsByName();
+            ReportData.ChecklistCounts counts = byName == null ? null
+                    : byName.get(checklistName.trim().toLowerCase().replace(' ', '-'));
+            if (counts == null) counts = ReportData.ChecklistCounts.NONE;
+            passed = counts.passed();
+            failed = counts.failed();
+            na = counts.notApplicable();
+        }
         Map<String, Integer> values = new HashMap<>();
         values.put("vulnerable", failed);
         values.put("failed", failed);

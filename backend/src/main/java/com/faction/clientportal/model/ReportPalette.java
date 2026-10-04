@@ -136,24 +136,20 @@ public class ReportPalette {
     }
 
     /**
-     * A palette for a newly created template, so a report and the screen it came from agree about
-     * what Critical looks like.
+     * A palette for a newly created template: iSec's report colours.
      *
-     * <p>The fill — the color itself, used for a filled cell and for text that is not on one — is
-     * the severity badge color from {@code SeverityBadge.css}, the one every finding list and drawer
-     * shows. The text on it follows the solid count pills in {@code Engagements.css}: white, except
-     * dark on Medium's amber, where white does not read.
-     *
-     * <p>Informational keeps a pale tint and a slate text color from before; it was left out when
-     * the others moved to the badge colors.
+     * <p>These are the fills of iSec's own report tables — Critical C00000, High FFC000, Medium
+     * FFFF00, Low 00B050, Informational 00B0F0 — rather than the severity badge colours the app
+     * shows on screen, which iSec's reports do not use. The text on each is the one those reports
+     * print: black on High's amber and Medium's yellow, white on the rest.
      */
     public static ReportPalette defaults() {
         Map<String, ColourPair> severity = new LinkedHashMap<>();
-        severity.put(VulnerabilitySeverity.CRITICAL.name(),      ColourPair.of("FFFFFF", "EF4444"));
-        severity.put(VulnerabilitySeverity.HIGH.name(),          ColourPair.of("FFFFFF", "F97316"));
-        severity.put(VulnerabilitySeverity.MEDIUM.name(),        ColourPair.of("1A1A1A", "F59E0B"));
-        severity.put(VulnerabilitySeverity.LOW.name(),           ColourPair.of("FFFFFF", "3B82F6"));
-        severity.put(VulnerabilitySeverity.INFORMATIONAL.name(), ColourPair.of("334155", "EFF0F2"));
+        severity.put(VulnerabilitySeverity.CRITICAL.name(),      ColourPair.of("FFFFFF", "C00000"));
+        severity.put(VulnerabilitySeverity.HIGH.name(),          ColourPair.of("000000", "FFC000"));
+        severity.put(VulnerabilitySeverity.MEDIUM.name(),        ColourPair.of("000000", "FFFF00"));
+        severity.put(VulnerabilitySeverity.LOW.name(),           ColourPair.of("FFFFFF", "00B050"));
+        severity.put(VulnerabilitySeverity.INFORMATIONAL.name(), ColourPair.of("FFFFFF", "00B0F0"));
 
         // Likelihood and impact are the same five levels as severity, so they seed with the same
         // colours. Leaving them empty meant a template painting a likelihood sentinel rendered

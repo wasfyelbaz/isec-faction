@@ -120,6 +120,60 @@ class DocxUtilsClientTest {
         assertThat(xml).doesNotContain("${");
     }
 
+    /**
+     * A {@code _Lines} list is written into the template's own paragraph, so a centred cell stays
+     * centred, the first run's formatting carries to every line, and there is no empty line after
+     * the last entry. It used to be swapped for an imported paragraph forced to the left.
+     */
+    @Test
+    void aLinesListKeepsItsParagraphsAlignmentAndRunFormatting() throws Exception {
+        ReportData data = client();
+        data.setAssessors(List.of(
+                ReportData.ReportUser.builder().firstName("Ali").lastName("Sayed").build(),
+                ReportData.ReportUser.builder().firstName("Amr").lastName("Yasser").build()));
+
+        WordprocessingMLPackage pkg = WordprocessingMLPackage.createPackage();
+        MainDocumentPart main = pkg.getMainDocumentPart();
+        for (String token : List.of("${asmtAssessors_Lines}", "${clientContacts_Lines}")) {
+            org.docx4j.wml.P p = (org.docx4j.wml.P) XmlUtils.unmarshalString(
+                    "<w:p xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
+                    + "<w:pPr><w:spacing w:before=\"80\" w:after=\"80\"/><w:jc w:val=\"center\"/></w:pPr>"
+                    + "<w:r><w:rPr><w:b/></w:rPr><w:t>" + token + "</w:t></w:r></w:p>");
+            main.getContent().add(p);
+        }
+        new DocxUtils(pkg, data).generateDocx("");
+
+        List<Object> paragraphs = main.getContent();
+        String assessors = XmlUtils.marshaltoString(paragraphs.get(0), true, false);
+        assertThat(assessors).contains("w:val=\"center\"").contains("w:before=\"80\"");
+        assertThat(assessors).containsSubsequence("Ali Sayed", "<w:br/>", "Amr Yasser");
+        assertThat(assessors.split("<w:br/>", -1)).hasSize(2);   // one break, none trailing
+        assertThat(assessors.split("<w:b/>", -1)).hasSize(3);    // bold kept on both lines
+
+        String contacts = XmlUtils.marshaltoString(paragraphs.get(1), true, false);
+        assertThat(contacts).contains("w:val=\"center\"");
+        assertThat(contacts).containsSubsequence("Ahmed Ali – CISO – a.ali@bdc.example", "<w:br/>",
+                                                 "Sara M. – sara@bdc.example");
+        assertThat(paragraphs).hasSize(2);
+    }
+
+    /**
+     * A CSS line-height on rich text arrives as a multiple ("auto"), not as an exact height. The
+     * importer leaves the rule out, and LibreOffice reads a missing rule as exact, which turned
+     * "line-height: 1.15" into "Exactly 13.8 pt" in every generated report.
+     */
+    @Test
+    void aCssLineHeightOnRichTextIsAMultipleNotAnExactHeight() throws Exception {
+        WordprocessingMLPackage pkg = WordprocessingMLPackage.createPackage();
+        pkg.getMainDocumentPart().addParagraphOfText("${asmtClient_profile}");
+        new DocxUtils(pkg, client()).generateDocx("p { line-height: 1.15; }");
+
+        String xml = textOf(pkg);
+        assertThat(xml).contains("retail");
+        assertThat(xml).containsPattern("<w:spacing[^>]*w:line=\"276\"[^>]*w:lineRule=\"auto\"|<w:spacing[^>]*w:lineRule=\"auto\"[^>]*w:line=\"276\"");
+        assertThat(xml).doesNotContain("w:lineRule=\"exact\"");
+    }
+
     @Test
     void aContactTableRepeatsItsLoopRowOncePerContact() throws Exception {
         WordprocessingMLPackage pkg = WordprocessingMLPackage.createPackage();

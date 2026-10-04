@@ -58,6 +58,39 @@ class LibreOfficeConverterTest {
         assertThat(reloaded.getMainDocumentPart()).isNotNull();
     }
 
+    /**
+     * LibreOffice's default DOCX filter stamps compatibilityMode 12 whatever the source said, so
+     * Word opened every report in Compatibility Mode and laid it out by Word 2007's rules. The
+     * round-trip must keep the mode the template was saved in.
+     */
+    @Test
+    void convertToDocx_keepsTheTemplatesWordCompatibilityMode() throws Exception {
+        WordprocessingMLPackage pkg = WordprocessingMLPackage.createPackage();
+        pkg.getMainDocumentPart().addParagraphOfText("Saved by a current Word");
+        org.docx4j.openpackaging.parts.WordprocessingML.DocumentSettingsPart settingsPart =
+                new org.docx4j.openpackaging.parts.WordprocessingML.DocumentSettingsPart();
+        settingsPart.setJaxbElement((org.docx4j.wml.CTSettings) org.docx4j.XmlUtils.unwrap(org.docx4j.XmlUtils.unmarshalString(
+                "<w:settings xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:compat>"
+                + "<w:compatSetting w:name=\"compatibilityMode\" w:uri=\"http://schemas.microsoft.com/office/word\" w:val=\"15\"/>"
+                + "</w:compat></w:settings>")));
+        pkg.getMainDocumentPart().addTargetPart(settingsPart);
+        ByteArrayOutputStream source = new ByteArrayOutputStream();
+        pkg.save(source);
+
+        byte[] result = converter.convertToDocx(source.toByteArray());
+
+        String settings;
+        try (java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(new ByteArrayInputStream(result))) {
+            java.util.zip.ZipEntry e;
+            settings = null;
+            while ((e = zip.getNextEntry()) != null) {
+                if (e.getName().equals("word/settings.xml")) settings = new String(zip.readAllBytes());
+            }
+        }
+        assertThat(settings).isNotNull();
+        assertThat(settings).containsPattern("compatibilityMode\"[^>]*w:val=\"15\"");
+    }
+
     @Test
     void convertToPdf_producesPdfBytes() throws Exception {
         byte[] result = converter.convertToPdf(sampleDocx());

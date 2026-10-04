@@ -320,6 +320,48 @@ class DocxReportGenerationServiceTest {
     }
 
     /**
+     * Two checklists, each counted on its own under the same key its ${checklist-<name>} table
+     * answers to — what ${chartData checklist:<name>} reads — while the totals still sum both.
+     */
+    @Test
+    void buildReportData_countsEachChecklistOnItsOwn() throws Exception {
+        java.util.function.Function<com.faction.clientportal.model.ChecklistResult,
+                com.faction.clientportal.model.ChecklistResponse> answer =
+                result -> com.faction.clientportal.model.ChecklistResponse.builder()
+                        .questionId("q").questionText("q").result(result).build();
+        var P = com.faction.clientportal.model.ChecklistResult.PASS;
+        var F = com.faction.clientportal.model.ChecklistResult.FAIL;
+        var NA = com.faction.clientportal.model.ChecklistResult.NA;
+        when(assessmentChecklistRepository.findByAssessmentId("asmt-1")).thenReturn(List.of(
+                com.faction.clientportal.model.AssessmentChecklist.builder()
+                        .templateName("iSec Web Penetration Testing Checklist")
+                        .responses(new java.util.ArrayList<>(List.of(answer.apply(P), answer.apply(P),
+                                answer.apply(P), answer.apply(F)))).build(),
+                com.faction.clientportal.model.AssessmentChecklist.builder()
+                        .templateName("OWASP Top 10")
+                        .responses(new java.util.ArrayList<>(List.of(answer.apply(P), answer.apply(F),
+                                answer.apply(F), answer.apply(NA)))).build()));
+
+        java.lang.reflect.Method m = DocxReportGenerationService.class.getDeclaredMethod(
+                "buildReportData", com.faction.clientportal.model.Assessment.class, List.class,
+                com.faction.clientportal.model.User.class, String.class, List.class,
+                java.util.Map.class, java.util.Map.class, java.util.Map.class);
+        m.setAccessible(true);
+        com.faction.clientportal.util.reporting.ReportData data =
+                (com.faction.clientportal.util.reporting.ReportData) m.invoke(service, baseAssessment,
+                        List.of(), null, "Pentest", List.of(), java.util.Map.of(), java.util.Map.of(), java.util.Map.of());
+
+        var byName = data.getChecklistCountsByName();
+        org.assertj.core.api.Assertions.assertThat(byName.get("isec-web-penetration-testing-checklist"))
+                .isEqualTo(new com.faction.clientportal.util.reporting.ReportData.ChecklistCounts(3, 1, 0));
+        org.assertj.core.api.Assertions.assertThat(byName.get("owasp-top-10"))
+                .isEqualTo(new com.faction.clientportal.util.reporting.ReportData.ChecklistCounts(1, 2, 1));
+        org.assertj.core.api.Assertions.assertThat(data.getChecklistPassed()).isEqualTo(4);
+        org.assertj.core.api.Assertions.assertThat(data.getChecklistFailed()).isEqualTo(3);
+        org.assertj.core.api.Assertions.assertThat(data.getChecklistNotApplicable()).isEqualTo(1);
+    }
+
+    /**
      * No checklist attached: the counts are zero, so the 2.4 chart draws empty rather than keeping
      * the template's placeholder numbers, which would read as real results.
      */

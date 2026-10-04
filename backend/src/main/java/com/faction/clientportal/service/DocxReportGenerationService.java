@@ -472,19 +472,31 @@ public class DocxReportGenerationService implements ReportGenerationService {
             }
         }
 
-        // Checklist outcomes for the ${chartData checklist} chart: every checklist attached to the
-        // assessment counts, PASS / FAIL / NA summed across them.
+        // Checklist outcomes for the charts. ${chartData checklist} takes the totals, PASS / FAIL / NA
+        // summed across every checklist attached; ${chartData checklist:<name>} takes one checklist's
+        // own counts, keyed exactly as its ${checklist-<name>} table is.
         int checklistPassed = 0, checklistFailed = 0, checklistNotApplicable = 0;
+        Map<String, ReportData.ChecklistCounts> checklistCountsByName = new HashMap<>();
         for (AssessmentChecklist checklist : assessmentChecklistRepository.findByAssessmentId(assessment.getId())) {
             if (checklist.getResponses() == null) continue;
+            int passed = 0, failed = 0, notApplicable = 0;
             for (ChecklistResponse response : checklist.getResponses()) {
                 if (response.getResult() == null) continue;
                 switch (response.getResult()) {
-                    case PASS -> checklistPassed++;
-                    case FAIL -> checklistFailed++;
-                    case NA -> checklistNotApplicable++;
+                    case PASS -> passed++;
+                    case FAIL -> failed++;
+                    case NA -> notApplicable++;
                 }
             }
+            checklistPassed += passed;
+            checklistFailed += failed;
+            checklistNotApplicable += notApplicable;
+            // Two checklists with the same title would share a key; add rather than overwrite, so
+            // neither silently disappears from its chart.
+            checklistCountsByName.merge(ChecklistTableRenderer.variableNameFor(checklist.getTemplateName()),
+                    new ReportData.ChecklistCounts(passed, failed, notApplicable),
+                    (a, b) -> new ReportData.ChecklistCounts(a.passed() + b.passed(), a.failed() + b.failed(),
+                            a.notApplicable() + b.notApplicable()));
         }
 
         return ReportData.builder()
@@ -492,6 +504,7 @@ public class DocxReportGenerationService implements ReportGenerationService {
                 .checklistPassed(checklistPassed)
                 .checklistFailed(checklistFailed)
                 .checklistNotApplicable(checklistNotApplicable)
+                .checklistCountsByName(checklistCountsByName)
                 .clientFieldValues(clientFieldValues)
                 .clientFieldTypes(clientFieldTypes)
                 .clientContacts(clientContacts)
@@ -608,11 +621,45 @@ public class DocxReportGenerationService implements ReportGenerationService {
         List<AssessmentChecklist> checklists =
                 assessmentChecklistRepository.findByAssessmentId(assessmentId);
 
+        return renderedTokenResolver(checklistTableRenderer, checklists, checklistOptions,
+                severityBarChartRenderer, vulns, chartOptions);
+    }
+
+    /**
+     * The resolver itself, separated from the repository lookups so a test can run the real
+     * renderers through a real document.
+     *
+     * <p>{@link DocxUtils} hands a resolver the <em>whole</em> placeholder, braces included —
+     * {@code ${checklist-owasp-api-top-10}} — which is the shape the App Store extensions
+     * matched on. The in-process renderers that replaced them take the bare name. Without the
+     * translation here neither renderer ever recognised its own tag, and every checklist table
+     * and severity chart printed into live reports as literal text, while the tests on each
+     * side of this seam stayed green because each tested against a stand-in for the other.
+     */
+    static DocxUtils.TokenResolver renderedTokenResolver(
+            ChecklistTableRenderer checklistRenderer,
+            List<AssessmentChecklist> checklists,
+            ChecklistTableRenderer.ChecklistRenderOptions checklistOptions,
+            SeverityBarChartRenderer chartRenderer,
+            List<Vulnerability> vulns,
+            SeverityBarChartRenderer.BarChartOptions chartOptions) {
         return token -> {
-            String checklist = checklistTableRenderer.render(token, checklists, checklistOptions);
+            String name = placeholderName(token);
+            String checklist = checklistRenderer.render(name, checklists, checklistOptions);
             if (checklist != null) return checklist;
-            return severityBarChartRenderer.render(token, vulns, chartOptions);
+            return chartRenderer.render(name, vulns, chartOptions);
         };
+    }
+
+    private static final java.util.regex.Pattern PLACEHOLDER =
+            java.util.regex.Pattern.compile("^\\$\\{(.+)}$");
+
+    /** {@code ${checklist-x}} → {@code checklist-x}; a name already bare is returned as is. */
+    static String placeholderName(String token) {
+        if (token == null) return null;
+        String trimmed = token.trim();
+        java.util.regex.Matcher m = PLACEHOLDER.matcher(trimmed);
+        return m.matches() ? m.group(1).trim() : trimmed;
     }
 
     /**
@@ -651,6 +698,7 @@ public class DocxReportGenerationService implements ReportGenerationService {
      */
     private byte[] refreshTocWithLibreOffice(byte[] docxBytes) {
         File tempFile = null;
+        File outFile  = null;
         XComponent xDoc = null;
         LibreOfficeConnectionPool.PooledConnection pooledConn = null;
         LibreOfficeConnectionPool pool = LibreOfficeConnectionPool.getInstance();
@@ -695,11 +743,24 @@ public class DocxReportGenerationService implements ReportGenerationService {
                     dispatchProvider, ".uno:UpdateAllIndexes", "", 0, new PropertyValue[0]);
             log.debug("Dispatched UpdateAllIndexes to LibreOffice");
 
-            // Save in place
+            // Save, naming the filter. A plain store() reuses the filter the file was
+            // detected as, "MS Word 2007 XML", which stamps compatibilityMode 12 into the
+            // settings whatever the template said: Word then opens every report in Compatibility
+            // Mode and lays it out by Word 2007's rules, so text wraps differently from the
+            // template it came from. DOCX_FILTER keeps the template's mode.
             XStorable xStorable = UnoRuntime.queryInterface(XStorable.class, xDoc);
-            xStorable.store();
+            PropertyValue filter = new PropertyValue();
+            filter.Name  = "FilterName";
+            filter.Value = LibreOfficeConverter.DOCX_FILTER;
+            PropertyValue overwrite = new PropertyValue();
+            overwrite.Name  = "Overwrite";
+            overwrite.Value = Boolean.TRUE;
+            // createTempFile has already made the (empty) file the save goes to
+            outFile = File.createTempFile("report-toc-out-", ".docx");
+            String outUrl = "file:///" + outFile.getAbsolutePath().replace("\\", "/");
+            xStorable.storeToURL(outUrl, new PropertyValue[] { filter, overwrite });
 
-            byte[] refreshed = Files.readAllBytes(tempFile.toPath());
+            byte[] refreshed = Files.readAllBytes(outFile.toPath());
             log.info("TOC page numbers refreshed via LibreOffice UNO connection pool");
             return refreshed;
 
@@ -724,6 +785,9 @@ public class DocxReportGenerationService implements ReportGenerationService {
             }
             if (tempFile != null) {
                 tempFile.delete();
+            }
+            if (outFile != null) {
+                outFile.delete();
             }
         }
     }

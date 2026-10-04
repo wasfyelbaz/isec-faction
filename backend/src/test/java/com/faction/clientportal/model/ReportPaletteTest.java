@@ -29,37 +29,29 @@ class ReportPaletteTest {
     }
 
     /**
-     * The defaults are the severity badge colors every finding list and drawer in Faction shows,
-     * so a report and the screen it came from agree about what Critical looks like.
-     *
-     * <p>The badge color is the <em>color itself</em> — the cell fill, and the text color wherever
-     * the text is not on a filled cell. The text <em>on</em> it follows the solid count pills on the
-     * Engagements page: white, except dark on Medium's amber, where white would not read.
+     * The defaults are iSec's report colours — the fills of its own report tables, not the badge
+     * colours on screen — with the text those reports print on them: black on High and Medium,
+     * white on the rest.
      */
     @Test
-    void theSeverityDefaultsAreTheBadgeColorsWithPillTextOnThem() {
+    void theSeverityDefaultsAreTheIsecReportColours() {
         ReportPalette palette = ReportPalette.defaults();
 
         assertThat(palette.getSeverity().get("CRITICAL"))
-                .returns("EF4444", ReportPalette.ColourPair::getFill)
+                .returns("C00000", ReportPalette.ColourPair::getFill)
                 .returns("FFFFFF", ReportPalette.ColourPair::getText);
         assertThat(palette.getSeverity().get("HIGH"))
-                .returns("F97316", ReportPalette.ColourPair::getFill)
-                .returns("FFFFFF", ReportPalette.ColourPair::getText);
+                .returns("FFC000", ReportPalette.ColourPair::getFill)
+                .returns("000000", ReportPalette.ColourPair::getText);
         assertThat(palette.getSeverity().get("MEDIUM"))
-                .returns("F59E0B", ReportPalette.ColourPair::getFill)
-                .returns("1A1A1A", ReportPalette.ColourPair::getText);
+                .returns("FFFF00", ReportPalette.ColourPair::getFill)
+                .returns("000000", ReportPalette.ColourPair::getText);
         assertThat(palette.getSeverity().get("LOW"))
-                .returns("3B82F6", ReportPalette.ColourPair::getFill)
+                .returns("00B050", ReportPalette.ColourPair::getFill)
                 .returns("FFFFFF", ReportPalette.ColourPair::getText);
-    }
-
-    /** Informational was deliberately left out of the badge-color change. */
-    @Test
-    void informationalKeepsItsOriginalDefault() {
-        assertThat(ReportPalette.defaults().getSeverity().get("INFORMATIONAL"))
-                .returns("334155", ReportPalette.ColourPair::getText)
-                .returns("EFF0F2", ReportPalette.ColourPair::getFill);
+        assertThat(palette.getSeverity().get("INFORMATIONAL"))
+                .returns("00B0F0", ReportPalette.ColourPair::getFill)
+                .returns("FFFFFF", ReportPalette.ColourPair::getText);
     }
 
     @Test
