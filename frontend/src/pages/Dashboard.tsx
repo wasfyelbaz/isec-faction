@@ -5,7 +5,6 @@ import Page from '../components/Page';
 import { permissions, isSuperAdmin } from '../utils/permissions';
 import './Dashboard.css';
 import PentesterDashboard from './PentesterDashboard';
-import AppOwnerDashboard from './AppOwnerDashboard';
 import ManagerDashboard from './ManagerDashboard';
 // Not one of the switchable views below — only the Remediation role's landing page.
 import VulnerabilityDashboard from './VulnerabilityDashboard';
@@ -18,7 +17,6 @@ import { useTerminology } from '../context/TerminologyContext';
 // Super admins can view every role dashboard; Pentester is the first/default view.
 const ADMIN_DASHBOARD_VIEWS = [
   { key: 'pentester', label: 'Pentester', Component: PentesterDashboard },
-  { key: 'app-owner', label: 'App Owner', Component: AppOwnerDashboard },
   { key: 'operational', label: 'Operational', Component: ManagerDashboard },
 ] as const;
 
@@ -101,10 +99,6 @@ export default function Dashboard() {
   // someone holding both is primarily an assessor.
   if (roles.some(r => r === 'Remediation' || r.startsWith('Remediation-'))) {
     return <VulnerabilityDashboard />;
-  }
-
-  if (roles.includes('App Owner')) {
-    return <AppOwnerDashboard />;
   }
 
   // Admins and users with the manager-dashboard grant land on the Operational

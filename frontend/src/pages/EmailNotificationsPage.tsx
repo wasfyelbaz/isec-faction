@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { usePageTitle } from '../context/PageTitleContext';
-import { useTerminology } from '../context/TerminologyContext';
 import { emailNotificationConfigApi } from '../api';
 import type {
   EmailNotificationAudience,
@@ -8,7 +7,6 @@ import type {
   EmailNotificationEvent,
   UpdateEmailNotificationConfigRequest,
 } from '../types';
-import { Input } from '../components';
 import Page from '../components/Page';
 import { AlertTriangle, BellRing, Loader2, MessageSquareText, X } from 'lucide-react';
 import './EmailNotificationsPage.css';
@@ -17,9 +15,7 @@ import './EmailNotificationsPage.css';
 const AUDIENCES: Array<{ key: EmailNotificationAudience; label: string; field: SwitchField }> = [
   { key: 'ASSESSORS', label: 'Assessors', field: 'notifyAssessors' },
   { key: 'STAKEHOLDERS', label: 'Stakeholders', field: 'notifyStakeholders' },
-  { key: 'APP_OWNER', label: 'App owner', field: 'notifyAppOwner' },
   { key: 'MENTIONED_USERS', label: 'Mentioned users', field: 'includeMentionedUsers' },
-  { key: 'ORG_USERS', label: 'Org access', field: 'notifyOrgUsers' },
 ];
 
 type SwitchField =
@@ -36,7 +32,7 @@ type SwitchField =
  * the record type — and a page that says "organizations" while the rest of the product says
  * "clients" reads as a different feature.
  */
-const groupsFor = (organizationsLower: string):
+const groupsFor = ():
     Array<{ title: string; hint: string; match: (e: EmailNotificationEvent) => boolean }> => [
   {
     title: 'Assessments',
@@ -50,16 +46,17 @@ const groupsFor = (organizationsLower: string):
   },
   {
     title: 'Vulnerabilities',
-    hint: 'Due-date reminders are digests — one email covering every finding across all '
-        + `applications and ${organizationsLower}, never one email per finding. Findings in the `
-        + 'Exception state are never included.',
-    match: e => e.event.startsWith('VULNERABILITY_'),
+    hint: 'Sent when a finding is closed.',
+    // The due-date reminders (VULNERABILITY_WARNING / _PAST_DUE) are not offered: iSec does not
+    // track remediation deadlines, and both are switched off.
+    match: e => e.event.startsWith('VULNERABILITY_') && !HIDDEN_EVENTS.has(e.event),
   },
 ];
 
+const HIDDEN_EVENTS = new Set(['VULNERABILITY_WARNING', 'VULNERABILITY_PAST_DUE']);
+
 export default function EmailNotificationsPage() {
   const { setPageTitle } = usePageTitle();
-  const { organizationLower, organizationsLower } = useTerminology();
 
   const [config, setConfig] = useState<EmailNotificationConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,8 +66,6 @@ export default function EmailNotificationsPage() {
   const [editingMessage, setEditingMessage] = useState<Set<string>>(new Set());
   /** Draft message text, so typing does not fire a save per keystroke. */
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [repeatCount, setRepeatCount] = useState('0');
-  const [repeatInterval, setRepeatInterval] = useState('7');
 
   useEffect(() => {
     setPageTitle('Email Notifications');
@@ -81,8 +76,6 @@ export default function EmailNotificationsPage() {
 
   const apply = (next: EmailNotificationConfig) => {
     setConfig(next);
-    setRepeatCount(String(next.pastDueRepeatCount));
-    setRepeatInterval(String(next.pastDueRepeatIntervalDays));
   };
 
   const setBusy = (key: string, busy: boolean) =>
@@ -142,20 +135,12 @@ export default function EmailNotificationsPage() {
     });
   };
 
-  const saveRepeats = () => {
-    if (!config) return;
-    const count = Math.max(0, Number(repeatCount) || 0);
-    const interval = Math.max(1, Number(repeatInterval) || 1);
-    if (count === config.pastDueRepeatCount && interval === config.pastDueRepeatIntervalDays) return;
-    save({ pastDueRepeatCount: count, pastDueRepeatIntervalDays: interval }, 'repeats');
-  };
-
   const grouped = useMemo(() => {
     if (!config) return [];
-    return groupsFor(organizationsLower)
+    return groupsFor()
       .map(group => ({ ...group, events: config.events.filter(group.match) }))
       .filter(group => group.events.length > 0);
-  }, [config, organizationsLower]);
+  }, [config]);
 
   if (!config) {
     return (
@@ -189,11 +174,9 @@ export default function EmailNotificationsPage() {
 
         <div className="email-notifications-body">
           <p className="email-notifications-intro">
-            Choose who is emailed about each event. Stakeholders and app owners are the
+            Choose who is emailed about each event. Stakeholders are the
             addresses recorded on the assessment and its application — they do not need an
-            account. <strong>Org access</strong> covers the external users assigned to the
-            application's {organizationLower} — they hear about everything in it. An external user
-            restricted to specific applications only hears about those. People who <em>do</em> have accounts can
+            account. People who <em>do</em> have accounts can
             still mute what they receive from their own profile.
           </p>
 
@@ -319,39 +302,6 @@ export default function EmailNotificationsPage() {
             </table>
             </div>
 
-            {group.title === 'Vulnerabilities' && (
-              <div className="email-notifications-repeats">
-                <div className="email-notifications-label">Past-due reminders</div>
-                <p className="email-notifications-hint">
-                  A finding is reported once when it breaches its SLA. Repeats chase it
-                  after that, then stop.
-                </p>
-                <div className="email-notifications-repeat-fields">
-                  <label>
-                    <span>Number of repeats</span>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={repeatCount}
-                      disabled={saving.has('repeats')}
-                      onChange={e => setRepeatCount(e.target.value)}
-                      onBlur={saveRepeats}
-                    />
-                  </label>
-                  <label>
-                    <span>Days between repeats</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={repeatInterval}
-                      disabled={saving.has('repeats')}
-                      onChange={e => setRepeatInterval(e.target.value)}
-                      onBlur={saveRepeats}
-                    />
-                  </label>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       ))}

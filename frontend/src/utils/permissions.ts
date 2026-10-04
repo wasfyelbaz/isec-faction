@@ -326,23 +326,12 @@ export const permissions = {
       'super_admin', 'vulnerabilities:read:all', 'vulnerabilities:read:team', 'vulnerabilities:read:assessment'
     ]),
 
-  // Staff scheduling only. The external retest permissions are deliberately absent: they let an
-  // app owner *request* a retest, which is a different act — no assessor or date picking — and
-  // including them here put the scheduling form behind a route those users could open but never
-  // submit. Requesting is gated by canRequestRetestOnly instead.
+  // Staff scheduling only: the external :org/:owned retest permissions are deliberately absent.
   canScheduleRetests: (authorities: string[]): boolean =>
     hasAnyPermission(authorities, [
       'super_admin', 'vulnerabilities:create:all', 'vulnerabilities:create:team', 'vulnerabilities:create:assessment',
     ]),
 
-  // External users (app owners / org users) can only REQUEST a retest — no
-  // assessor/date picking. The request lands in the remediation queue as
-  // "Retest Requested" for staff to schedule.
-  canRequestRetestOnly: (authorities: string[]): boolean =>
-    hasAnyPermission(authorities, ['vulnerabilities:retest:org', 'vulnerabilities:retest:owned'])
-    && !hasAnyPermission(authorities, [
-      'super_admin', 'vulnerabilities:create:all', 'vulnerabilities:create:team', 'vulnerabilities:create:assessment',
-    ]),
 };
 
 /**
