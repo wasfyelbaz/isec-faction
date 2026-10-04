@@ -1,12 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, Trash2, Plus, Network, X, ShieldCheck, ShieldAlert, Upload, Download } from 'lucide-react';
-import ApplicationsAssessmentsTab from './ApplicationsAssessmentsTab';
-import VulnerabilitiesView from './VulnerabilitiesView';
-import VulnSummaryPanel from '../components/VulnSummaryPanel';
-import { applicationsApi, organizationsApi, entityFieldsApi, regionConfigApi, subOrganizationsApi } from '../api';
-import type { Application, CreateApplicationRequest, UpdateApplicationRequest, ApplicationStatus, ApplicationUrl, Stakeholder, AppOwner, Organization, SubOrganization, ApplicationImportResult, UserDefinedField } from '../types';
-import RichTextEditor from '../components/RichTextEditor';
+import { Eye, Trash2, Plus, Network, Upload, Download } from 'lucide-react';
+import { applicationsApi, organizationsApi, subOrganizationsApi } from '../api';
+import type { Application, Organization, SubOrganization, ApplicationImportResult } from '../types';
 import DataTable, { Column, PaginationInfo, SortState, sortParam } from '../components/DataTable';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { MultiSelect } from '../components/SearchableSelect';
@@ -20,35 +16,10 @@ import {
   Badge,
   FormGroup,
   FormLabel,
-  FormRow,
-  Input,
-  Select,
 } from '../components';
 import '../components/SearchableSelect.css';
 import './Applications.css';
 import { useTerminology } from '../context/TerminologyContext';
-
-const APPLICATION_STATUS_COLORS: Record<ApplicationStatus, 'success' | 'warning' | 'info' | 'danger'> = {
-  PRODUCTION: 'success',
-  DEVELOPMENT: 'info',
-  STAGING: 'warning',
-  TESTING: 'info',
-  DECOMMISSIONED: 'danger',
-  PLANNED: 'warning',
-};
-
-/** Filter options for the status pill; the same set the create/edit form offers. */
-const APPLICATION_STATUSES = Object.keys(APPLICATION_STATUS_COLORS) as ApplicationStatus[];
-
-const COMMON_TECHNOLOGIES = [
-  'Java', 'JavaScript', 'TypeScript', 'Python', 'C#', 'Go', 'Rust', 'PHP',
-  'React', 'Angular', 'Vue', 'Node.js', 'Spring Boot', '.NET', 'Django', 'Flask',
-  'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Oracle', 'SQL Server',
-  'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'Jenkins',
-  'REST API', 'GraphQL', 'gRPC', 'Apache', 'Nginx', 'Tomcat',
-];
-
-type ApplicationsTab = 'applications' | 'assessments' | 'vulnerabilities';
 
 // Table view state (search, filters, sort, page) is remembered under this key across navigation.
 const TABLE_KEY = 'applications';
@@ -58,18 +29,26 @@ export default function Applications() {
     subOrganizationPlural, targetSingular, targetPlural, targetLower, targetsLower } = useTerminology();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState<ApplicationsTab>(
-    tabParam === 'applications' || tabParam === 'assessments' || tabParam === 'vulnerabilities'
-      ? tabParam
-      : 'applications'
-  );
+
+  // The "All Assessments" tab that used to live here is retired: the same list is Scheduling's.
+  // Old links still circulate — survey links posted in target discussions before the change
+  // carried ?tab=assessments&assessment=&survey= — so send each to where it now lives.
+  useEffect(() => {
+    if (searchParams.get('tab') !== 'assessments') return;
+    const assessmentId = searchParams.get('assessment');
+    const surveyId = searchParams.get('survey');
+    if (assessmentId) {
+      navigate(`/assessments/${assessmentId}${surveyId ? `?survey=${encodeURIComponent(surveyId)}` : ''}`,
+        { replace: true });
+    } else {
+      navigate('/scheduling', { replace: true });
+    }
+  }, [searchParams, navigate]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<Application | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
-  const [showModal, setShowModal] = useState(false);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -88,7 +67,6 @@ export default function Applications() {
   // earlier single-select build is simply ignored rather than mis-read.
   const [filterOrganizations, setFilterOrganizations] = usePersistedState<string[]>(TABLE_KEY, 'filterOrganizations', []);
   const [filterSubOrganizations, setFilterSubOrganizations] = usePersistedState<string[]>(TABLE_KEY, 'filterSubOrganizations', []);
-  const [filterStatuses, setFilterStatuses] = usePersistedState<ApplicationStatus[]>(TABLE_KEY, 'filterStatuses', []);
   // Every division the user can see, so the picker works with or without an organization chosen.
   const [subOrganizations, setSubOrganizations] = useState<SubOrganization[]>([]);
 
@@ -99,44 +77,11 @@ export default function Applications() {
   const [importResult, setImportResult] = useState<ApplicationImportResult | null>(null);
   const [importError, setImportError] = useState('');
 
-  const [regions, setRegions] = useState<string[]>([]);
-
-  // Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    appId: '',
-    description: '',
-    status: 'DEVELOPMENT' as ApplicationStatus,
-    organizationId: '',
-    region: 'Global',
-    applicationType: '',
-    assessmentFrequency: 'Ad Hoc',
-  });
-
-  const [urls, setUrls] = useState<ApplicationUrl[]>([]);
-  const [newUrl, setNewUrl] = useState({ url: '', title: '' });
-
-  const [stakeholders, setStakeholders] = useState<Stakeholder[]>([]);
-  const [newStakeholder, setNewStakeholder] = useState({ name: '', email: '', role: '' });
-
-  const [technologies, setTechnologies] = useState<string[]>([]);
-  const [newTechnology, setNewTechnology] = useState('');
-
-  const [appOwner, setAppOwner] = useState<AppOwner>({ fullName: '', email: '' });
-
-  const [fieldDefinitions, setFieldDefinitions] = useState<UserDefinedField[]>([]);
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    regionConfigApi.getRegions().then(setRegions).catch(() => {});
-  }, []);
-
   useEffect(() => {
     loadApplications();
     loadOrganizations();
-    loadFieldDefinitions();
   }, [pagination.page, pagination.pageSize, searchQuery, sort,
-      filterOrganizations, filterSubOrganizations, filterStatuses]);
+      filterOrganizations, filterSubOrganizations]);
 
   useEffect(() => {
     subOrganizationsApi.listAll()
@@ -153,7 +98,6 @@ export default function Applications() {
         {
           organizationIds: filterOrganizations,
           subOrganizationIds: filterSubOrganizations,
-          statuses: filterStatuses,
         });
       if (response.data) {
         setApplications(response.data);
@@ -185,46 +129,7 @@ export default function Applications() {
     }
   };
 
-  const loadFieldDefinitions = async () => {
-    try {
-      const response = await entityFieldsApi.getConfig('APPLICATION');
-      if (response.data) {
-        const sorted = [...(response.data.fieldDefinitions || [])].sort(
-          (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
-        );
-        setFieldDefinitions(sorted);
-      }
-    } catch (err: any) {
-      console.error('Failed to load application field definitions:', err);
-    }
-  };
-
-
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      appId: '',
-      description: '',
-      status: 'DEVELOPMENT',
-      organizationId: '',
-      region: 'Global',
-      applicationType: '',
-      assessmentFrequency: 'Ad Hoc',
-    });
-    setUrls([]);
-    setNewUrl({ url: '', title: '' });
-    setStakeholders([]);
-    setNewStakeholder({ name: '', email: '', role: '' });
-    setTechnologies([]);
-    setNewTechnology('');
-    setAppOwner({ fullName: '', email: '' });
-    setFieldValues({});
-  };
-
-  const handleCreate = () => {
-    resetForm();
-    setShowModal(true);
-  };
+  const handleCreate = () => navigate('/applications/new');
 
   const handleEdit = (application: Application) => {
     navigate(`/applications/${application.id}/edit`);
@@ -241,84 +146,6 @@ export default function Applications() {
       setError(err.response?.data?.message || `Failed to delete ${targetLower}`);
     } finally {
       setDeleting(false);
-    }
-  };
-
-  const handleAddUrl = () => {
-    if (!newUrl.url || !newUrl.title) return;
-
-    // Validate URL format
-    try {
-      new URL(newUrl.url);
-      setUrls([...urls, { ...newUrl }]);
-      setNewUrl({ url: '', title: '' });
-    } catch (err) {
-      setError('Please enter a valid URL (e.g., https://example.com)');
-    }
-  };
-
-  const handleRemoveUrl = (index: number) => {
-    setUrls(urls.filter((_, i) => i !== index));
-  };
-
-  const handleAddStakeholder = () => {
-    if (!newStakeholder.name || !newStakeholder.email || !newStakeholder.role) return;
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(newStakeholder.email)) {
-      setError('Please enter a valid email address');
-      return;
-    }
-
-    setStakeholders([...stakeholders, { ...newStakeholder }]);
-    setNewStakeholder({ name: '', email: '', role: '' });
-  };
-
-  const handleRemoveStakeholder = (index: number) => {
-    setStakeholders(stakeholders.filter((_, i) => i !== index));
-  };
-
-  const handleAddTechnology = () => {
-    if (newTechnology && !technologies.includes(newTechnology)) {
-      setTechnologies([...technologies, newTechnology]);
-      setNewTechnology('');
-    }
-  };
-
-  const handleToggleTechnology = (tech: string) => {
-    if (technologies.includes(tech)) {
-      setTechnologies(technologies.filter((t) => t !== tech));
-    } else {
-      setTechnologies([...technologies, tech]);
-    }
-  };
-
-  const handleRemoveTechnology = (tech: string) => {
-    setTechnologies(technologies.filter((t) => t !== tech));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    try {
-      const requestData: CreateApplicationRequest | UpdateApplicationRequest = {
-        ...formData,
-        organizationId: formData.organizationId,
-        urls: urls.length > 0 ? urls : undefined,
-        stakeHolders: stakeholders.length > 0 ? stakeholders : undefined,
-        technologies: technologies.length > 0 ? technologies : undefined,
-        appOwner: appOwner.fullName && appOwner.email ? appOwner : undefined,
-        fieldValues: Object.keys(fieldValues).length > 0 ? fieldValues : undefined,
-      };
-
-      await applicationsApi.create(requestData as CreateApplicationRequest);
-
-      setShowModal(false);
-      await loadApplications();
-    } catch (err: any) {
-      setError(err.response?.data?.message || `Failed to create ${targetLower}`);
     }
   };
 
@@ -345,11 +172,6 @@ export default function Applications() {
   const formatTechnologies = (technologies?: string[]) => {
     if (!technologies || technologies.length === 0) return 'None';
     return technologies.slice(0, 3).join(', ') + (technologies.length > 3 ? '...' : '');
-  };
-
-  const formatStatus = (status?: ApplicationStatus) => {
-    if (!status) return <Badge variant="info">Unknown</Badge>;
-    return <Badge variant={APPLICATION_STATUS_COLORS[status]}>{status}</Badge>;
   };
 
   const truncateDescription = (html: string) => {
@@ -459,66 +281,17 @@ export default function Applications() {
       render: (app) => (app.organizationId && orgNameById[app.organizationId]) || '—',
     },
     {
-      header: 'Status',
-      sortKey: 'status',
-      render: (app) => formatStatus(app.status),
+      // Not sortable: the server has no sort key for the type.
+      header: 'Type',
+      render: (app) => app.applicationType || '—',
     },
     {
       header: 'Technologies',
       render: (app) => formatTechnologies(app.technologies),
     },
     {
-      // Not sortable: the cell shows appOwner.fullName and falls back to ownerName, so
-      // ordering by either column alone would disagree with what's on screen.
-      header: 'Owner',
-      render: (app) => {
-        if (app.appOwner) {
-          return (
-            <div>
-              <div className="font-medium">{app.appOwner.fullName}</div>
-              <div className="text-sm text-muted">
-                <a href={`mailto:${app.appOwner.email}`} className="link">
-                  {app.appOwner.email}
-                </a>
-              </div>
-            </div>
-          );
-        }
-        if (app.ownerName) {
-          return (
-            <div>
-              <div className="font-medium">{app.ownerName}</div>
-              {app.ownerEmail && (
-                <div className="text-sm text-muted">
-                  <a href={`mailto:${app.ownerEmail}`} className="link">
-                    {app.ownerEmail}
-                  </a>
-                </div>
-              )}
-            </div>
-          );
-        }
-        return 'N/A';
-      },
-    },
-    {
-      header: 'Open Issues',
-      render: (app) => {
-        const count = app.openIssueCount || 0;
-        if (count === 0) {
-          return (
-          <span title="No open tracked issues">
-            <ShieldCheck size={20} color="#22c55e" strokeWidth={1.75} />
-          </span>
-        );
-        }
-        return (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#f97316', fontWeight: 600, fontSize: '0.875rem' }}>
-            <ShieldAlert size={20} strokeWidth={1.75} />
-            {count}
-          </span>
-        );
-      },
+      header: 'Total Assessments',
+      render: (app) => app.assessmentCount ?? 0,
     },
     {
       header: 'Actions',
@@ -540,31 +313,11 @@ export default function Applications() {
 
   return (
     <Page className="applications-page">
-      {/* Pane-level global vulnerability summary — shown above all tabs, fetched once, does not
-          reload on tab switch, and deliberately not wired to any tab's filters. */}
-      <VulnSummaryPanel />
+      {error && <div className="error-message">{error}</div>}
 
-      {/* Tab Navigation */}
-      <div className="app-tab-nav">
-        <button
-          className={`app-tab-btn${activeTab === 'applications' ? ' active' : ''}`}
-          onClick={() => setActiveTab('applications')}
-        >
-          All {targetPlural}
-        </button>
-        <button
-          className={`app-tab-btn${activeTab === 'assessments' ? ' active' : ''}`}
-          onClick={() => setActiveTab('assessments')}
-        >
-          All Assessments
-        </button>
-        <button
-          className={`app-tab-btn${activeTab === 'vulnerabilities' ? ' active' : ''}`}
-          onClick={() => setActiveTab('vulnerabilities')}
-        >
-          All Vulnerabilities
-        </button>
-        <div className={`app-tab-actions${activeTab === 'applications' ? '' : ' app-tab-action--hidden'}`}>
+      {/* No tabs any more (assessments live under Scheduling); the bar keeps the page's actions. */}
+      <div className="app-tab-nav app-tab-nav--actions-only">
+        <div className="app-tab-actions">
           {isAdmin && (
             <Button variant="secondary" onClick={openImport} icon={Upload}>
               Sync from CSV
@@ -572,14 +325,13 @@ export default function Applications() {
           )}
           {canCreate && (
             <Button onClick={handleCreate} icon={Plus}>
-              Create Application
+              New {targetSingular} / Asset
             </Button>
           )}
         </div>
       </div>
 
-      {activeTab === 'applications' ? (
-        <DataTable
+      <DataTable
           columns={columns}
           data={applications}
           loading={loading}
@@ -588,7 +340,7 @@ export default function Applications() {
           onPageSizeChange={handlePageSizeChange}
           onSearchChange={handleSearchChange}
           initialSearch={searchQuery}
-          searchPlaceholder={`Search name, ID, ${organizationLower}, status, technology or owner`}
+          searchPlaceholder={`Search name, ID, ${organizationLower} or technology`}
           emptyMessage={`No ${targetsLower} found`}
           idAccessor="id"
           sort={sort}
@@ -623,29 +375,14 @@ export default function Applications() {
                 placeholder={`All ${subOrganizationPlural}`}
                 searchable={false}
               />
-              <MultiSelect
-                selected={filterStatuses}
-                onChange={(values) => {
-                  setFilterStatuses(values as ApplicationStatus[]);
-                  setPagination((prev) => ({ ...prev, page: 0 }));
-                }}
-                options={APPLICATION_STATUSES.map((s) => ({ value: s, label: s }))}
-                placeholder="All Statuses"
-                searchable={false}
-              />
             </div>
           }
         />
-      ) : activeTab === 'vulnerabilities' ? (
-        <VulnerabilitiesView />
-      ) : (
-        <ApplicationsAssessmentsTab />
-      )}
 
       <Modal
         isOpen={showImport}
         onClose={() => setShowImport(false)}
-        title="Sync Applications from CSV"
+        title={`Sync ${targetPlural} from CSV`}
         size="lg"
         footer={
           <>
@@ -737,344 +474,6 @@ export default function Applications() {
             </div>
           )}
         </div>
-      </Modal>
-
-      <Modal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title="Create Application"
-        size="lg"
-        closeOnOverlayClick={false}
-      >
-        <form onSubmit={handleSubmit} className="application-form">
-          {error && <div className="error-message">{error}</div>}
-
-          {/* Basic Information */}
-          <div className="form-section">
-            <h3 className="form-section-title">Basic Information</h3>
-            <FormRow columns={2}>
-              <FormGroup>
-                <FormLabel required>Name</FormLabel>
-                <Input
-                  placeholder={`${targetSingular} name`}
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </FormGroup>
-              <FormGroup>
-                <FormLabel>
-                  App ID <small className="text-muted">(optional)</small>
-                </FormLabel>
-                <Input
-                  placeholder="e.g., ASMT-5"
-                  value={formData.appId || ''}
-                  onChange={(e) => setFormData({ ...formData, appId: e.target.value })}
-                />
-              </FormGroup>
-              <FormGroup>
-                <FormLabel>Status</FormLabel>
-                <Select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as ApplicationStatus })}
-                >
-                  <option value="PRODUCTION">Production</option>
-                  <option value="DEVELOPMENT">Development</option>
-                  <option value="STAGING">Staging</option>
-                  <option value="TESTING">Testing</option>
-                  <option value="DECOMMISSIONED">Decommissioned</option>
-                  <option value="PLANNED">Planned</option>
-                </Select>
-              </FormGroup>
-            </FormRow>
-            <FormRow columns={2}>
-              <FormGroup>
-                <FormLabel required>{organizationSingular}</FormLabel>
-                <Select
-                  value={formData.organizationId}
-                  onChange={(e) => setFormData({ ...formData, organizationId: e.target.value })}
-                  required
-                >
-                  <option value="">{`Select a ${organizationLower}`}</option>
-                  {organizations.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name}
-                    </option>
-                  ))}
-                </Select>
-              </FormGroup>
-              <FormGroup>
-                <FormLabel>Region</FormLabel>
-                <Select
-                  value={formData.region}
-                  onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                >
-                  {regions.length === 0 && (
-                    <option value="Global">Global</option>
-                  )}
-                  {regions.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </Select>
-              </FormGroup>
-            </FormRow>
-            <FormGroup>
-              <FormLabel>Application Owner</FormLabel>
-              <FormRow columns={2}>
-                <Input
-                  placeholder="Full Name"
-                  value={appOwner.fullName}
-                  onChange={(e) => setAppOwner({ ...appOwner, fullName: e.target.value })}
-                />
-                <Input
-                  type="email"
-                  placeholder="Email"
-                  value={appOwner.email}
-                  onChange={(e) => setAppOwner({ ...appOwner, email: e.target.value })}
-                />
-              </FormRow>
-            </FormGroup>
-            <FormGroup>
-              <FormLabel>Description</FormLabel>
-              <RichTextEditor
-                value={formData.description}
-                onChange={(html) => setFormData({ ...formData, description: html })}
-              />
-            </FormGroup>
-          </div>
-
-          {/* URLs */}
-          <div className="form-section">
-            <h3 className="form-section-title">URLs</h3>
-            {urls.map((url, index) => (
-              <div key={index} className="list-item">
-                <div className="list-item-content">
-                  <div className="font-medium">{url.title}</div>
-                  <div className="text-sm text-muted">
-                    <a href={url.url} target="_blank" rel="noopener noreferrer" className="link">
-                      {url.url}
-                    </a>
-                  </div>
-                </div>
-                <IconButton
-                  icon={X}
-                  onClick={() => handleRemoveUrl(index)}
-                  variant="delete"
-                  title="Remove"
-                />
-              </div>
-            ))}
-            <div className="technology-input-group">
-              <Input
-                type="url"
-                placeholder="URL"
-                value={newUrl.url}
-                onChange={(e) => setNewUrl({ ...newUrl, url: e.target.value })}
-              />
-              <Input
-                placeholder="Title"
-                value={newUrl.title}
-                onChange={(e) => setNewUrl({ ...newUrl, title: e.target.value })}
-              />
-              <Button type="button" onClick={handleAddUrl} size="sm">
-                Add
-              </Button>
-            </div>
-          </div>
-
-          {/* Stakeholders */}
-          <div className="form-section">
-            <h3 className="form-section-title">Stakeholders</h3>
-            {stakeholders.map((stakeholder, index) => (
-              <div key={index} className="list-item">
-                <div className="list-item-content">
-                  <div className="font-medium">{stakeholder.name}</div>
-                  <div className="text-sm text-muted">
-                    <a href={`mailto:${stakeholder.email}`} className="link">
-                      {stakeholder.email}
-                    </a>
-                    {' - '}{stakeholder.role}
-                  </div>
-                </div>
-                <IconButton
-                  icon={X}
-                  onClick={() => handleRemoveStakeholder(index)}
-                  variant="delete"
-                  title="Remove"
-                />
-              </div>
-            ))}
-            <div className="technology-input-group">
-              <Input
-                placeholder="Full Name"
-                value={newStakeholder.name}
-                onChange={(e) => setNewStakeholder({ ...newStakeholder, name: e.target.value })}
-              />
-              <Input
-                type="email"
-                placeholder="Email"
-                value={newStakeholder.email}
-                onChange={(e) => setNewStakeholder({ ...newStakeholder, email: e.target.value })}
-              />
-              <Input
-                placeholder="Role"
-                value={newStakeholder.role}
-                onChange={(e) => setNewStakeholder({ ...newStakeholder, role: e.target.value })}
-              />
-              <Button type="button" onClick={handleAddStakeholder} size="sm">
-                Add
-              </Button>
-            </div>
-          </div>
-
-          {/* Technologies */}
-          <div className="form-section">
-            <h3 className="form-section-title">Technologies</h3>
-
-            {/* Selected Technologies */}
-            {technologies.length > 0 && (
-              <div style={{ marginBottom: '1rem' }}>
-                <div style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Selected:</div>
-                <div className="technology-tags">
-                  {technologies.map((tech) => (
-                    <div key={tech} className="technology-tag">
-                      {tech}
-                      <button type="button" onClick={() => handleRemoveTechnology(tech)}>
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Common Technologies */}
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Common Technologies:</div>
-              <div className="technology-tags">
-                {COMMON_TECHNOLOGIES.map((tech) => (
-                  <button
-                    key={tech}
-                    type="button"
-                    onClick={() => handleToggleTechnology(tech)}
-                    className={`technology-tag ${technologies.includes(tech) ? 'selected' : 'selectable'}`}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    {tech}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Custom Technology Input */}
-            <div>
-              <div style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Add Custom:</div>
-              <div className="technology-input-group">
-                <Input
-                  placeholder="Add custom technology"
-                  value={newTechnology}
-                  onChange={(e) => setNewTechnology(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddTechnology();
-                    }
-                  }}
-                />
-                <Button type="button" onClick={handleAddTechnology} size="sm">
-                  Add
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Assessment Information */}
-          <div className="form-section">
-            <h3 className="form-section-title">Assessment Information</h3>
-            <FormRow columns={2}>
-              <FormGroup>
-                <FormLabel>Assessment Frequency</FormLabel>
-                <Select
-                  value={formData.assessmentFrequency}
-                  onChange={(e) => setFormData({ ...formData, assessmentFrequency: e.target.value })}
-                >
-                  <option value="">Select frequency</option>
-                  <option value="Ad Hoc">Ad Hoc</option>
-                  <option value="Yearly">Yearly</option>
-                  <option value="Custom">Custom</option>
-                </Select>
-              </FormGroup>
-            </FormRow>
-          </div>
-
-          {/* Additional Information */}
-          {fieldDefinitions.length > 0 && (
-            <div className="form-section">
-              <h3 className="form-section-title">Additional Information</h3>
-              {(() => {
-                const regularFields = fieldDefinitions.filter((f) => f.fieldType !== 'RICH_TEXT');
-                const richTextFields = fieldDefinitions.filter((f) => f.fieldType === 'RICH_TEXT');
-                return (
-                  <>
-                    {regularFields.length > 0 && (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                        {regularFields.map((field) => (
-                          <FormGroup key={field.id}>
-                            <FormLabel>
-                              {field.displayName}
-                              {field.required && <span style={{ color: 'var(--color-danger)', marginLeft: 2 }}>*</span>}
-                            </FormLabel>
-                            {field.fieldType === 'DROPDOWN' ? (
-                              <Select
-                                value={fieldValues[field.id] || ''}
-                                onChange={(e) => setFieldValues({ ...fieldValues, [field.id]: e.target.value })}
-                              >
-                                <option value="">Select...</option>
-                                {(field.dropdownOptions || []).map((opt) => (
-                                  <option key={opt} value={opt}>{opt}</option>
-                                ))}
-                              </Select>
-                            ) : (
-                              <Input
-                                value={fieldValues[field.id] || ''}
-                                onChange={(e) => setFieldValues({ ...fieldValues, [field.id]: e.target.value })}
-                                placeholder={field.helpText || `Enter ${field.displayName}`}
-                              />
-                            )}
-                            {field.helpText && (
-                              <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
-                                {field.helpText}
-                              </p>
-                            )}
-                          </FormGroup>
-                        ))}
-                      </div>
-                    )}
-                    {richTextFields.map((field) => (
-                      <FormGroup key={field.id}>
-                        <FormLabel>
-                          {field.displayName}
-                          {field.required && <span style={{ color: 'var(--color-danger)', marginLeft: 2 }}>*</span>}
-                        </FormLabel>
-                        <RichTextEditor
-                          value={fieldValues[field.id] || ''}
-                          onChange={(val) => setFieldValues({ ...fieldValues, [field.id]: val })}
-                        />
-                      </FormGroup>
-                    ))}
-                  </>
-                );
-              })()}
-            </div>
-          )}
-
-          <div className="modal-actions">
-            <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>
-              Cancel
-            </Button>
-            <Button type="submit">Create</Button>
-          </div>
-        </form>
       </Modal>
 
       <ConfirmDialog

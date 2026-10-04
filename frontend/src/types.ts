@@ -465,6 +465,8 @@ export interface Application {
   createdAt: string;
   updatedAt: string;
   openIssueCount?: number;
+  /** Assessments on this target, deleted ones excluded; filled on the Targets list only. */
+  assessmentCount?: number;
 }
 
 /** Pre-aggregated, SLA-aware vulnerability counts for the Vulnerability Trend panel. */

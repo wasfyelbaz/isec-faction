@@ -4,7 +4,7 @@ import UserAvatar from '../components/UserAvatar';
 import {
   X, Pencil, MessageSquare, Trash2, Send, Eye,
   CalendarClock, CheckCircle2, ClipboardList, ClipboardCheck, Info,
-  Copy, Check, ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp,
   type LucideIcon,
 } from 'lucide-react';
 import { marked } from 'marked';
@@ -32,11 +32,9 @@ import DataTable, { type Column, type PaginationInfo, type SortState } from '../
 import { applyClientSort, type SortAccessors } from '../utils/tableSort';
 import VulnerabilityDetailDrawer from '../components/VulnerabilityDetailDrawer';
 import CommentSearch, { useCommentSearch } from '../components/CommentSearch';
-import VulnSummaryPanel from '../components/VulnSummaryPanel';
+import TargetStatsPanel from '../components/TargetStatsPanel';
 import ReportPreviewDrawer from '../components/ReportPreviewDrawer';
 import SurveyDrawer from '../components/SurveyDrawer';
-import ResourceUserManager from './ResourceUserManager';
-import './ResourceUserManager.css';
 import {
   Button,
   IconButton,
@@ -58,6 +56,7 @@ import { colorFor, statusLabel } from '../utils/workflowLookup';
 import './Applications.css';
 import './ApplicationEdit.css';
 import { useTerminology } from '../context/TerminologyContext';
+import { targetTypeOptions } from '../utils/targetTypes';
 
 const VULN_PAGE_SIZE = 10;
 
@@ -68,24 +67,6 @@ const COMMON_TECHNOLOGIES = [
   'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'Jenkins',
   'REST API', 'GraphQL', 'gRPC', 'Apache', 'Nginx', 'Tomcat',
 ];
-
-const STATUS_LABELS: Record<ApplicationStatus, string> = {
-  PRODUCTION: 'Production',
-  DEVELOPMENT: 'Development',
-  STAGING: 'Staging',
-  TESTING: 'Testing',
-  DECOMMISSIONED: 'Decommissioned',
-  PLANNED: 'Planned',
-};
-
-const STATUS_BADGE_VARIANTS: Record<ApplicationStatus, 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'info'> = {
-  PRODUCTION: 'success',
-  DEVELOPMENT: 'info',
-  STAGING: 'warning',
-  TESTING: 'secondary',
-  DECOMMISSIONED: 'danger',
-  PLANNED: 'primary',
-};
 
 // ── Avatar helpers (mirrors VulnerabilityDetailDrawer's local pattern) ─────────
 interface CommentAvatarProps { name: string; authorId: string; size?: number }
@@ -111,27 +92,6 @@ function SystemEventIcon({ content }: { content: string }) {
     <span className={`app-chat-event-icon app-chat-event-icon--${event?.variant ?? 'info'}`}>
       <Icon size={18} />
     </span>
-  );
-}
-
-// Small inline copy-to-clipboard button rendered next to email addresses.
-function CopyEmailButton({ email, title = 'Copy email' }: { email: string; title?: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(email).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
-  return (
-    <button
-      type="button"
-      className={`app-detail-copy-email${copied ? ' copied' : ''}`}
-      onClick={handleCopy}
-      title={copied ? 'Copied!' : title}
-    >
-      {copied ? <Check size={13} /> : <Copy size={13} />}
-    </button>
   );
 }
 
@@ -194,7 +154,8 @@ interface AppFormSnapshot {
   formData: {
     name: string;
     description: string;
-    status: ApplicationStatus;
+    // Not shown on this page (iSec does not track it); carried as loaded so a save never invents one.
+    status?: ApplicationStatus;
     organizationId: string;
     subOrganizationId: string;
     region: string;
@@ -223,7 +184,7 @@ export default function ApplicationEdit() {
   const [formData, setFormData] = useState<AppFormSnapshot['formData']>({
     name: '',
     description: '',
-    status: 'DEVELOPMENT',
+    status: undefined,
     organizationId: '',
     subOrganizationId: '',
     region: 'Global',
@@ -234,7 +195,6 @@ export default function ApplicationEdit() {
   const [urls, setUrls] = useState<ApplicationUrl[]>([]);
   const [newUrl, setNewUrl] = useState({ url: '', title: '' });
   const [stakeholders, setStakeholders] = useState<Stakeholder[]>([]);
-  const [newStakeholder, setNewStakeholder] = useState({ name: '', email: '', role: '' });
   const [technologies, setTechnologies] = useState<string[]>([]);
   const [newTechnology, setNewTechnology] = useState('');
   const [appOwner, setAppOwner] = useState<AppOwner>({ fullName: '', email: '' });
@@ -261,7 +221,8 @@ export default function ApplicationEdit() {
   const [selectedVulnAssessment, setSelectedVulnAssessment] = useState<Assessment | null>(null);
 
   // Assessments tab in the same panel
-  const [detailTab, setDetailTab] = useState<'vulnerabilities' | 'assessments'>('vulnerabilities');
+  // Assessments first: what a target has been through is what people open it to see.
+  const [detailTab, setDetailTab] = useState<'vulnerabilities' | 'assessments'>('assessments');
   const [assessmentSearch, setAssessmentSearch] = useState('');
   const [assessmentPage, setAssessmentPage] = useState(0);
   const [assessmentSort, setAssessmentSort] = useState<SortState | null>(null);
@@ -312,7 +273,6 @@ export default function ApplicationEdit() {
   const myAssignment = assignedUsers.find(u => u.userId === currentUser.id);
   const canWrite = isSuperAdmin || hasEditAll || hasEditOrg ||
     (hasReadOwned && (myAssignment ? myAssignment.accessLevel === 'WRITE' : true));
-  const canAssignUsers = isSuperAdmin || hasEditAll;
 
   useEffect(() => {
     if (!id) return;
@@ -325,7 +285,7 @@ export default function ApplicationEdit() {
         const loadedFormData: AppFormSnapshot['formData'] = {
           name: app.name,
           description: app.description || '',
-          status: app.status || 'DEVELOPMENT',
+          status: app.status ?? undefined,
           organizationId: app.organizationId || '',
           subOrganizationId: app.subOrganizationId || '',
           region: app.region || 'Global',
@@ -483,7 +443,6 @@ export default function ApplicationEdit() {
         setUrls(savedSnapshot.urls);
         setNewUrl({ url: '', title: '' });
         setStakeholders(savedSnapshot.stakeholders);
-        setNewStakeholder({ name: '', email: '', role: '' });
         break;
       case 'customFields':
         setFieldValues(savedSnapshot.fieldValues);
@@ -500,17 +459,6 @@ export default function ApplicationEdit() {
     } catch {
       setError('Please enter a valid URL (e.g., https://example.com)');
     }
-  };
-
-  const handleAddStakeholder = () => {
-    if (!newStakeholder.name || !newStakeholder.email || !newStakeholder.role) return;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(newStakeholder.email)) {
-      setError('Please enter a valid email address');
-      return;
-    }
-    setStakeholders([...stakeholders, { ...newStakeholder }]);
-    setNewStakeholder({ name: '', email: '', role: '' });
   };
 
   const handleToggleTechnology = (tech: string) => {
@@ -537,6 +485,7 @@ export default function ApplicationEdit() {
         organizationId: formData.organizationId || undefined,
         subOrganizationId: formData.subOrganizationId || undefined,
         region: formData.region || 'Global',
+        applicationType: formData.applicationType || undefined,
         urls: urls.length > 0 ? urls : undefined,
         stakeHolders: stakeholders.length > 0 ? stakeholders : undefined,
         technologies: technologies.length > 0 ? technologies : undefined,
@@ -817,9 +766,14 @@ export default function ApplicationEdit() {
     <Page className="applications-page app-detail-page">
       {error && <ErrorMessage>{error}</ErrorMessage>}
 
-      {/* Same summary donuts as the Applications/Vulnerabilities panes, scoped to this application */}
       <div className="app-detail-trend">
-        <VulnSummaryPanel applicationId={id} />
+        <TargetStatsPanel
+          assessments={Object.values(vulnAssessmentMap)}
+          vulnerabilities={appVulnerabilities}
+          loading={vulnsLoading}
+          frequency={formData.assessmentFrequency}
+          customFrequencyMonths={formData.customFrequencyMonths}
+        />
       </div>
 
       <div className="app-detail-layout">
@@ -843,31 +797,8 @@ export default function ApplicationEdit() {
                   </span>
                 </div>
                 <div className="app-detail-field">
-                  <span className="app-detail-field-label">Status</span>
-                  <span className="app-detail-field-value">
-                    <Badge variant={STATUS_BADGE_VARIANTS[formData.status]}>{STATUS_LABELS[formData.status]}</Badge>
-                  </span>
-                </div>
-                <div className="app-detail-field">
-                  <span className="app-detail-field-label">Application Type</span>
+                  <span className="app-detail-field-label">{targetSingular} Type</span>
                   <span className="app-detail-field-value">{formData.applicationType || '—'}</span>
-                </div>
-                <div className="app-detail-field">
-                  <span className="app-detail-field-label">Application Owner</span>
-                  <span className="app-detail-field-value">
-                    {appOwner.fullName ? (
-                      <>
-                        {appOwner.fullName}
-                        {appOwner.email && (
-                          <>
-                            {' · '}
-                            <a href={`mailto:${appOwner.email}`} className="link">{appOwner.email}</a>
-                            <CopyEmailButton email={appOwner.email} />
-                          </>
-                        )}
-                      </>
-                    ) : '—'}
-                  </span>
                 </div>
                 {showMoreDetails && (
                 <>
@@ -899,33 +830,6 @@ export default function ApplicationEdit() {
                       ? ` (${formData.customFrequencyMonths} ${formData.customFrequencyMonths === 1 ? 'month' : 'months'})`
                       : ''}
                   </span>
-                </div>
-                <div className="app-detail-field">
-                  <span className="app-detail-field-label">
-                    Stakeholders
-                    {stakeholders.length > 0 && (
-                      <CopyEmailButton
-                        email={stakeholders.map((s) => s.email).join(', ')}
-                        title="Copy all emails"
-                      />
-                    )}
-                  </span>
-                  {stakeholders.length === 0 ? (
-                    <span className="app-detail-field-value">—</span>
-                  ) : (
-                    <div className="app-detail-simple-list">
-                      {stakeholders.map((stakeholder, index) => (
-                        <div key={index} className="app-detail-simple-list-item">
-                          {stakeholder.name}
-                          {' - '}
-                          <a href={`mailto:${stakeholder.email}`} className="link">{stakeholder.email}</a>
-                          <CopyEmailButton email={stakeholder.email} />
-                          {' - '}
-                          {stakeholder.role}
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
                 <div className="app-detail-field app-detail-field--span2">
                   <span className="app-detail-field-label">URLs</span>
@@ -990,17 +894,6 @@ export default function ApplicationEdit() {
                       onChange={(e) => setAppId(e.target.value)}
                     />
                   </FormGroup>
-                  <FormGroup>
-                    <FormLabel>Status</FormLabel>
-                    <Select
-                      value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value as ApplicationStatus })}
-                    >
-                      {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </Select>
-                  </FormGroup>
                 </FormRow>
                 <FormRow columns={3}>
                   <FormGroup>
@@ -1055,17 +948,13 @@ export default function ApplicationEdit() {
                     </Select>
                   </FormGroup>
                   <FormGroup>
-                    <FormLabel>Application Type</FormLabel>
+                    <FormLabel>{targetSingular} Type</FormLabel>
                     <Select
                       value={formData.applicationType}
                       onChange={(e) => setFormData({ ...formData, applicationType: e.target.value })}
                     >
                       <option value="">Select type</option>
-                      <option value="Web Application">Web Application</option>
-                      <option value="Mobile Application">Mobile Application</option>
-                      <option value="API">API</option>
-                      <option value="Thick Client">Thick Client</option>
-                      <option value="Other">Other</option>
+                      {targetTypeOptions(formData.applicationType).map((t) => <option key={t} value={t}>{t}</option>)}
                     </Select>
                   </FormGroup>
                 </FormRow>
@@ -1098,22 +987,7 @@ export default function ApplicationEdit() {
                   )}
                 </FormRow>
                 <FormRow columns={3}>
-                  <FormGroup>
-                    <FormLabel>Application Owner</FormLabel>
-                    <Input
-                      placeholder="Full Name"
-                      value={appOwner.fullName}
-                      onChange={(e) => setAppOwner({ ...appOwner, fullName: e.target.value })}
-                    />
-                    <Input
-                      type="email"
-                      placeholder="Email"
-                      style={{ marginTop: '0.5rem' }}
-                      value={appOwner.email}
-                      onChange={(e) => setAppOwner({ ...appOwner, email: e.target.value })}
-                    />
-                  </FormGroup>
-                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <div className="form-group" style={{ gridColumn: 'span 3' }}>
                     <FormLabel>Technologies</FormLabel>
                     {technologies.length > 0 && (
                       <div className="technology-tags" style={{ marginBottom: '0.5rem' }}>
@@ -1159,54 +1033,7 @@ export default function ApplicationEdit() {
                   </div>
                 </FormRow>
                 <FormRow columns={3}>
-                  <FormGroup>
-                    <FormLabel>Stakeholders</FormLabel>
-                    {stakeholders.length > 0 && (
-                      <div className="app-detail-simple-list" style={{ marginBottom: '0.5rem' }}>
-                        {stakeholders.map((stakeholder, index) => (
-                          <div key={index} className="app-detail-simple-list-item">
-                            {stakeholder.name}
-                            {' - '}
-                            {stakeholder.email}
-                            {' - '}
-                            {stakeholder.role}
-                            <button
-                              type="button"
-                              className="app-detail-list-remove"
-                              title="Remove"
-                              onClick={() => setStakeholders(stakeholders.filter((_, i) => i !== index))}
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      <Input
-                        placeholder="Full Name"
-                        value={newStakeholder.name}
-                        onChange={(e) => setNewStakeholder({ ...newStakeholder, name: e.target.value })}
-                      />
-                      <Input
-                        type="email"
-                        placeholder="Email"
-                        value={newStakeholder.email}
-                        onChange={(e) => setNewStakeholder({ ...newStakeholder, email: e.target.value })}
-                      />
-                      <Input
-                        placeholder="Role"
-                        value={newStakeholder.role}
-                        onChange={(e) => setNewStakeholder({ ...newStakeholder, role: e.target.value })}
-                      />
-                      <div>
-                        <Button type="button" onClick={handleAddStakeholder} size="sm">
-                          Add
-                        </Button>
-                      </div>
-                    </div>
-                  </FormGroup>
-                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <div className="form-group" style={{ gridColumn: 'span 3' }}>
                     <FormLabel>URLs</FormLabel>
                     {urls.length > 0 && (
                       <div className="app-detail-simple-list" style={{ marginBottom: '0.5rem' }}>
@@ -1261,16 +1088,16 @@ export default function ApplicationEdit() {
           <div className="form-panel app-detail-section">
             <div className="app-tab-nav app-detail-tab-nav">
               <button
-                className={`app-tab-btn${detailTab === 'vulnerabilities' ? ' active' : ''}`}
-                onClick={() => setDetailTab('vulnerabilities')}
-              >
-                Vulnerabilities
-              </button>
-              <button
                 className={`app-tab-btn${detailTab === 'assessments' ? ' active' : ''}`}
                 onClick={() => setDetailTab('assessments')}
               >
                 Assessments
+              </button>
+              <button
+                className={`app-tab-btn${detailTab === 'vulnerabilities' ? ' active' : ''}`}
+                onClick={() => setDetailTab('vulnerabilities')}
+              >
+                Vulnerabilities
               </button>
             </div>
             {detailTab === 'vulnerabilities' ? (
@@ -1315,13 +1142,6 @@ export default function ApplicationEdit() {
               />
             )}
           </div>
-
-          {/* Application owners (portal user assignment) */}
-          {canAssignUsers && id && (
-            <div className="form-panel app-detail-section">
-              <ResourceUserManager resourceType="application" resourceId={id} />
-            </div>
-          )}
 
           {/* Additional Information */}
           {fieldDefinitions.length > 0 && (

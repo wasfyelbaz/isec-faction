@@ -1,0 +1,87 @@
+/* Four across, like the summary row it replaced on a target's page; cards share a height. */
+.target-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (max-width: 1100px) {
+  .target-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.tsp-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.tsp-headline {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tsp-sub {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.tsp-runners {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  font-size: 0.8125rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.tsp-runners li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--text-muted);
+}
+
+.tsp-runners li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tsp-runners li strong {
+  color: var(--text-primary);
+}
+
+.tsp-flag {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tsp-flag--warn,
+.vpill-total.tsp-overdue {
+  color: var(--sev-high);
+}
+
+/* Total Findings carries five severities (Info too), one more than the other pill cards. A
+   tighter legend keeps all five on one line where the card is wide enough; below that it wraps
+   rather than clipping. */
+.target-stats-grid .vpill-body .vdash-legend {
+  gap: 0.25rem 0.45rem;
+}
+
+.target-stats-grid .vpill-body .vdash-legend-row {
+  font-size: 0.66rem;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+@media (min-width: 1500px) {
+  .target-stats-grid .vpill-body .vdash-legend { flex-wrap: nowrap; }
+}

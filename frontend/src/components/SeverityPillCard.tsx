@@ -22,21 +22,23 @@ export function positiveEmpty(text: string) {
  * library — a stacked pill is a few proportional widths, and rounding it cleanly at both
  * ends is easier without one.
  */
-export default function SeverityPillCard({ title, counts, loading, emptyContent }: {
+export default function SeverityPillCard({ title, counts, loading, emptyContent, severities = SEVERITIES }: {
   title: string;
   counts: Record<string, number>;
   loading: boolean;
   emptyContent?: React.ReactNode;
+  /** Which severities to total and draw, most severe first. Defaults to C/H/M/L. */
+  severities?: readonly string[];
 }) {
   const { severityLabel: label } = useTerminology();
   const [hovered, setHovered] = useState<string | null>(null);
 
-  const total = SEVERITIES.reduce((sum, k) => sum + (counts[k] || 0), 0);
+  const total = severities.reduce((sum, k) => sum + (counts[k] || 0), 0);
   // SEVERITIES runs most- to least-severe; the bar reads the other way, building up to
   // Critical at the right-hand end. `center` is the segment's midpoint along the bar, so
   // the hover tooltip can sit over it without measuring the DOM.
   let offset = 0;
-  const segments = [...SEVERITIES].reverse()
+  const segments = [...severities].reverse()
     .filter(sev => (counts[sev] || 0) > 0)
     .map(sev => {
       const pct = (counts[sev] / total) * 100;
@@ -84,7 +86,7 @@ export default function SeverityPillCard({ title, counts, loading, emptyContent 
               ))}
             </div>
           </div>
-          <SeverityLegend counts={counts} reverse />
+          <SeverityLegend counts={counts} reverse severities={severities} />
         </div>
       )}
     </div>
