@@ -60,13 +60,13 @@ is the same static text.
 | 1.3 | Reviewer / approver rows | `${first_reviewer}`, `${second_reviewer}`, `${approver}`; their dates stay manual | UDF, GAP 5.3 |
 | 2.2 | `{ Client Name With No Abbreviations }` | `${asmtClient}` | DIRECT |
 | 2.3 | Methodology diagram (SmartArt) | Replaced in v2 by a picture rendered from Word (`methodology.png`, 18 x 10.96 cm, centred): LibreOffice lays SmartArt out differently. | STATIC (fixed in v2) |
-| 2.4 | Summary of iSec Network checklist (native bar chart fed by the embedded workbook) | `${chartData checklist}` alone in the paragraph before the chart (v3): the engine writes the assessment's PASS count into the "Secure" series and FAIL into "Vulnerable", in the chart's cached values and in its embedded workbook, then deletes the marker. | DIRECT |
+| 2.4 | Summary of iSec Network checklist (native bar chart fed by the embedded workbook) | `${chartData checklist:isec-network-penetration-testing-checklist}` alone in the paragraph before the chart (v7; unnamed `${chartData checklist}` from v3 to v6): the engine writes that checklist's PASS count into "Secure" and FAIL into "Vulnerable", in the cached values and the embedded workbook, then deletes the marker. Named so that a second checklist attached to the assessment cannot inflate it. | DIRECT |
 | 2.5 | Critical … Informational counts | `${riskCount9}` … `${riskCount5}` | DIRECT |
 | 2.6 | Findings Distribution Chart | `${chartData severity}` alone in the paragraph before the chart (v3): per-severity finding counts in the series and the workbook, so this chart and the 2.5 counts / 2.8 table cannot disagree. | DIRECT |
 | 2.7 | Risk Criteria tables | Static. | STATIC |
 | 2.8 | Summary of Findings | `${vulnTable}` layout, section 5.1 below. Column header "Affected URL" kept as in the original. | DIRECT |
 | 3.3 | Report Organization | Static. | STATIC |
-| 4.1 | iSec Network Penetration Testing Checklist | Manual (Done / Status fills). | GAP 5.6 |
+| 4.1 | iSec Network Penetration Testing Checklist | `${checklist-isec-network-penetration-testing-checklist}` where the static table was (v7). Four columns as in the original — #, Attack Type, Done, Status — with the template's checklist config `showComments=false`, `showDone=true`. Same name as the 2.4 chart, so the table and its chart read the same answers. | DONE (v7) |
 | 4.2 | iSec Role in Remediation Phase | Static. | STATIC |
 | 5.1 | `5.1 { Project Name 1} - {Target URL}` | `5.1 ${project_name} - ${target_scope}` | UDF |
 | 5.1.N | Finding heading | Heading 3 `${vulnName}` numbered by a new Word numbering definition `5.1.%1` (numbering `abstractNum 20` / `num 21`) | DIRECT |
@@ -230,3 +230,14 @@ History:
   `verify_network_v6.py` now reads the generated DOCX for empty `tcBorders`. Same run: a client whose record has no
   image in the `logo` slot gets an empty logo box on the cover and in the footers, with no warning; the fix is the
   client's Images page, not the template.
+- v7 (2026-10-02): the 4.1 checklist table and its 2.4 chart now read the engagement's own answers, as the Web template's
+  did in v11. The static 4.1 table — the original report's 13 sample answers — became
+  `${checklist-isec-network-penetration-testing-checklist}`, rendered with the original's four columns through the
+  checklist config (`showComments=false`, `showDone=true`). The 2.4 marker became
+  `${chartData checklist:isec-network-penetration-testing-checklist}`: the unnamed form summed every checklist attached,
+  so a second one would have inflated the chart. The checklist itself now exists in Faction as a Network Assessment
+  checklist template, its 13 items taken from the original's 4.1 and kept in `isec-network-checklists.json`. Verified live
+  on a throwaway template built from the repo's 27 field definitions and shared stylesheet: 0C / 2H / 1M / 4L / 0I findings
+  and 9 pass / 3 fail / 1 N/A answers gave a severity chart of 0/2/1/4/0, a checklist chart of 9/3 and a 13-row table
+  with the same counts; no unresolved tag. Comments 11 and 12 in the annotated master have had no anchor since v4 split
+  the 3.1.1 / 3.1.2 merged cells they described; left as they are.

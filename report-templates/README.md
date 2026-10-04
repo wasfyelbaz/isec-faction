@@ -16,8 +16,8 @@ and the stylesheet they share.
 
 | Template | Folder | Version | Assessment type | Registered in Faction |
 |---|---|---|---|---|
-| Web application (WAPT) | [`templates/web/`](templates/web/) | v9 | Web Application Pentest | yes — "iSec WAPT Report" |
-| Internal/external network (INT_EXTNWPT) | [`templates/network/`](templates/network/) | v6 | Network Assessment | **no — converted but never uploaded** |
+| Web application (WAPT) | [`templates/web/`](templates/web/) | v12 | Web Application Pentest | yes — "iSec WAPT Report" |
+| Internal/external network (INT_EXTNWPT) | [`templates/network/`](templates/network/) | v7 | Network Assessment | **no — converted but never uploaded** |
 | Mobile application (MAPT) | [`templates/mobile/`](templates/mobile/) | — | Mobile Application Pentest | yes, **twice** — "Mobile Application Pentest" and "iSec MAPT Report", both pointing at the same file |
 
 Two things in that table are worth fixing: the Network template is finished and verified but has

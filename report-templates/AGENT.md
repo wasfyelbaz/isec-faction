@@ -97,7 +97,7 @@ iSec template uses:
 | Client images | `${clientImage <slot> width=W height=H}` | Alone in its paragraph; body, cells, text boxes, headers, footers. Section 6. |
 | Per finding | `${vulnName}`, `${severity}`, `${cvssScore}`, `${cvssString link}` or `${cvssLink <label>}` (inside a hyperlink), `${assetLocation}`, `${category}`, `${desc}`, `${rec}`, `${details}`, `${count}` (table rows only), `${likelihood}` / `${impact}` (ratings) | Only inside a `${vulnTable}` row or a `${fiBegin}` block. |
 | Structure | `${pageBreak}`, `${if-section S}` … `${end-section S}` | Alone in top-level body paragraphs. |
-| Native charts | `${chartData severity}`, `${chartData checklist}` | Alone in the top-level body paragraph directly before the chart it feeds. The marker paragraph is deleted on generation. |
+| Native charts | `${chartData severity}`, `${chartData checklist}`, `${chartData checklist:<name>}` | Alone in the top-level body paragraph directly before the chart it feeds. The marker paragraph is deleted on generation. |
 
 Rules of thumb:
 
@@ -116,7 +116,7 @@ Rules of thumb:
 - `${noIssuesText …}` belongs to the summary table only; inside a findings block it prints once
   per finding.
 
-**Native charts (`${chartData severity}`, `${chartData checklist}`)**: the marker must be the whole
+**Native charts (`${chartData severity}`, `${chartData checklist}`, `${chartData checklist:<name>}`)**: the marker must be the whole
 text of a top-level body paragraph placed directly before the chart it feeds, and it is deleted
 during generation, so it costs no space. The engine writes both the chart's cached values and the
 cells of its embedded workbook, so the picture and the data behind it stay in step. It only finds
@@ -125,6 +125,12 @@ per-severity finding counts. `checklist` writes the PASS / FAIL / NA totals summ
 checklists attached to the assessment (`CONVERSION_WORKFLOW.md` has the three API calls that attach one); with no
 checklist attached the counts are zero and the chart draws empty on purpose, rather than keeping the
 template's placeholder numbers, which would read as real results.
+
+`checklist:<name>` writes one checklist's counts instead of the sum, for a template that charts each
+checklist separately — the Web template's 2.4 and 2.5. The name is matched exactly as the
+`${checklist-<name>}` table is: the checklist's title lowercased with spaces turned into hyphens, so
+"OWASP Web Top 10" is `checklist:owasp-web-top-10`. A name the assessment has no checklist for draws
+zero, never the template's placeholder numbers.
 
 ---
 
@@ -401,7 +407,7 @@ ${fiEnd}
 | `${fiBegin}` … `${fiEnd}` | Top-level body paragraphs | Everything between is copied per finding. Not inside tables or text boxes. |
 | `${if-section S}` … `${end-section S}` | Top-level body paragraphs | Removes the wrapped content when section S has no findings. |
 | `${pageBreak}` | Top-level paragraph, or last paragraph of a block | Inside a block: one page per finding. |
-| `${faction-bar-chart}`, `${checklist-<name> columns=[…]}` | Alone in a paragraph | Need the App Store extension installed; not used by the iSec templates (layout differs). |
+| `${checklist-<name>}`, `${faction-bar-chart}` | Alone in a top-level paragraph | Rendered in-process (the App Store extensions are gone). `<name>` is the checklist's title lowercased with spaces turned into hyphens; the tag takes **no arguments** — `columns=[…]` never worked. Appearance comes from the template's checklist config: labels, colours, headers, `showComments`, and `showDone` for the iSec "Done" column. Any key may be prefixed with a checklist's name (`owasp-web-top-10.passText=Passed`) to apply to that table alone. A checklist the assessment lacks leaves the tag visible rather than an empty table. |
 
 There is no `if-eq` / `if-set` on values; alternative sentences live in DROPDOWN option text
 (`testing_hours`). There is no evidence or screenshot loop in the DOCX: those live in rich text.
@@ -629,7 +635,8 @@ Table:           ${vulnTable [Section]} ${cells k=v,…} ${noIssuesText …} ${l
 Block:           ${fiBegin [Section]} ${fill k=v,…} ${vulnName} ${desc} ${rec} ${details}
                  ${cvssString link} | ${cvssLink <label>}  ${pageBreak} ${fiEnd}
                  ${if-section S} … ${end-section S}
-Charts:          ${chartData severity} ${chartData checklist}  (alone in the body paragraph before the chart)
+Charts:          ${chartData severity} ${chartData checklist} ${chartData checklist:<name>}
+                 (alone in the body paragraph before the chart; <name> as in ${checklist-<name>})
 Sizes:           1 cm = 37.8 px = 360000 EMU;  1 px = 9525 EMU;  page width cap 15.9 cm
 Web v9 geometry: cover logo 139x54 px (3.67x1.44 cm), box 4.29 cm wide at 15.05 cm from column
                  footer logo 64x25 px (1.69x0.66 cm), box 2.26 cm at 2.90 cm from column, 0.12 cm below the footer paragraph

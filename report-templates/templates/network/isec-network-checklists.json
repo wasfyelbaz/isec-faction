@@ -1,0 +1,62 @@
+{
+  "checklists": [
+    {
+      "name": "iSec Network Penetration Testing Checklist",
+      "source": "isec-network-original.docx, section 4.1 iSec Network Penetration Testing Checklist",
+      "questions": [
+        {
+          "text": "Brute Force/Spraying",
+          "order": 0
+        },
+        {
+          "text": "WAF & Firewall Bypass",
+          "order": 1
+        },
+        {
+          "text": "Sensitive Data Enumeration",
+          "order": 2
+        },
+        {
+          "text": "Injections",
+          "order": 3
+        },
+        {
+          "text": "Weak configuration or Misconfiguration",
+          "order": 4
+        },
+        {
+          "text": "Sensitive Data Exposure",
+          "order": 5
+        },
+        {
+          "text": "Privilege Escalation",
+          "order": 6
+        },
+        {
+          "text": "Lateral Movement",
+          "order": 7
+        },
+        {
+          "text": "Remote Code Execution",
+          "order": 8
+        },
+        {
+          "text": "Outdated Services & Components",
+          "order": 9
+        },
+        {
+          "text": "Buffer Overflow",
+          "order": 10
+        },
+        {
+          "text": "Cryptography Failures",
+          "order": 11
+        },
+        {
+          "text": "Default Credential",
+          "order": 12
+        }
+      ]
+    }
+  ]
+}

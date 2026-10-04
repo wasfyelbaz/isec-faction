@@ -174,17 +174,17 @@ The paragraph keeps its own alignment and spacing. A slot the client has not fil
 | Footer band (pages 2 onward, both footers) | Client logo next to the iSec wordmark (where "[Insert Image Here]" was) | `${clientImage logo width=64 height=25}` alone in the small text box right after the separator bar (box at 2.90 cm from the column edge, centred on the wordmark). Prints the same `logo` image fitted into a 1.69 × 0.66 cm box, the iSec wordmark's own width. Footers are parts of their own; the engine registers the picture on each footer (fork commit b77a81b). | DIRECT |
 | Footer band | Page number in the pink tab | A page-anchored text box (0.54 / 28.71 cm, 1.1 × 0.8 cm) holding the PAGE field, white, centred. The original Word frame was dropped by Faction's LibreOffice pass, which left the number invisible. | STATIC (fixed in v7) |
 | 1.0 | Client logo | Removed in v6: the logo lives on the cover and in the footer band instead. | — |
-| 1.1 | Document Title | `${asmtClient} ${project_name} Penetration Testing Report v${report_version}` (`project_name`, `report_version` are assessment UDFs, see 4). | DIRECT + UDF, PARTIAL 5.3 |
+| 1.1 | Document Title | `${asmtClient_short_name} ${project_name} Penetration Testing Report v${report_version}` from v12: the client's `short_name` custom field (Clients > custom fields, e.g. NI), while the cover keeps the full `${asmtClient}`. `project_name`, `report_version` are assessment UDFs, see 4. | DIRECT + UDF, PARTIAL 5.3 |
 | 1.1 | Classification, Description | Static. | STATIC |
-| 1.1 | Date of Issue | `${today MMMM d, yyyy}` | DIRECT |
+| 1.1 | Date of Issue | `${issue_date}` from v12 (also on the cover), a required assessment STRING UDF printed as typed, e.g. "September 26th, 2026". Until v11 it was `${today MMMM d, yyyy}`, the generation date. | UDF |
 | 1.3 | Report Type | Static "Testing". | STATIC |
-| 1.3 | Start / End Date | `${asmtStart dd/MM/yyyy}` / `${asmtEnd dd/MM/yyyy}` (planned end). | DIRECT |
-| 1.3 | Author | `${asmtAssessors_Comma}` as the only text in the cell, or `${asmtAssessor}` inline. | DIRECT |
+| 1.3 | Start / End Date | `${asmtStart dd/MM/yyyy}` / `${asmtEnd dd/MM/yyyy}` (planned end). From v12 a second row carries a second testing window, `${window2_start}` / `${window2_end}` (assessment STRING UDFs); Version, Report Type, Author and Description are merged across both rows. The row prints with empty dates when the UDFs are not set. | DIRECT + UDF |
+| 1.3 | Author | `${asmtAssessors_Lines}` from v12 (one assessor per line, keeping the cell's centring), the only text in the cell. | DIRECT |
 | 2.3 | Assessment Methodology (+ SmartArt) | Static. | STATIC |
-| 2.4 / 2.5 | Summary of iSec / OWASP checklist bar charts | Native Word charts (chart1/chart2) fed by embedded Excel. Faction cannot update chart values. Checklist pass/fail counts are not exposed as variables. | GAP 5.5, 5.7 |
+| 2.4 / 2.5 | Summary of iSec / OWASP checklist bar charts | Native Word charts, each fed from v10 by a marker paragraph before it: `${chartData checklist:isec-web-penetration-testing-checklist}` (2.4) and `${chartData checklist:owasp-web-top-10}` (2.5). Each chart takes only its own checklist's Secure / Vulnerable counts, in the cached values and the embedded workbook. A checklist the assessment does not have draws 0 / 0. | DONE (v10) |
 | 2.6 | Critical … Informational counts | `${riskCount9}` `${riskCount8}` `${riskCount7}` `${riskCount6}` `${riskCount5}` | DIRECT |
 | 2.6 | Extra retest columns (Fixed / Not Fixed per severity) | Not used in this template (initial test only). Only the totals `${totalOpenVulns}` / `${totalClosedVulns}` exist. | PARTIAL 5.9, retest template only |
-| 2.7 | Findings Distribution Chart | Native Word chart (chart3, categories Critical…Informational). Not refreshable. `${faction-bar-chart}` needs the App Store extension and inserts an image, not the styled chart. | GAP 5.5 |
+| 2.7 | Findings Distribution Chart | Native Word chart fed from v10 by `${chartData severity}`: one bar per severity, counted from the report's findings. | DONE (v10) |
 | 2.8, 2.8.1–2.8.3 | Risk Criteria | Static. | STATIC |
 | 2.9 | # column | `${loop}${count}` | DIRECT |
 | 2.9 | Vulnerability | `${vulnName}` | DIRECT |
@@ -192,13 +192,13 @@ The paragraph keeps its own alignment and spacing. A slot the client has not fil
 | 2.9 | CVSS 3.1 | `${cvssScore}` | DIRECT |
 | 2.9 | Affected URL | `${assetLocation}`. `${assetLocation link}` is not supported. For a clickable cell use a vuln UDF `affected_url` with `${affected_url link}`. | DIRECT |
 | 3.3 | Report Organization | Static. | STATIC |
-| 4.1 / 4.2 | iSec checklist / OWASP Top 10 checklist tables | Extension placeholder `${checklist-isec-web-penetration-testing-checklist columns=[Question,Status,Comment]}`. What it cannot do: see 5.6. Interim: keep the tables static and fill them by hand, or install the extension and accept its layout. | PARTIAL 5.6 |
+| 4.1 / 4.2 | iSec checklist / OWASP Top 10 checklist tables | From v11, `${checklist-isec-web-penetration-testing-checklist}` and `${checklist-owasp-web-top-10}`, each alone in the paragraph where the static table was. Four columns as in the original — #, Attack Type, Done ("Checks" in 4.2), Status — from the template's checklist config: `showComments=false`, `showDone=true`, and for 4.2 only `owasp-web-top-10.doneHeader=Checks`, `.passText=Passed`, `.failText=Failed`. Same names as the 2.4 / 2.5 charts, so a table and its chart always agree. | DONE (v11) |
 | 4.3 | iSec Role in Remediation Phase | Static. | STATIC |
 | 5.0 | Vulnerability Findings heading | Static. | STATIC |
 | 5.1 | `5.1 { Project Name 1} - {Target URL}` heading, one group per target | Static heading `${project_name} - ${app_url}` (UDFs, see 4). Earlier draft: `${asmtName}` plus STRING UDF `target_url`. The tagged DOCX uses the bare `${fiBegin}` block, so all findings render in one group. Per-target groups are now possible with Report Sections (rule 8): one `${if-section S}` / `${fiBegin S}` block per target, as the MAPT template does. | PARTIAL 5.13 |
 | 5.1.N | Finding heading `5.1.N Finding N` | Heading 3 paragraph containing `${vulnName}` inside the block. Word numbering supplies 5.1.N. | DIRECT |
 | 5.x | Severity cell | `${severity}`; cell fill `FAC701`; block config paragraph `${fill Critical=C00000,High=FFC000,Medium=FFFF00,Low=00B050,Informational=00B0F0}` | DIRECT |
-| 5.x | CVSS `9.0 (View CVSS Metrics)` | `${cvssScore}` plus a hyperlink whose text is `${cvssString link}`. The link text becomes the CVSS vector, not "View CVSS Metrics". | PARTIAL 5.10 |
+| 5.x | CVSS `9.0 (View CVSS Metrics)` | From v12 `${cvssScore} (${cvssLink View CVSS Metrics})`, the label bold and underlined inside a Word hyperlink that the engine points at the NVD calculator for the finding's vector. Give every finding a vector, Informational included (e.g. `CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:N` for 0.0), or the link has nothing to open. | DONE (v12) |
 | 5.x | Affected Assets (several URLs, one per line) | `${assetLocation}` gives one string. No line splitting. | PARTIAL 5.11 |
 | 5.x | OWASP Top Ten | `${category}` when the vulnerability category list is the OWASP Top 10 entries. Otherwise a UDF, see 4. | DIRECT |
 | 5.x | Description | `${desc}` alone in the cell. | DIRECT |
@@ -220,7 +220,7 @@ Create these in the Report Designer. Full option lists and defaults: `../../BACK
 | 1.2 | Diffusion List (Contact Name / Title / Email) | none: the client record's distribution list | built-in | `${clientContactTable}` in a merged row above the `${loop}` row; the loop row holds `${loop}${contactName}`, `${contactTitle}`, `${contactEmail}`. Empty list prints the `${noIssuesText …}` wording. |
 | 1.3 | First / Second Reviewer, Approver | Assessment `first_reviewer`, `second_reviewer`, `approver` | STRING | Interim. GAP 5.3: peer-review data exists in Faction but is not exposed. Reviewer dates: no variable, manual. |
 | 2.1 | `{Initial Test/Retest}` | Assessment `asmt_phase` | DROPDOWN | `Initial Test` only. This template is for initial tests; retests use a separate template. |
-| 2.1 | `{type} box` | Assessment `test_type` | DROPDOWN | `Black` / `Grey` / `White`. |
+| 2.1 | `{type} box` | Assessment `test_type` | DROPDOWN | `Black` / `Gray` / `White` ("Gray" from v12, as the reports spell it). |
 | 2.1, 3.1, 3.1.1, 5.1 heading | `{ Project Name }` / Application Name | Assessment `project_name` | STRING | Earlier draft name: `app_name`. Interim: no application-name variable, only `${asmtAppid}` (the ID). GAP 5.1. |
 | 2.1 | `{during/after} working hours` | Assessment `testing_hours` | DROPDOWN | Each option holds the full clause. |
 | 2.1 | `{./, minimizing the impact … sensitivity}` | Same `testing_hours` option text | DROPDOWN | GAP 5.4: no if/else on values, so the alternative sentence lives in the option text (`after working hours, minimizing …`). |
@@ -253,7 +253,7 @@ Create these in the Report Designer. Full option lists and defaults: `../../BACK
 | 5.7 | Checklist pass/fail counts feeding the 2.4 / 2.5 charts | Not exposed. | None. |
 | 5.8 | Finding status "Initial Test / Retest: Fixed / Not Fixed / Partially Fixed". Retest template only; this template prints `Initial Test` in grey. | Only `${remediationStatus}` = Open/Closed. Retest results (`Retest.result` PASS/FAIL) are not exposed. | `${remediationStatus}` loses the retest meaning. A UDF works but must be maintained by hand. |
 | 5.9 | Per-severity open/closed counts for the 2.6 retest columns. Retest template only. | Only overall `${totalOpenVulns}` / `${totalClosedVulns}`. | None. |
-| 5.10 | CVSS hyperlink displaying "View CVSS Metrics" | `${cvssString link}` overwrites the link text with the vector string. | Accept the vector as link text. |
+| 5.10 | CVSS hyperlink displaying "View CVSS Metrics" | Closed in v12 by `${cvssLink View CVSS Metrics}`, which keeps the label and links it to the vector. | — |
 | 5.11 | Affected Assets as several lines | `${assetLocation}` is one string. No splitting. | One asset per finding, or a RICH_TEXT UDF. |
 | 5.12 | "iSec Check List" row linking a finding to checklist items | No relation between vulnerabilities and checklist questions in the model. | Vuln STRING UDF typed by hand. |
 | 5.13 | Findings grouped per target under `5.1 {Project} - {URL}` | Needs Report Sections, which this fork now enables (rule 8). Not applied to the tagged DOCX yet: it needs one section per target on the template, every finding filed under a section, and a bare `${fiBegin}` block kept as the Default fallback so unfiled findings are not dropped. | One flat block (current DOCX). |
@@ -310,12 +310,40 @@ ${fiEnd}
 2. Replace every `{…}` placeholder with the `${…}` tag or UDF from sections 3 and 4. Faction ignores single-brace text.
 3. Keep the native TOC. Do not add `${TOC}`.
 4. Type all tags with spell-check off. Keep each block tag alone in its paragraph.
-5. Charts (2.4, 2.5, 2.7) and checklists (4.1, 4.2) stay manual until the variables in `../../BACKEND_GAPS.md`, section 3, exist.
+5. Charts (2.4, 2.5, 2.7) are fed by `${chartData …}` markers from v10, and the checklist tables (4.1, 4.2) by `${checklist-<name>}` from v11, under the same two names, so each table and its chart read the same answers.
 6. Upload `isec-web-upload.docx`, not the annotated master. Faction copies Word comments into every generated DOCX, so the file uploaded to Faction must carry none. The master `isec-web-annotated.docx` keeps the "Faction Mapping" comments as documentation.
 7. Verified on 2026-09-18 with a real generation in the local fork build (3 sample findings): no unresolved tags, TOC and 5.1.N numbering refreshed, colour maps applied, CVSS links resolved, 30-page PDF.
 8. Template history after v5 (all applied to both files; scripts in the session scratchpad, results verified in Word and in Faction's LibreOffice output):
    - v6: the cover placeholder picture "[Insert Image Here]" became the `${clientImage}` tag in a text box narrowed to the placeholder's footprint; the footer placeholder pictures and the 1.0 logo paragraph were removed.
    - v7: the footer page number moved from a Word frame (dropped by LibreOffice, number invisible) into a page-anchored text box inside the pink tab.
    - v8: the footer placeholder box returned, holding a `${clientImage}` tag, once the engine could fill headers and footers (fork commit b77a81b); the cover tag got a fixed `width= height=` box.
-   - v9 (current): the footer box grew to the iSec wordmark's width (`width=64 height=25`) and sits right after the separator bar, centred on the wordmark.
+   - v9: the footer box grew to the iSec wordmark's width (`width=64 height=25`) and sits right after the separator bar, centred on the wordmark.
+   - v10: the three native charts take the report's own numbers. A `${chartData …}` marker paragraph was
+     inserted immediately before each chart — `checklist:isec-web-penetration-testing-checklist` before 2.4,
+     `checklist:owasp-web-top-10` before 2.5, `severity` before 2.7 — and the engine rewrites each chart's cached values
+     and embedded workbook from the assessment, then drops the marker. Until v10 all three printed the template's
+     placeholder numbers (14 / 6, 14 / 6 and 0 / 0 / 1 / 5 / 1) whatever the engagement found. The per-checklist form
+     `checklist:<name>` was added to the engine for this template; without it 2.4 and 2.5 would both show the sum of
+     every checklist. Verified offline by running the engine over the v10 upload file with 2 Critical / 1 High /
+     0 Medium / 3 Low / 1 Informational findings and two checklists at 41/6 and 8/2: the charts read exactly those
+     numbers and no marker survived. **2.4 and 2.5 draw 0 / 0 until web assessments carry checklists with those two
+     titles** ("iSec Web Penetration Testing Checklist", "OWASP Web Top 10").
+   - v11: the static 4.1 and 4.2 tables, which carried the original report's sample answers, were replaced by
+     `${checklist-isec-web-penetration-testing-checklist}` and `${checklist-owasp-web-top-10}`. To reproduce the original's
+     four columns the renderer gained an optional Done column (`showDone`, "Done" for a Pass or Fail, the N/A text for N/A)
+     and per-checklist settings (any key prefixed with the checklist's name), so 4.2 can say "Checks" and "Passed" while
+     4.1 says "Done" and "Not Vulnerable". Both are off unless set, so the Mobile template renders as before. The live
+     template's checklist config carries the settings listed in the 4.1 / 4.2 row above. Verified offline through the real
+     renderer and engine; the two checklists themselves come from the original's 4.1 (52 items) and 4.2 (A01–A10:2025),
+     kept in `isec-web-checklists.json`.
+   - v12 (current): the improvements made while reproducing a delivered report (NI TMS) folded back, so one global
+     template serves every client. Date of Issue is the `issue_date` UDF (cover and 1.1) instead of the generation date;
+     the 1.1 title uses the client's `short_name` field; Author is `${asmtAssessors_Lines}`; 1.3 gains a second
+     testing-window row (`window2_start`, `window2_end`); `test_type` offers Black / Gray / White; the 5.x CVSS cell is
+     `${cvssScore} (${cvssLink View CVSS Metrics})`, label bold and underlined; the 5.1 heading's URL is `${app_url link}` in the
+     Hyperlink style, as in 3.1.1. Live configuration that goes with it:
+     the iSec palette (High FFC000, Medium FFFF00, Low 00B050, Informational 00B0F0, Critical C00000; black text on High
+     and Medium, white on the rest), now also the platform default, and `passFontColour=#000000` so a "Not Vulnerable"
+     cell is black on green while "Vulnerable" stays white on red. The scope grid and a multi-line iSec Check List cell
+     are not in v12; they are still open.
 9. Verified on 2026-09-20 on the real Web template in the local fork build with the OneBank client: cover logo 3.68 × 1.43 cm at the placeholder position, footer logo 1.69 × 0.66 cm on every page from page 2, page numbers in the tab, no unresolved tags (`samples/v9-report.*`).

@@ -1,6 +1,6 @@
 # iSec Web Application Penetration Testing template
 
-The iSec WAPT report template converted to Faction 2, at v9. It is the reference implementation
+The iSec WAPT report template converted to Faction 2, at v12. It is the reference implementation
 for every recipe in `../../AGENT.md`; this folder holds what is specific to it.
 
 | File | What it is |
@@ -10,6 +10,7 @@ for every recipe in `../../AGENT.md`; this folder holds what is specific to it.
 | `isec-web-annotated.docx` | The same template carrying 19 "Faction Mapping" comments that explain each tag and gap. Documentation master: do not upload it. |
 | `MAPPING.md` | The complete built-in variable reference, the section-by-section mapping, the client package and the v1 to v9 history. |
 | `isec-web-udfs.json` | The 21 user-defined fields in the API's `userDefinedFields` shape, ready to PUT onto a report template. |
+| `isec-web-checklists.json` | The two checklists the 2.4 and 2.5 charts read — "iSec Web Penetration Testing Checklist" (52 items) and "OWASP Web Top 10" (A01–A10:2025) — taken from sections 4.1 and 4.2 of the original document. Both exist in Faction as checklist templates for the Web Application Pentest type; attach them to an assessment for the charts to show anything other than 0 / 0. |
 | `../../BACKEND_GAPS.md` | What Faction could not do when the template was converted, the engine fixes made for it, and the unified UDF names shared with the other templates. |
 | `../../shared/isec-report.css` | The Report Designer stylesheet (shared with the Network template). Set the template's Report Font to Calibri alongside it. |
 | `samples/v9-report.*` | A report generated from v9 on the OneBank client demo (3 findings): cover and footer logos through `${clientImage}`, page numbers, Calibri. |

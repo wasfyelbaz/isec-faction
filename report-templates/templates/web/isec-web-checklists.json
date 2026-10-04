@@ -1,0 +1,264 @@
+{
+  "checklists": [
+    {
+      "name": "iSec Web Penetration Testing Checklist",
+      "source": "isec-web-original.docx, section 4.1 iSec Web Penetration Testing Checklist",
+      "questions": [
+        {
+          "text": "WAF Bypass",
+          "order": 0
+        },
+        {
+          "text": "Content Security Policy (CSP)",
+          "order": 1
+        },
+        {
+          "text": "Secure Flags",
+          "order": 2
+        },
+        {
+          "text": "Cross-Origin Resource Sharing (CORS)",
+          "order": 3
+        },
+        {
+          "text": "HTTP Security Headers (like Strict-Transport-Security)",
+          "order": 4
+        },
+        {
+          "text": "HTTP Methods",
+          "order": 5
+        },
+        {
+          "text": "Security Misconfiguration",
+          "order": 6
+        },
+        {
+          "text": "Information Disclosure",
+          "order": 7
+        },
+        {
+          "text": "Username Enumeration",
+          "order": 8
+        },
+        {
+          "text": "Guessable/Default Credentials",
+          "order": 9
+        },
+        {
+          "text": "Brute Force",
+          "order": 10
+        },
+        {
+          "text": "Password Policy",
+          "order": 11
+        },
+        {
+          "text": "Multi-Factor Authentication (MFA)",
+          "order": 12
+        },
+        {
+          "text": "Logout Functionality",
+          "order": 13
+        },
+        {
+          "text": "Directory Traversal",
+          "order": 14
+        },
+        {
+          "text": "Privilege Escalation",
+          "order": 15
+        },
+        {
+          "text": "Authorization Bypass",
+          "order": 16
+        },
+        {
+          "text": "Session Management Schema",
+          "order": 17
+        },
+        {
+          "text": "Cookies Attributes",
+          "order": 18
+        },
+        {
+          "text": "Cross-Site Request Forgery (CSRF)",
+          "order": 19
+        },
+        {
+          "text": "SQL Injection",
+          "order": 20
+        },
+        {
+          "text": "Cross-Site Script Inclusion (XSSI)",
+          "order": 21
+        },
+        {
+          "text": "XML External Entity (XXE) Injection",
+          "order": 22
+        },
+        {
+          "text": "Command Injection",
+          "order": 23
+        },
+        {
+          "text": "Cross-Site Scripting (XSS)",
+          "order": 24
+        },
+        {
+          "text": "HTTP Parameter Pollution",
+          "order": 25
+        },
+        {
+          "text": "Insecure Deserialization",
+          "order": 26
+        },
+        {
+          "text": "Local File Inclusion (LFI)",
+          "order": 27
+        },
+        {
+          "text": "Insufficient Input Validation",
+          "order": 28
+        },
+        {
+          "text": "Server-Side Request Forgery (SSRF)",
+          "order": 29
+        },
+        {
+          "text": "Business Logic Flaws",
+          "order": 30
+        },
+        {
+          "text": "Transaction Integrity",
+          "order": 31
+        },
+        {
+          "text": "Rate Limiting and DoS Controls",
+          "order": 32
+        },
+        {
+          "text": "Client-Side URL Redirection",
+          "order": 33
+        },
+        {
+          "text": "JavaScript Execution",
+          "order": 34
+        },
+        {
+          "text": "HTML5 Storage",
+          "order": 35
+        },
+        {
+          "text": "URL Manipulation",
+          "order": 36
+        },
+        {
+          "text": "Race Conditions",
+          "order": 37
+        },
+        {
+          "text": "Insufficient Authorization Checks",
+          "order": 38
+        },
+        {
+          "text": "Insecure Direct Object References (IDOR)",
+          "order": 39
+        },
+        {
+          "text": "Insecure Session Storage",
+          "order": 40
+        },
+        {
+          "text": "Session Hijacking",
+          "order": 41
+        },
+        {
+          "text": "Outdated Components",
+          "order": 42
+        },
+        {
+          "text": "Unrestricted File Upload",
+          "order": 43
+        },
+        {
+          "text": "Insecure Design",
+          "order": 44
+        },
+        {
+          "text": "Misconfigured SSL/TLS (Weak Ciphers, SSL/TLS Version)",
+          "order": 45
+        },
+        {
+          "text": "Presence of Debugging or Diagnostic Information",
+          "order": 46
+        },
+        {
+          "text": "Sensitive Data Exposure",
+          "order": 47
+        },
+        {
+          "text": "Response Manipulation",
+          "order": 48
+        },
+        {
+          "text": "HTTP Response Splitting",
+          "order": 49
+        },
+        {
+          "text": "Unauthorized Remote Code Execution",
+          "order": 50
+        },
+        {
+          "text": "Improper Validation of File Upload Types",
+          "order": 51
+        }
+      ]
+    },
+    {
+      "name": "OWASP Web Top 10",
+      "source": "isec-web-original.docx, section 4.2 OWASP Web Top 10 Check List",
+      "questions": [
+        {
+          "text": "A01:2025 - Broken Access Control",
+          "order": 0
+        },
+        {
+          "text": "A02:2025 - Security Misconfiguration",
+          "order": 1
+        },
+        {
+          "text": "A03:2025 - Software Supply Chain Failures",
+          "order": 2
+        },
+        {
+          "text": "A04:2025 - Cryptographic Failures",
+          "order": 3
+        },
+        {
+          "text": "A05:2025 - Injection",
+          "order": 4
+        },
+        {
+          "text": "A06:2025 - Insecure Design",
+          "order": 5
+        },
+        {
+          "text": "A07:2025 - Authentication Failures",
+          "order": 6
+        },
+        {
+          "text": "A08:2025 - Software or Data Integrity Failures",
+          "order": 7
+        },
+        {
+          "text": "A09:2025 - Logging & Alerting Failures",
+          "order": 8
+        },
+        {
+          "text": "A10:2025 - Mishandling of Exceptional Conditions",
+          "order": 9
+        }
+      ]
+    }
+  ]
+}
