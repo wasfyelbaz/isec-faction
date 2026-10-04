@@ -35,3 +35,9 @@ dist/
 # tracked. (The MAPT conversion notes that used to sit beside this are now committed as
 # report-templates/templates/mobile/MAPPING.md.)
 TO_DO_PLAN.md
+
+# skill-creator eval runs for isec-faction-reporting — local only
+isec-faction-reporting-workspace/
+
+# client deliverables dropped in for analysis — never commit
+NI TMS Web Application Penetration Testing.docx

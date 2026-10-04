@@ -1,0 +1,26 @@
+{
+  "skill_name": "isec-faction-reporting",
+  "evals": [
+    {
+      "id": 0,
+      "name": "open-assessment-status",
+      "prompt": "Our Faction reporting platform is running at http://localhost:8080 (login admin / admin123). I need a quick status: which assessments are currently open (anything not completed), and for each one how many findings it has at each severity? Save the answer as a markdown table to {out}/status.md.",
+      "expected_output": "A markdown table listing each non-completed assessment with per-severity finding counts that match the database.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "create-engagement-and-report",
+      "prompt": "Using our Faction platform at http://localhost:8080 (admin / admin123), set up a new engagement end to end. Client: 'EvalCorp ({run})', with one contact, Dana Reyes, Head of Security, dana@evalcorp.example. Target under that client: 'EvalCorp Customer Portal ({run})', URL https://portal.evalcorp.example. Assessment: a Web Application Pentest on that target using the 'iSec WAPT Report' template, 6-10 October 2026, with report version 1.0, test type Grey, environment UAT and project name 'EvalCorp Customer Portal'. Add two findings: a High SQL injection in the login form and a Low for missing security headers, each with a short description, steps and a recommendation. Then generate the report and save the Word document to {out}/report.docx, and write the ids of everything you created to {out}/summary.md.",
+      "expected_output": "Client, target and assessment created in the right chain; the four report fields set on the assessment; two findings at HIGH and LOW; a generated DOCX saved; ids recorded.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "csv-bulk-schedule-script",
+      "prompt": "I want a Python script that bulk-schedules next quarter's pentests into our Faction platform from a spreadsheet export (CSV). Write the script to {out}/bulk_schedule.py and a short {out}/README.md saying what columns the CSV needs and how to run it safely. Don't run it against the server.",
+      "expected_output": "A script that previews before importing, and a README naming the required columns including client, and warning that the import is all or nothing.",
+      "files": []
+    }
+  ]
+}
