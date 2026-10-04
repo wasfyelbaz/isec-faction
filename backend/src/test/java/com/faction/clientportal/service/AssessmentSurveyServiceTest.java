@@ -102,7 +102,7 @@ class AssessmentSurveyServiceTest {
                 eq("user-1"));
         verify(applicationService).addSystemComment(
                 eq("app-1"),
-                contains("/applications?tab=assessments&assessment=assessment-1&survey=survey-1"),
+                contains("(/assessments/assessment-1?survey=survey-1)"),
                 eq("user-1"));
     }
 

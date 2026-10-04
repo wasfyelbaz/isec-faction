@@ -70,6 +70,26 @@ class ApplicationOpenIssueCountTest extends TestContainersConfig {
         assertThat(dto(apps, appB).getOpenIssueCount()).isEqualTo(0L);
     }
 
+    /** The Targets list's "Total Assessments" column: every assessment on the target, deleted ones excluded. */
+    @Test
+    void searchApplications_populatesAssessmentCountPerApplication() {
+        String appA = application("App A");
+        String appB = application("App B");
+        assessment(appA);
+        assessment(appA);
+        String deleted = assessment(appA);
+        Assessment gone = assessmentRepository.findById(deleted).orElseThrow();
+        gone.setDeletedAt(LocalDateTime.now());
+        assessmentRepository.save(gone);
+
+        List<ApplicationDto> apps = applicationService
+                .searchApplications(null, PageRequest.of(0, 10), superAdmin())
+                .getContent();
+
+        assertThat(dto(apps, appA).getAssessmentCount()).isEqualTo(2L);
+        assertThat(dto(apps, appB).getAssessmentCount()).isEqualTo(0L);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private ApplicationDto dto(List<ApplicationDto> apps, String id) {

@@ -72,10 +72,12 @@ public class AssessmentSurveyService {
 
         AssessmentSurvey saved = repository.save(survey);
 
-        // Announce the new survey in the application's chat, with a deep link to complete it
+        // Announce the new survey in the application's chat, with a deep link to complete it. The
+        // link opens the assessment's own page with the survey on top: that page is open to anyone
+        // who can read the assessment, unlike Scheduling, which needs the right to create one.
+        // (Older links to the retired Targets "All Assessments" tab are redirected client-side.)
         assessmentRepository.findByIdAndDeletedAtIsNull(assessmentId).ifPresent(assessment -> {
-            String surveyLink = "/applications?tab=assessments&assessment=" + assessmentId
-                    + "&survey=" + saved.getId();
+            String surveyLink = "/assessments/" + assessmentId + "?survey=" + saved.getId();
             applicationService.addSystemComment(assessment.getApplicationId(),
                     "**Survey assigned**: \"" + template.getName() + "\" was added to assessment \""
                             + assessment.getName() + "\" by {actor}. [Complete the survey](" + surveyLink + ")",

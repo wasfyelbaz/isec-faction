@@ -94,6 +94,17 @@ public interface AssessmentRepository extends JpaRepository<Assessment, String>,
     long countByApplicationIdAndDeletedAtIsNull(String applicationId);
 
     /**
+     * Assessments per application for a page of applications, deleted ones excluded — one grouped
+     * query for the Targets list's "Total Assessments" column. Rows are [applicationId, count].
+     */
+    @Query("""
+            SELECT a.applicationId, COUNT(a) FROM Assessment a
+            WHERE a.applicationId IN :applicationIds AND a.deletedAt IS NULL
+            GROUP BY a.applicationId
+            """)
+    List<Object[]> countByApplicationIds(@Param("applicationIds") Collection<String> applicationIds);
+
+    /**
      * Find assessments by date range (for calendar view)
      */
     @Query("SELECT a FROM Assessment a WHERE a.startDate <= ?2 AND a.plannedEndDate >= ?1 AND a.deletedAt IS NULL")

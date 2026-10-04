@@ -80,4 +80,11 @@ public class ApplicationDto {
      * grouped query for the page; null elsewhere.
      */
     private Long openIssueCount;
+
+    /**
+     * How many assessments this application has had, deleted ones excluded (the Targets list's
+     * "Total Assessments" column). Populated only on the paginated list path, like
+     * {@link #openIssueCount}; null elsewhere.
+     */
+    private Long assessmentCount;
 }

@@ -343,6 +343,7 @@ public class ApplicationService {
                 search, emptyToNull(organizationIds), emptyToNull(subOrganizationIds), emptyToNull(statuses),
                 pageable, authentication);
         enrichOpenIssueCounts(result.getContent());
+        enrichAssessmentCounts(result.getContent());
         return result;
     }
 
@@ -354,6 +355,19 @@ public class ApplicationService {
         return values == null || values.isEmpty() ? null : values;
     }
 
+
+    /** Attaches the "Total Assessments" count to a page of application DTOs via one batched query. */
+    private void enrichAssessmentCounts(List<ApplicationDto> apps) {
+        if (apps == null || apps.isEmpty()) return;
+        List<String> ids = apps.stream().map(ApplicationDto::getId).collect(Collectors.toList());
+        Map<String, Long> counts = new java.util.HashMap<>();
+        for (Object[] row : assessmentRepository.countByApplicationIds(ids)) {
+            counts.put((String) row[0], ((Number) row[1]).longValue());
+        }
+        for (ApplicationDto app : apps) {
+            app.setAssessmentCount(counts.getOrDefault(app.getId(), 0L));
+        }
+    }
 
     /** Attaches the "Open Issues" count to a page of application DTOs via one batched query. */
     private void enrichOpenIssueCounts(List<ApplicationDto> apps) {
