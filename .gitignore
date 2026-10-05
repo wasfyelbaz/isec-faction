@@ -41,3 +41,6 @@ isec-faction-reporting-workspace/
 
 # client deliverables dropped in for analysis — never commit
 NI TMS Web Application Penetration Testing.docx
+
+# client findings dropped in for import — never commit
+test-findings/
