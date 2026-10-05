@@ -471,6 +471,21 @@ public class AssessmentService {
                         "Send this assessment to peer review at least once before finalizing it");
             }
 
+            // Impact is a mandatory part of every finding: block finalization while any lacks one.
+            if (AssessmentWorkflows.isCompleted(workflow, request.getStatus())
+                    && !AssessmentWorkflows.isCompleted(workflow, oldStatus)) {
+                List<String> missingImpact = vulnerabilityRepository
+                        .findByAssessmentIdAndDeletedAtIsNull(assessment.getId()).stream()
+                        .filter(v -> isBlankRichText(v.getImpactNarrative()))
+                        .map(Vulnerability::getName)
+                        .toList();
+                if (!missingImpact.isEmpty()) {
+                    throw new BusinessRuleException(
+                            "Every finding needs an Impact before finalizing. Missing on: "
+                                    + String.join(", ", missingImpact));
+                }
+            }
+
             // Block finalization if any preventClosure checklists have unanswered questions
             if (AssessmentWorkflows.isCompleted(workflow, request.getStatus())
                     && !AssessmentWorkflows.isCompleted(workflow, oldStatus)) {
@@ -1176,6 +1191,14 @@ public class AssessmentService {
      * As {@link #withinReopenWindow(Assessment)}, but taking the assessment's workflow when the
      * caller already has it, avoiding a repeat catalog load.
      */
+    /** True when rich text has no visible text and no image, e.g. an untouched editor's "<p></p>". */
+    static boolean isBlankRichText(String html) {
+        if (html == null) return true;
+        if (html.contains("<img")) return false;
+        String text = html.replaceAll("<[^>]*>", "").replace("&nbsp;", " ").trim();
+        return text.isEmpty();
+    }
+
     private boolean withinReopenWindow(Assessment assessment, AssessmentWorkflow workflow) {
         if (!AssessmentWorkflows.isCompleted(workflow, assessment.getStatus())) {
             return false;

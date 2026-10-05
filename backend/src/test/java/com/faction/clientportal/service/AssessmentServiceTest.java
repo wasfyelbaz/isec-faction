@@ -1629,9 +1629,9 @@ class AssessmentServiceTest {
                 .thenReturn(List.of());
 
         Vulnerability v1 = Vulnerability.builder().id("v-1").assessmentId(testAssessment.getId())
-                .name("SQLi").severity(VulnerabilitySeverity.CRITICAL).build();
+                .name("SQLi").severity(VulnerabilitySeverity.CRITICAL).impactNarrative("<p>impact</p>").build();
         Vulnerability v2 = Vulnerability.builder().id("v-2").assessmentId(testAssessment.getId())
-                .name("XSS").severity(VulnerabilitySeverity.HIGH).openedAt(LocalDateTime.now().minusDays(1)).build();
+                .name("XSS").severity(VulnerabilitySeverity.HIGH).openedAt(LocalDateTime.now().minusDays(1)).impactNarrative("<p>impact</p>").build();
 
         when(vulnerabilityRepository.findByAssessmentIdAndDeletedAtIsNull(testAssessment.getId()))
                 .thenReturn(List.of(v1, v2));
@@ -1675,13 +1675,13 @@ class AssessmentServiceTest {
         when(userRepository.findById("user-rem")).thenReturn(Optional.of(manager));
 
         Vulnerability fresh = Vulnerability.builder().id("v-1").assessmentId(testAssessment.getId())
-                .name("SQLi").severity(VulnerabilitySeverity.CRITICAL)
+                .name("SQLi").severity(VulnerabilitySeverity.CRITICAL).impactNarrative("<p>impact</p>")
                 .subscribers(new ArrayList<>()).build();
         // Already open and already reassigned — a later finalization must not overwrite that.
         Vulnerability reassigned = Vulnerability.builder().id("v-2").assessmentId(testAssessment.getId())
                 .name("XSS").severity(VulnerabilitySeverity.HIGH)
                 .openedAt(LocalDateTime.now().minusDays(1))
-                .remediationOwnerId("someone-else")
+                .remediationOwnerId("someone-else").impactNarrative("<p>impact</p>")
                 .subscribers(new ArrayList<>()).build();
 
         when(vulnerabilityRepository.findByAssessmentIdAndDeletedAtIsNull(testAssessment.getId()))
@@ -1993,13 +1993,23 @@ class AssessmentServiceTest {
     }
 
     @Test
+    void blankRichTextIsAnEmptyEditorNotJustNull() {
+        assertThat(AssessmentService.isBlankRichText(null)).isTrue();
+        assertThat(AssessmentService.isBlankRichText("")).isTrue();
+        assertThat(AssessmentService.isBlankRichText("<p></p>")).isTrue();
+        assertThat(AssessmentService.isBlankRichText("<p>&nbsp; <br></p>")).isTrue();
+        assertThat(AssessmentService.isBlankRichText("<p>Data can be read.</p>")).isFalse();
+        assertThat(AssessmentService.isBlankRichText("<p><img src=\"/x.png\"></p>")).isFalse();
+    }
+
+    @Test
     void completingUsesTheAssessmentsOwnCompletedStatusAndSlas() {
         AssessmentWorkflow second = secondWorkflowInCatalog();
         testAssessment.setWorkflowId(TestWorkflows.SECOND_ID);
         testAssessment.setStatus("Fieldwork");
         UpdateAssessmentRequest request = UpdateAssessmentRequest.builder().status("Signed Off").build();
         Vulnerability unopened = Vulnerability.builder().id("v-1").assessmentId(testAssessment.getId())
-                .severity(com.faction.clientportal.model.VulnerabilitySeverity.HIGH).status("None").build();
+                .severity(com.faction.clientportal.model.VulnerabilitySeverity.HIGH).status("None").impactNarrative("<p>impact</p>").build();
         when(assessmentRepository.findByIdAndDeletedAtIsNull(testAssessment.getId())).thenReturn(Optional.of(testAssessment));
         when(assessmentRepository.save(any(Assessment.class))).thenAnswer(inv -> inv.getArgument(0));
         when(vulnerabilityRepository.findByAssessmentIdAndDeletedAtIsNull(testAssessment.getId()))

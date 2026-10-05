@@ -226,6 +226,8 @@ public class ReportData {
         private LocalDateTime closedInDevAt;
         private LocalDateTime closedInStagingAt;
         private String categoryName;
+        /** The impact narrative (rich text), a built-in field like the description. */
+        private String impactNarrative;
         /**
          * The checklist items this finding is filed under, by checklist — keyed on the checklist's
          * variable name (its title lowercased, spaces to hyphens), the same key the checklist

@@ -49,6 +49,9 @@ class AssessmentControllerTest extends TestContainersConfig {
     private com.faction.clientportal.repository.PeerReviewRepository peerReviewRepository;
 
     @Autowired
+    private com.faction.clientportal.repository.VulnerabilityRepository vulnerabilityRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     @Autowired
@@ -91,6 +94,7 @@ class AssessmentControllerTest extends TestContainersConfig {
 
     @BeforeEach
     void setUp() {
+        vulnerabilityRepository.deleteAll();
         assessmentSurveyRepository.deleteAll();
         assessmentRepository.deleteAll();
         reportTemplateRepository.deleteAll();
@@ -637,6 +641,40 @@ class AssessmentControllerTest extends TestContainersConfig {
         org.assertj.core.api.Assertions
                 .assertThat(assessmentRepository.findById(assessment.getId()).orElseThrow().getStatus())
                 .isEqualTo("Testing");
+    }
+
+    @Test
+    void testUpdateAssessment_RefusesToFinalizeWhileAFindingHasNoImpact() throws Exception {
+        Assessment assessment = createTestAssessment("No Impact", "Testing");
+        sentToPeerReview(assessment.getId());
+        saveFinding(assessment.getId(), "Weak Password Policy", "<p></p>");
+        saveFinding(assessment.getId(), "SQL Injection", "<p>Data can be read.</p>");
+
+        mockMvc.perform(put("/api/v1/assessments/" + assessment.getId())
+                        .header("Authorization", "Bearer " + jwtToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"Completed\"}"))
+                .andExpect(status().is4xxClientError())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Weak Password Policy")))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("SQL Injection"))));
+
+        org.assertj.core.api.Assertions
+                .assertThat(assessmentRepository.findById(assessment.getId()).orElseThrow().getStatus())
+                .isEqualTo("Testing");
+    }
+
+    @Test
+    void testUpdateAssessment_FinalizesOnceEveryFindingHasAnImpact() throws Exception {
+        Assessment assessment = createTestAssessment("All Impacts", "Testing");
+        sentToPeerReview(assessment.getId());
+        saveFinding(assessment.getId(), "SQL Injection", "<p>Data can be read.</p>");
+
+        mockMvc.perform(put("/api/v1/assessments/" + assessment.getId())
+                        .header("Authorization", "Bearer " + jwtToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"Completed\"}"))
+                .andExpect(status().isOk());
     }
 
     // ── Status and open-survey filters ─────────────────────────────────────────
@@ -1219,6 +1257,18 @@ class AssessmentControllerTest extends TestContainersConfig {
                 .andExpect(jsonPath("$.data.newCampaignCount").value(1));
     }
     /** Finalizing needs the assessment to have been sent to peer review at least once. */
+    private void saveFinding(String assessmentId, String name, String impactNarrative) {
+        vulnerabilityRepository.save(com.faction.clientportal.model.Vulnerability.builder()
+                .name(name)
+                .severity(com.faction.clientportal.model.VulnerabilitySeverity.HIGH)
+                .assessmentId(assessmentId)
+                .impactNarrative(impactNarrative)
+                .order(0)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build());
+    }
+
     private void sentToPeerReview(String assessmentId) {
         peerReviewRepository.save(com.faction.clientportal.model.PeerReview.builder()
                 .assessmentId(assessmentId)

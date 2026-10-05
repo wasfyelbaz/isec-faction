@@ -235,6 +235,21 @@ public class DocxUtils {
 
     // ── CDATA wrap ──────────────────────────────────────────────────────────
 
+    /**
+     * The finding's Impact (narrative), a built-in rich-text field like the description:
+     * {@code ${impactNarrative}}, and {@code ${impact_narrative}} for templates written when it was
+     * a template field. Wrapped in the {@code impact_narrative} class so template CSS written for
+     * that field still applies.
+     */
+    private void putImpactNarrative(Map<String, List<Object>> map2, ReportData.ReportVulnerability v,
+                                    int count, String customCSS) throws Docx4JException {
+        String impact = v.getImpactNarrative() != null ? v.getImpactNarrative() : "";
+        impact = replaceVulnUdfsInHtml(impact, v);
+        impact = replaceFigureVariables(impact, count);
+        map2.put("${impactNarrative}", wrapHTML(impact, customCSS, "impact_narrative"));
+        map2.put("${impact_narrative}", wrapHTML(impact, customCSS, "impact_narrative"));
+    }
+
     /** {@code ${checklistItems <checklist name>}}, inside a finding's own XML. */
     private static final Pattern CHECKLIST_ITEMS = Pattern.compile("\\$\\{checklistItems\\s+([^}\\s]+)\\s*\\}");
 
@@ -700,6 +715,8 @@ public class DocxUtils {
                             }
                         }
                     }
+                    // After the template fields, so the built-in Impact wins over a leftover field
+                    putImpactNarrative(map2, v, count, customCSS);
 
                     replaceHTML(table, map2);
                 }
@@ -1084,6 +1101,8 @@ public class DocxUtils {
                     }
                 }
             }
+            // After the template fields, so the built-in Impact wins over a leftover field
+            putImpactNarrative(map2, v, count, customCSS);
 
             pendingRichText.add(map2);
         }

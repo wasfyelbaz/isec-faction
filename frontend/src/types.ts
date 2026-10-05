@@ -837,18 +837,37 @@ export interface PeerReviewVulnerability {
   impact?: string;
   cvssScore?: number;
   cvssString?: string;
+  assetLocation?: string;
+  section?: string;
+  checklistItems?: VulnerabilityChecklistItem[];
+  /** The finding's template fields, to label them and pick the right editor. */
+  fieldDefinitions?: UserDefinedField[];
   // Snapshot
   description?: string;
+  impactNarrative?: string;
   recommendation?: string;
   details?: string;
   fieldValues?: Record<string, string>;
-  // Reviewer edits
+  // Reviewer edits; unset means "not revised"
+  revisedName?: string;
+  revisedSeverity?: VulnerabilitySeverity;
+  revisedLikelihood?: string;
+  revisedImpact?: string;
+  revisedCvssScore?: number;
+  revisedCvssString?: string;
+  revisedAssetLocation?: string;
+  revisedSection?: string;
+  revisedChecklistItems?: VulnerabilityChecklistItem[];
   revisedDescription?: string;
+  revisedImpactNarrative?: string;
   revisedRecommendation?: string;
   revisedDetails?: string;
   revisedFieldValues?: Record<string, string>;
   // Reviewer notes
+  /** One note covering the finding's attributes: title, ratings, CVSS, asset, checklist items. */
+  attributesNotes?: string;
   descriptionNotes?: string;
+  impactNarrativeNotes?: string;
   recommendationNotes?: string;
   detailsNotes?: string;
   fieldNotes?: Record<string, string>;
@@ -1442,6 +1461,7 @@ export interface Vulnerability {
   description?: string;
   recommendation?: string;
   details?: string;
+  impactNarrative?: string;
   trackingId?: string;
   order: number;
   status?: string;
@@ -1511,6 +1531,7 @@ export interface CreateVulnerabilityRequest {
   description?: string;
   recommendation?: string;
   details?: string;
+  impactNarrative?: string;
   vulnerabilityCategoryId?: string;
   fieldValues?: Record<string, string>;
   /** Update: omit to leave the selection alone, [] to clear it. */
@@ -1530,6 +1551,7 @@ export interface UpdateVulnerabilityRequest {
   description?: string;
   recommendation?: string;
   details?: string;
+  impactNarrative?: string;
   vulnerabilityCategoryId?: string;
   fieldValues?: Record<string, string>;
   /** Update: omit to leave the selection alone, [] to clear it. */

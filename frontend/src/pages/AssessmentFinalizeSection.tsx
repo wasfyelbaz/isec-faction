@@ -172,6 +172,8 @@ export default function AssessmentFinalizeSection({
   const [sentToPeerReview, setSentToPeerReview] = useState(false);
   const [openReview, setOpenReview] = useState<PeerReview | null>(null);
   const [blockingChecklists, setBlockingChecklists] = useState<AssessmentChecklist[]>([]);
+  // Findings without an Impact: a mandatory field, so they block finalizing (mirrored by the server).
+  const [missingImpact, setMissingImpact] = useState<string[]>([]);
   // Correcting the completion date: super-admin only, mirrored by the server. The date drives
   // the reopen window and the completed-work counts, so it is a deliberate edit behind a modal.
   const { isSuperAdmin, permissions } = usePermissions();
@@ -195,6 +197,14 @@ export default function AssessmentFinalizeSection({
       setBlockingChecklists(blocking);
     });
   }, [assessmentId, assessment.assessmentTypeId]);
+
+  useEffect(() => {
+    vulnerabilitiesApi.getAll(assessmentId).then(res => {
+      const blank = (html?: string) => !html
+        || (!html.includes('<img') && !html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim());
+      setMissingImpact((res.data ?? []).filter(v => blank(v.impactNarrative)).map(v => v.name));
+    }).catch(() => setMissingImpact([]));
+  }, [assessmentId]);
 
   useEffect(() => {
     peerReviewsApi.getByAssessment(assessmentId).then(res => {
@@ -318,8 +328,8 @@ export default function AssessmentFinalizeSection({
       } else {
         setActionError(res.message || 'Failed to finalize assessment');
       }
-    } catch {
-      setActionError('Failed to finalize assessment');
+    } catch (err: any) {
+      setActionError(err.response?.data?.message || 'Failed to finalize assessment');
     } finally {
       setSubmittingFinalize(false);
     }
@@ -543,6 +553,14 @@ export default function AssessmentFinalizeSection({
               <strong>Cannot finalize yet:</strong> send this assessment to peer review at least once first.
             </div>
           )}
+          {!isCompleted && missingImpact.length > 0 && (
+            <div className="finalize-checklist-block">
+              <strong>Cannot finalize:</strong> these findings have no Impact:
+              <ul className="finalize-checklist-block-list">
+                {missingImpact.map((name, i) => <li key={i}>{name}</li>)}
+              </ul>
+            </div>
+          )}
           <div className="finalize-action-row">
             <div className="finalize-action-info">
               <span className="finalize-action-name">Finalize Assessment</span>
@@ -555,7 +573,7 @@ export default function AssessmentFinalizeSection({
               size="sm"
               onClick={() => setShowFinalizeConfirm(true)}
               disabled={submittingFinalize || isCompleted || !completedStatus || blockingChecklists.length > 0
-                || !hasPeerReview}
+                || !hasPeerReview || missingImpact.length > 0}
             >
               <CheckCircle2 size={14} />
               {submittingFinalize ? 'Finalizing…' : 'Finalize'}

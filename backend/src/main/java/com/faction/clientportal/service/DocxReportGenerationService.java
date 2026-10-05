@@ -663,6 +663,7 @@ public class DocxReportGenerationService implements ReportGenerationService {
                 .description(v.getDescription())
                 .recommendation(v.getRecommendation())
                 .details(v.getDetails())
+                .impactNarrative(v.getImpactNarrative())
                 .trackingId(v.getTrackingId())
                 .openedAt(v.getOpenedAt())
                 .closedAt(v.getClosedAt())
