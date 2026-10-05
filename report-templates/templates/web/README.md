@@ -1,6 +1,6 @@
 # iSec Web Application Penetration Testing template
 
-The iSec WAPT report template converted to Faction 2, at v12. It is the reference implementation
+The iSec WAPT report template converted to Faction 2, at v14. It is the reference implementation
 for every recipe in `../../AGENT.md`; this folder holds what is specific to it.
 
 | File | What it is |

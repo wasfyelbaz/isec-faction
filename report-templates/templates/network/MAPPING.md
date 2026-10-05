@@ -40,7 +40,7 @@ is the same static text.
 
 | Section | Item | Tag / mapping | Status |
 |---|---|---|---|
-| Cover | `{ Client Name + Project Name } {Internal/External} Penetration Testing Report` (text box) | `${asmtClient} ${project_name} ${network_type} Penetration Testing Report` | DIRECT + UDF |
+| Cover | `{ Client Name + Project Name } {Internal/External} Penetration Testing Report` (text box) | `${asmtName}` from v9: the assessment name (Client + Target + Assessment Type, set when the assessment is created). Until v8, `${asmtClient} ${project_name} ${network_type} Penetration Testing Report`. | DIRECT |
 | Cover | `{Month DayNN, Year}` (text box) | `${today MMMM d, yyyy}`; box widened to 2.5 in, left-aligned (Web v4 fix) | PARTIAL (no ordinal suffix) |
 | Cover | "Network Penetration Testing Report" | Static. | STATIC |
 | Cover | Client logo (top right, where "[Insert Image Here]" was) | `${clientImage logo width=139 height=54}` alone in the text box narrowed to the placeholder (4.29 cm wide at 15.05 cm from the column edge): the client record's `logo` fitted into a 3.67 × 1.44 cm box. Same geometry as Web v9. | DIRECT |
@@ -48,7 +48,7 @@ is the same static text.
 | Table of Contents | Native Word TOC | Kept; Faction's LibreOffice pass refreshes it. The stale entries for "5.1 { Project Name 1} - {Target URL}" and "5.1.2 … 5.1.5" disappear at refresh. | DIRECT |
 | Footer band (pages 2 onward, footers 2 and 4) | Client logo next to the iSec wordmark | `${clientImage logo width=64 height=25}` in the small text box after the separator bar (footers copied from Web v9, which come from the same source XML). | DIRECT |
 | Footer band | Page number in the pink tab | Page-anchored text box with the PAGE field (Web v7 fix); the original Word frame is dropped by LibreOffice. | STATIC (fixed) |
-| 1.1 | Document Title | `${asmtClient} ${project_name} ${network_type} Penetration Testing Report v${report_version}` | DIRECT + UDF |
+| 1.1 | Document Title | `${asmtName}` from v9, as on the cover. | DIRECT |
 | 1.1 | Document ID | `${document_id}` (STRING UDF, empty by default) | UDF |
 | 1.1 | Classification, Description | Static. | STATIC |
 | 1.1 | Date of Issue | `${today MMMM d, yyyy}` | DIRECT |
@@ -72,7 +72,7 @@ is the same static text.
 | 5.1.N | Finding heading | Heading 3 `${vulnName}` numbered by a new Word numbering definition `5.1.%1` (numbering `abstractNum 20` / `num 21`) | DIRECT |
 | 5.x | Severity / CVSS / Status | `${severity}` (fill `FAC701`), `${cvssScore} (${cvssLink View CVSS Metrics})` since v3 — the label is the link and its target is the NVD calculator for this finding's own vector — and `${asmt_phase}` (static grey) | DIRECT |
 | 5.x | Affected Assets | `${assetLocation}` (one string; several hosts separated by commas), centred since v2 | PARTIAL 5.11 |
-| 5.x | iSec Check List | `${isec_checklist_ref}` | UDF |
+| 5.x | iSec Check List | `${checklistItems isec-network-penetration-testing-checklist}` from v8: the network checklist items chosen on the finding, one per line, each marked Vulnerable in the checklist | DIRECT |
 | 5.x | Description / Impact / Recommendation | `${desc}` / `${impact_narrative}` / `${rec}`, each the only text of its cell | DIRECT / UDF |
 | 5.x | Proof Of Concept | `${details}` under the Heading 4; the page break after it closes the finding | DIRECT |
 | 6.0 | Recommendation | `${recommendations}` | UDF |
@@ -83,7 +83,7 @@ is the same static text.
 Shared names (same meaning as the Web and MAPT templates): `summary1`, `summary2`, `report_version`,
 `asmt_phase`, `test_type`, `testing_hours`, `project_name`, `environment`, `first_reviewer`,
 `second_reviewer`, `approver`, `provided_credentials`, `limitations`, `recommendations`;
-vulnerability scope `affected_user`, `isec_checklist_ref`, `impact_narrative`.
+vulnerability scope `affected_user`, `impact_narrative` (`isec_checklist_ref` retired in v8).
 
 Network-specific:
 
@@ -131,7 +131,7 @@ ${fill Critical=C00000,High=FFC000,Medium=FFFF00,Low=00B050,Informational=00B0F0
 Heading 3:  ${vulnName}                        ← numbering "5.1.%1"
 [table]  Severity ${severity} | CVSS 3.1 ${cvssScore} (${cvssString link}) | Status ${asmt_phase}
          Affected Assets  | ${assetLocation}
-         iSec Check List  | ${isec_checklist_ref}
+         iSec Check List  | ${checklistItems isec-network-penetration-testing-checklist}
          Description      | ${desc}
          Impact           | ${impact_narrative}
          Recommendation   | ${rec}
@@ -241,3 +241,8 @@ History:
   and 9 pass / 3 fail / 1 N/A answers gave a severity chart of 0/2/1/4/0, a checklist chart of 9/3 and a 13-row table
   with the same counts; no unresolved tag. Comments 11 and 12 in the annotated master have had no anchor since v4 split
   the 3.1.1 / 3.1.2 merged cells they described; left as they are.
+- v8 (2026-10-04): the finding table's iSec Check List row lists the network checklist items chosen on the finding
+  (`${checklistItems isec-network-penetration-testing-checklist}`), replacing the free-text `isec_checklist_ref` UDF.
+  Choosing an item marks it Vulnerable in the checklist.
+- v9 (2026-10-05): the cover title and the 1.1 Document Title print `${asmtName}`, the assessment name (Client +
+  Target + Assessment Type, filled in when the assessment is created), instead of client + project + network type.

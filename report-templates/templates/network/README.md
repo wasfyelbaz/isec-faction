@@ -1,6 +1,6 @@
 # iSec Internal / External Network Penetration Testing template
 
-The iSec Network report template converted to Faction 2, at v7. `../../AGENT.md` explains the engine
+The iSec Network report template converted to Faction 2, at v9. `../../AGENT.md` explains the engine
 rules and the conversion recipes; this folder holds what is specific to this template.
 
 | File | What it is |

@@ -95,7 +95,7 @@ iSec template uses:
 | Client | `${asmtClient}`, `${asmtClient_<field>}` | Inline. Client = the assessment's organization. |
 | Distribution list | `${clientContactTable}` + `${loop}` row with `${contactName}`, `${contactTitle}`, `${contactEmail}`; or `${clientContacts_Lines / _Bullets / _Comma}` | Table form: config tag in a merged row above the loop row. |
 | Client images | `${clientImage <slot> width=W height=H}` | Alone in its paragraph; body, cells, text boxes, headers, footers. Section 6. |
-| Per finding | `${vulnName}`, `${severity}`, `${cvssScore}`, `${cvssString link}` or `${cvssLink <label>}` (inside a hyperlink), `${assetLocation}`, `${category}`, `${desc}`, `${rec}`, `${details}`, `${count}` (table rows only), `${likelihood}` / `${impact}` (ratings) | Only inside a `${vulnTable}` row or a `${fiBegin}` block. |
+| Per finding | `${vulnName}`, `${severity}`, `${cvssScore}`, `${cvssString link}` or `${cvssLink <label>}` (inside a hyperlink), `${assetLocation}`, `${category}`, `${checklistItems <checklist-name>}` (the finding's items from that checklist, one per line; name as in `${checklist-<name>}`), `${desc}`, `${rec}`, `${details}`, `${count}` (table rows only), `${likelihood}` / `${impact}` (ratings) | Only inside a `${vulnTable}` row or a `${fiBegin}` block. |
 | Structure | `${pageBreak}`, `${if-section S}` … `${end-section S}` | Alone in top-level body paragraphs. |
 | Native charts | `${chartData severity}`, `${chartData checklist}`, `${chartData checklist:<name>}` | Alone in the top-level body paragraph directly before the chart it feeds. The marker paragraph is deleted on generation. |
 

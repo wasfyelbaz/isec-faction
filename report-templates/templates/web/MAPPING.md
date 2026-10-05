@@ -164,7 +164,7 @@ The paragraph keeps its own alignment and spacing. A slot the client has not fil
 
 | Section | Item | Tag / mapping | Status |
 |---|---|---|---|
-| Cover | `{ Client Name + Project Name } Penetration Testing Report` (text box) | `${asmtClient} ${project_name} Penetration Testing Report`. `${asmtClient}` is the client (organization) name from the client record (fork `main`, commit 40047cc); `${project_name}` is an assessment UDF. | DIRECT + UDF |
+| Cover | `{ Client Name + Project Name } Penetration Testing Report` (text box) | `${asmtName}` from v14: the assessment name, which Faction sets to Client + Target + Assessment Type when the assessment is created (e.g. "Network International TMS Web Application Pentest"; editable). Until v13, `${asmtClient} ${project_name} Penetration Testing Report`. | DIRECT |
 | Cover | `{Month DayNN, Year}` (text box) | `${today MMMM d, yyyy}` → "May 11, 2026". No ordinal suffix ("11th"). | PARTIAL 5.14 |
 | Cover | "Web Application Penetration Testing Report" | Static, or `${asmtType}`. | STATIC |
 | Cover | iSec logo, shapes | Untouched. | STATIC |
@@ -174,7 +174,7 @@ The paragraph keeps its own alignment and spacing. A slot the client has not fil
 | Footer band (pages 2 onward, both footers) | Client logo next to the iSec wordmark (where "[Insert Image Here]" was) | `${clientImage logo width=64 height=25}` alone in the small text box right after the separator bar (box at 2.90 cm from the column edge, centred on the wordmark). Prints the same `logo` image fitted into a 1.69 × 0.66 cm box, the iSec wordmark's own width. Footers are parts of their own; the engine registers the picture on each footer (fork commit b77a81b). | DIRECT |
 | Footer band | Page number in the pink tab | A page-anchored text box (0.54 / 28.71 cm, 1.1 × 0.8 cm) holding the PAGE field, white, centred. The original Word frame was dropped by Faction's LibreOffice pass, which left the number invisible. | STATIC (fixed in v7) |
 | 1.0 | Client logo | Removed in v6: the logo lives on the cover and in the footer band instead. | — |
-| 1.1 | Document Title | `${asmtClient_short_name} ${project_name} Penetration Testing Report v${report_version}` from v12: the client's `short_name` custom field (Clients > custom fields, e.g. NI), while the cover keeps the full `${asmtClient}`. `project_name`, `report_version` are assessment UDFs, see 4. | DIRECT + UDF, PARTIAL 5.3 |
+| 1.1 | Document Title | `${asmtName}` from v14, the same assessment name as the cover. v12–v13: `${asmtClient_short_name} ${project_name} Penetration Testing Report v${report_version}`, from v12: the client's `short_name` custom field (Clients > custom fields, e.g. NI), while the cover keeps the full `${asmtClient}`. `project_name`, `report_version` are assessment UDFs, see 4. | DIRECT + UDF, PARTIAL 5.3 |
 | 1.1 | Classification, Description | Static. | STATIC |
 | 1.1 | Date of Issue | `${issue_date}` from v12 (also on the cover), a required assessment STRING UDF printed as typed, e.g. "September 26th, 2026". Until v11 it was `${today MMMM d, yyyy}`, the generation date. | UDF |
 | 1.3 | Report Type | Static "Testing". | STATIC |
@@ -200,7 +200,7 @@ The paragraph keeps its own alignment and spacing. A slot the client has not fil
 | 5.x | Severity cell | `${severity}`; cell fill `FAC701`; block config paragraph `${fill Critical=C00000,High=FFC000,Medium=FFFF00,Low=00B050,Informational=00B0F0}` | DIRECT |
 | 5.x | CVSS `9.0 (View CVSS Metrics)` | From v12 `${cvssScore} (${cvssLink View CVSS Metrics})`, the label bold and underlined inside a Word hyperlink that the engine points at the NVD calculator for the finding's vector. Give every finding a vector, Informational included (e.g. `CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:N` for 0.0), or the link has nothing to open. | DONE (v12) |
 | 5.x | Affected Assets (several URLs, one per line) | `${assetLocation}` gives one string. No line splitting. | PARTIAL 5.11 |
-| 5.x | OWASP Top Ten | `${category}` when the vulnerability category list is the OWASP Top 10 entries. Otherwise a UDF, see 4. | DIRECT |
+| 5.x | OWASP Top Ten | `${checklistItems owasp-web-top-10}` from v13: the OWASP Web Top 10 items chosen on the finding, one per line. Choosing an item marks it Vulnerable in the assessment's OWASP checklist (and back to Not Vulnerable when removed, unless another finding still names it). | DONE (v13) |
 | 5.x | Description | `${desc}` alone in the cell. | DIRECT |
 | 5.x | Recommendation | `${rec}` alone in the cell. | DIRECT |
 | 5.x | Proof Of Concept steps and screenshots | `${details}` alone in a paragraph under the "Proof Of Concept" heading. Captions via `${Figure#.N}` in the editor. | DIRECT |
@@ -236,7 +236,7 @@ Create these in the Report Designer. Full option lists and defaults: `../../BACK
 | 3.2 | Testing Constraints and Limitations | Assessment `limitations` | RICH_TEXT | |
 | 5.1 heading | `{Target URL}` | Assessment `app_url` | STRING | Earlier draft name: `target_url`. |
 | 5.x | OWASP Top Ten | Vulnerability `owasp_top_ten` | DROPDOWN | Only when `${category}` is not the OWASP Top 10 list. |
-| 5.x | iSec Check List | Vulnerability `isec_checklist_ref` | STRING | Interim. GAP 5.12: no link between a finding and checklist items. |
+| 5.x | iSec Check List | `${checklistItems isec-web-penetration-testing-checklist}` from v13 (not a UDF any more) | — | The iSec checklist items chosen on the finding, one per line, each marked Vulnerable in the checklist. Closes GAP 5.12. |
 | 5.x | Impact (narrative) | Vulnerability `impact_narrative` | RICH_TEXT | Not `${impact}` (that is a rating label). |
 | 6.0 | Recommendation | Assessment `recommendations` | RICH_TEXT | |
 
@@ -288,8 +288,8 @@ Heading 3:  ${vulnName}            ← Word numbering "5.1.%1" supplies 5.1.1, 5
    Severity | CVSS 3.1 | Status
    ${severity} (fill FAC701) | ${cvssScore} (hyperlink text: ${cvssString link}) | ${asmt_phase} (static fill 808080)
    Affected Assets | ${assetLocation}
-   OWASP Top Ten   | ${category}            ← or ${owasp_top_ten}
-   iSec Check List | ${isec_checklist_ref}
+   OWASP Top Ten   | ${checklistItems owasp-web-top-10}
+   iSec Check List | ${checklistItems isec-web-penetration-testing-checklist}
    Description     | ${desc}                ← the only text in the cell
    Impact          | ${impact_narrative}      ← RICH_TEXT UDF, the only text in the cell
    Recommendation  | ${rec}                 ← the only text in the cell
@@ -336,7 +336,7 @@ ${fiEnd}
      template's checklist config carries the settings listed in the 4.1 / 4.2 row above. Verified offline through the real
      renderer and engine; the two checklists themselves come from the original's 4.1 (52 items) and 4.2 (A01–A10:2025),
      kept in `isec-web-checklists.json`.
-   - v12 (current): the improvements made while reproducing a delivered report (NI TMS) folded back, so one global
+   - v12: the improvements made while reproducing a delivered report (NI TMS) folded back, so one global
      template serves every client. Date of Issue is the `issue_date` UDF (cover and 1.1) instead of the generation date;
      the 1.1 title uses the client's `short_name` field; Author is `${asmtAssessors_Lines}`; 1.3 gains a second
      testing-window row (`window2_start`, `window2_end`); `test_type` offers Black / Gray / White; the 5.x CVSS cell is
@@ -346,4 +346,12 @@ ${fiEnd}
      and Medium, white on the rest), now also the platform default, and `passFontColour=#000000` so a "Not Vulnerable"
      cell is black on green while "Vulnerable" stays white on red. The scope grid and a multi-line iSec Check List cell
      are not in v12; they are still open.
+   - v13: the finding table's OWASP Top Ten and iSec Check List rows list the checklist items chosen on
+     the finding — `${checklistItems owasp-web-top-10}` and `${checklistItems isec-web-penetration-testing-checklist}`,
+     one per line — instead of the single category and the free-text `isec_checklist_ref` UDF (retired). The finding
+     form offers one multi-select per checklist attached to the assessment; each item chosen is marked Vulnerable in
+     that checklist, and goes back to Not Vulnerable when no finding names it any more.
+   - v14 (current): the cover title and the 1.1 Document Title print `${asmtName}`, the assessment name, which the
+     Create Assessment form now fills as Client + Target + Assessment Type. The "Penetration Testing Report" suffix and
+     the "v1.0" after the Document Title are gone, since the name says what the report is; the version stays in 1.3.
 9. Verified on 2026-09-20 on the real Web template in the local fork build with the OneBank client: cover logo 3.68 × 1.43 cm at the placeholder position, footer logo 1.69 × 0.66 cm on every page from page 2, page numbers in the tab, no unresolved tags (`samples/v9-report.*`).
