@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, ClipboardList, Eye, FileText, FileType2, PenLine } from 'lucide-react';
 import { marked } from 'marked';
-import { peerReviewsApi, assessmentsApi, reportsApi } from '../api';
-import type { Assessment, FieldLockInfo, PeerReview, PeerReviewVulnerability, ReportDocumentInfo, ReportDocumentType, ScoringType, UserDefinedField, VulnerabilitySeverity } from '../types';
+import { peerReviewsApi, assessmentsApi, reportsApi, assessmentChecklistsApi } from '../api';
+import type { Assessment, AssessmentChecklist, FieldLockInfo, PeerReview, PeerReviewVulnerability, ReportDocumentInfo, ReportDocumentType, ScoringType, UserDefinedField } from '../types';
 import { ASSESSMENT_VARIABLES_NOTES_KEY } from '../types';
 import { Button, Badge } from '../components';
 import TrackChangesEditor from '../components/TrackChangesEditor';
@@ -14,37 +14,9 @@ import { usePageTitle } from '../context/PageTitleContext';
 import Page from '../components/Page';
 import { peerReviewerNames } from '../utils/peerReview';
 import { createSseParser } from '../utils/sse';
-import { SEVERITY_COLORS } from '../utils/vulnSeverity';
+import { useEdition } from '../context/EditionContext';
+import PeerReviewFindingBlock from './PeerReviewFindingBlock';
 import './PeerReviewEditor.css';
-import { useTerminology } from '../context/TerminologyContext';
-
-function ratingVariant(value: string): 'danger' | 'warning' | 'info' | 'success' | 'secondary' {
-  switch (value.toLowerCase()) {
-    case 'critical':
-    case 'very high': return 'danger';
-    case 'high': return 'warning';
-    case 'medium':
-    case 'moderate': return 'info';
-    case 'low': return 'success';
-    default: return 'secondary';
-  }
-}
-
-function PrCvssScoreBadge({ score, severity }: { score?: number; severity: VulnerabilitySeverity }) {
-  const { severityLabel } = useTerminology();
-  const color = SEVERITY_COLORS[severity] ?? '#9ca3af';
-  const label = severityLabel(severity);
-  return (
-    <div className="pr-cvss-badge">
-      <div className="pr-cvss-badge-value" style={{ color }}>
-        {score != null ? score.toFixed(1) : '—'}
-      </div>
-      <div className="pr-cvss-badge-label" style={{ background: color }}>
-        {label}
-      </div>
-    </div>
-  );
-}
 
 /**
  * A top-bar action. The title sits on a wrapper because a disabled button never fires hover,
@@ -86,8 +58,14 @@ const LOCK_TTL_MS = 10000;
 
 /** Vulnerability fields that carry a reviewer's text and so sync between clients. */
 const VULN_SYNCED_FIELDS = [
-  'revisedDescription', 'revisedRecommendation', 'revisedDetails',
-  'descriptionNotes', 'recommendationNotes', 'detailsNotes',
+  'revisedDescription', 'revisedImpactNarrative', 'revisedRecommendation', 'revisedDetails',
+  'descriptionNotes', 'impactNarrativeNotes', 'recommendationNotes', 'detailsNotes',
+] as const;
+
+/** The finding's attributes, which share one lock region and so sync together. */
+const VULN_ATTRIBUTE_FIELDS = [
+  'revisedName', 'revisedSeverity', 'revisedLikelihood', 'revisedImpact', 'revisedCvssScore',
+  'revisedCvssString', 'revisedAssetLocation', 'revisedSection', 'revisedChecklistItems',
 ] as const;
 
 /** The editable payload another reviewer's save pushes to everyone else on the review. */
@@ -126,6 +104,8 @@ export default function PeerReviewEditor() {
   const [revisedFieldValues, setRevisedFieldValues] = useState<Record<string, string>>({});
   const [fieldNotes, setFieldNotes] = useState<Record<string, string>>({});
   const [vulnEdits, setVulnEdits] = useState<PeerReviewVulnerability[]>([]);
+  const [checklists, setChecklists] = useState<AssessmentChecklist[]>([]);
+  const sectionsAvailable = useEdition().hasFeature('report_sections');
 
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   /** Last time each region's lock was stamped, so typing doesn't post on every keystroke. */
@@ -227,6 +207,14 @@ export default function PeerReviewEditor() {
         // sound; TypeScript just can't narrow a union key to a single property.
         if (!heldByMe(lockKey('vuln', local.vulnerabilityId, f))) merged[f] = incoming[f];
       });
+      if (!heldByMe(lockKey('vuln', local.vulnerabilityId, 'attributes'))) {
+        const target = merged as unknown as Record<string, unknown>;
+        const source = incoming as unknown as Record<string, unknown>;
+        VULN_ATTRIBUTE_FIELDS.forEach(f => { target[f] = source[f]; });
+      }
+      if (!heldByMe(lockKey('vuln', local.vulnerabilityId, 'attributesNotes'))) {
+        merged.attributesNotes = incoming.attributesNotes;
+      }
 
       const revised = { ...(local.revisedFieldValues ?? {}) };
       Object.entries(incoming.revisedFieldValues ?? {}).forEach(([fid, val]) => {
@@ -275,6 +263,11 @@ export default function PeerReviewEditor() {
       reportsApi.getDocuments(r.assessmentId)
         .then(res => setReportDocs(res.success && res.data ? res.data.documents ?? [] : []))
         .catch(() => setReportDocs([]));
+
+      // The finding's checklist dropdowns offer these; without them the items show read-only.
+      assessmentChecklistsApi.getByAssessment(r.assessmentId)
+        .then(res => setChecklists(res.data ?? []))
+        .catch(() => setChecklists([]));
 
       const aRes = await assessmentsApi.getById(r.assessmentId);
       if (aRes.success && aRes.data) {
@@ -425,9 +418,9 @@ export default function PeerReviewEditor() {
     }
   };
 
-  const updateVulnRichField = (vulnId: string, field: keyof PeerReviewVulnerability, value: string) => {
+  const updateVuln = (vulnId: string, patch: Partial<PeerReviewVulnerability>) => {
     setVulnEdits(prev => prev.map(v =>
-      v.vulnerabilityId === vulnId ? { ...v, [field]: value } : v
+      v.vulnerabilityId === vulnId ? { ...v, ...patch } : v
     ));
   };
 
@@ -479,7 +472,7 @@ export default function PeerReviewEditor() {
   const stringDropdownFields = assessmentFields.filter(f => f.fieldType !== 'RICH_TEXT');
 
   const scoringType: ScoringType = assessment.scoringType ?? 'NATIVE';
-  const cvssVersion = scoringType === 'CVSS_31' ? '3.1' : scoringType === 'CVSS_40' ? '4.0' : null;
+  const sections: string[] = sectionsAvailable ? (assessment.sections ?? []) : [];
 
   const fieldLabel = (f: UserDefinedField) => f.displayName;
 
@@ -666,177 +659,22 @@ export default function PeerReviewEditor() {
           <section className="pr-editor-section">
             <h3 className="pr-section-title">Vulnerabilities ({vulnEdits.length})</h3>
             {vulnEdits.map(vuln => (
-              <div key={vuln.vulnerabilityId} className="pr-vuln-block">
-                <div className="pr-vuln-header">
-                  <strong>{vuln.name}</strong>
-                  <Badge variant={
-                    vuln.severity === 'CRITICAL' ? 'danger' :
-                    vuln.severity === 'HIGH' ? 'warning' :
-                    vuln.severity === 'MEDIUM' ? 'info' : 'secondary'
-                  }>
-                    {vuln.severity}
-                  </Badge>
-                  {vuln.likelihood && (
-                    <span className="pr-vuln-rated-field">
-                      <span className="pr-vuln-rated-label">Likelihood</span>
-                      <Badge variant={ratingVariant(vuln.likelihood)}>{vuln.likelihood}</Badge>
-                    </span>
-                  )}
-                  {vuln.impact && (
-                    <span className="pr-vuln-rated-field">
-                      <span className="pr-vuln-rated-label">Impact</span>
-                      <Badge variant={ratingVariant(vuln.impact)}>{vuln.impact}</Badge>
-                    </span>
-                  )}
-                </div>
-                {scoringType !== 'NATIVE' && (
-                  <div className="pr-vuln-scoring">
-                    <PrCvssScoreBadge score={vuln.cvssScore} severity={vuln.severity} />
-                    <div className="pr-vuln-cvss-meta">
-                      <span className="pr-vuln-meta-label">CVSS {cvssVersion} Vector</span>
-                      <span className="pr-vuln-cvss-string">{vuln.cvssString || '—'}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Description */}
-                <div className="pr-field-block">
-                  <div className="pr-col-header">
-                    <div className="pr-field-label">Description</div>
-                    <span className="pr-notes-col-label">Notes</span>
-                  </div>
-                  <div className="pr-field-with-notes">
-                    <TrackChangesEditor
-                      key={`${vuln.vulnerabilityId}-desc`}
-                      defaultValue={getInitialHtml(vuln.description, vuln.revisedDescription)}
-                      onChange={val => {
-                        onLocalEdit(lockKey('vuln', vuln.vulnerabilityId, 'revisedDescription'));
-                        updateVulnRichField(vuln.vulnerabilityId, 'revisedDescription', val);
-                      }}
-                      userId={String(user.id || '')}
-                      userName={String(user.username || '')}
-                      disabled={isReadOnly}
-                      lockedBy={heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'revisedDescription'))}
-                    />
-                    <PlainEditor
-                      defaultValue={vuln.descriptionNotes || ''}
-                      onChange={val => {
-                        onLocalEdit(lockKey('vuln', vuln.vulnerabilityId, 'descriptionNotes'));
-                        updateVulnRichField(vuln.vulnerabilityId, 'descriptionNotes', val);
-                      }}
-                      disabled={isReadOnly}
-                      lockedBy={heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'descriptionNotes'))}
-                    />
-                  </div>
-                </div>
-
-                {/* Recommendation */}
-                <div className="pr-field-block">
-                  <div className="pr-col-header">
-                    <div className="pr-field-label">Recommendation</div>
-                    <span className="pr-notes-col-label">Notes</span>
-                  </div>
-                  <div className="pr-field-with-notes">
-                    <TrackChangesEditor
-                      key={`${vuln.vulnerabilityId}-rec`}
-                      defaultValue={getInitialHtml(vuln.recommendation, vuln.revisedRecommendation)}
-                      onChange={val => {
-                        onLocalEdit(lockKey('vuln', vuln.vulnerabilityId, 'revisedRecommendation'));
-                        updateVulnRichField(vuln.vulnerabilityId, 'revisedRecommendation', val);
-                      }}
-                      userId={String(user.id || '')}
-                      userName={String(user.username || '')}
-                      disabled={isReadOnly}
-                      lockedBy={heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'revisedRecommendation'))}
-                    />
-                    <PlainEditor
-                      defaultValue={vuln.recommendationNotes || ''}
-                      onChange={val => {
-                        onLocalEdit(lockKey('vuln', vuln.vulnerabilityId, 'recommendationNotes'));
-                        updateVulnRichField(vuln.vulnerabilityId, 'recommendationNotes', val);
-                      }}
-                      disabled={isReadOnly}
-                      lockedBy={heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'recommendationNotes'))}
-                    />
-                  </div>
-                </div>
-
-                {/* Details */}
-                {(vuln.details || !isReadOnly) && (
-                  <div className="pr-field-block">
-                    <div className="pr-col-header">
-                      <div className="pr-field-label">Details</div>
-                      <span className="pr-notes-col-label">Notes</span>
-                    </div>
-                    <div className="pr-field-with-notes">
-                      <TrackChangesEditor
-                        key={`${vuln.vulnerabilityId}-details`}
-                        defaultValue={getInitialHtml(vuln.details, vuln.revisedDetails)}
-                        onChange={val => {
-                          onLocalEdit(lockKey('vuln', vuln.vulnerabilityId, 'revisedDetails'));
-                          updateVulnRichField(vuln.vulnerabilityId, 'revisedDetails', val);
-                        }}
-                        userId={String(user.id || '')}
-                        userName={String(user.username || '')}
-                        disabled={isReadOnly}
-                        lockedBy={heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'revisedDetails'))}
-                      />
-                      <PlainEditor
-                        defaultValue={vuln.detailsNotes || ''}
-                        onChange={val => {
-                          onLocalEdit(lockKey('vuln', vuln.vulnerabilityId, 'detailsNotes'));
-                          updateVulnRichField(vuln.vulnerabilityId, 'detailsNotes', val);
-                        }}
-                        disabled={isReadOnly}
-                        lockedBy={heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'detailsNotes'))}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Custom vulnerability fields */}
-                {Object.entries(vuln.fieldValues || {}).map(([fieldId, original]) => (
-                  <div key={fieldId} className="pr-field-block">
-                    <div className="pr-field-label">Field: {fieldId}</div>
-                    <div className="pr-field-original">
-                      <span className="pr-field-badge">Original</span>
-                      <span>{original || '—'}</span>
-                    </div>
-                    <div className="pr-field-revised">
-                      <span className="pr-field-badge pr-field-badge--revised">Revised</span>
-                      <input
-                        type="text"
-                        className="pr-text-input"
-                        value={vuln.revisedFieldValues?.[fieldId] || ''}
-                        onChange={e => {
-                          onLocalEdit(lockKey('vuln', vuln.vulnerabilityId, 'field', fieldId));
-                          updateVulnRevisedCustomField(vuln.vulnerabilityId, fieldId, e.target.value);
-                        }}
-                        disabled={isReadOnly || !!heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'field', fieldId))}
-                        title={heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'field', fieldId))
-                          ? `${heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'field', fieldId))} is editing`
-                          : undefined}
-                      />
-                    </div>
-                    <div className="pr-field-notes">
-                      <span className="pr-field-badge pr-field-badge--notes">Notes</span>
-                      <textarea
-                        className="pr-textarea"
-                        value={vuln.fieldNotes?.[fieldId] || ''}
-                        onChange={e => {
-                          onLocalEdit(lockKey('vuln', vuln.vulnerabilityId, 'field', fieldId, 'notes'));
-                          updateVulnNoteField(vuln.vulnerabilityId, fieldId, e.target.value);
-                        }}
-                        disabled={isReadOnly || !!heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'field', fieldId, 'notes'))}
-                        title={heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'field', fieldId, 'notes'))
-                          ? `${heldByOther(lockKey('vuln', vuln.vulnerabilityId, 'field', fieldId, 'notes'))} is editing`
-                          : undefined}
-                        rows={2}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <PeerReviewFindingBlock
+                key={vuln.vulnerabilityId}
+                vuln={vuln}
+                readOnly={isReadOnly}
+                scoringType={scoringType}
+                sections={sections}
+                checklists={checklists}
+                userId={String(user.id || '')}
+                userName={String(user.username || '')}
+                regionKey={(...parts) => lockKey('vuln', vuln.vulnerabilityId, ...parts)}
+                onLocalEdit={onLocalEdit}
+                heldByOther={heldByOther}
+                onChange={patch => updateVuln(vuln.vulnerabilityId, patch)}
+                onFieldValueChange={(fieldId, val) => updateVulnRevisedCustomField(vuln.vulnerabilityId, fieldId, val)}
+                onFieldNoteChange={(fieldId, val) => updateVulnNoteField(vuln.vulnerabilityId, fieldId, val)}
+              />
             ))}
           </section>
         )}

@@ -512,3 +512,50 @@
 .pr-editor-checklists .clv-tabs {
   padding-top: 0;
 }
+
+/* ── Finding details: the attributes a reviewer can revise ── */
+.pr-attr-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .pr-attr-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .pr-attr-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pr-attr {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.pr-attr--wide {
+  grid-column: 1 / -1;
+}
+
+.pr-attr-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+/* The snapshot value beside a revised attribute, so the change is visible while reviewing. */
+.pr-attr-was {
+  font-size: 0.75rem;
+  color: var(--warning-color, #d97706);
+  text-decoration: line-through;
+  word-break: break-word;
+}

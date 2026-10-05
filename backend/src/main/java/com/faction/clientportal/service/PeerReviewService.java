@@ -1,9 +1,11 @@
 package com.faction.clientportal.service;
 
 import com.faction.clientportal.dto.AcceptPeerReviewRequest;
+import com.faction.clientportal.dto.ChecklistItemRef;
 import com.faction.clientportal.dto.PeerReviewDto;
 import com.faction.clientportal.dto.PeerReviewVulnerabilityDto;
 import com.faction.clientportal.dto.UpdatePeerReviewRequest;
+import com.faction.clientportal.dto.UpdateVulnerabilityRequest;
 import com.faction.clientportal.exception.BusinessRuleException;
 import com.faction.clientportal.exception.ResourceNotFoundException;
 import com.faction.clientportal.model.Assessment;
@@ -50,6 +52,7 @@ public class PeerReviewService {
     private final UserRepository userRepository;
     private final WorkflowCatalogService workflowCatalogService;
     private final PeerReviewLockService lockService;
+    private final VulnerabilityService vulnerabilityService;
 
     // ── Team scoping ──────────────────────────────────────────────────────────
     //
@@ -224,7 +227,14 @@ public class PeerReviewService {
                         .impact(v.getImpact())
                         .cvssScore(v.getCvssScore())
                         .cvssString(v.getCvssString())
+                        .assetLocation(v.getAssetLocation())
+                        .section(v.getSection())
+                        .checklistItems(v.getChecklistItems() != null
+                                ? new ArrayList<>(v.getChecklistItems()) : new ArrayList<>())
+                        .fieldDefinitions(v.getFieldDefinitions() != null
+                                ? new ArrayList<>(v.getFieldDefinitions()) : new ArrayList<>())
                         .description(v.getDescription())
+                        .impactNarrative(v.getImpactNarrative())
                         .recommendation(v.getRecommendation())
                         .details(v.getDetails())
                         .fieldValues(v.getFieldValues() != null ? new HashMap<>(v.getFieldValues()) : new HashMap<>())
@@ -506,44 +516,107 @@ public class PeerReviewService {
                 PeerReviewVulnerability prVuln = vulnMap.get(vulnId);
                 if (prVuln == null || acceptedFields == null || acceptedFields.isEmpty()) continue;
 
-                vulnerabilityRepository.findById(vulnId).ifPresent(vuln -> {
-                    for (String field : acceptedFields) {
-                        switch (field) {
-                            case "description":
-                                if (prVuln.getRevisedDescription() != null
-                                        && !isBlankOverwrite(prVuln.getRevisedDescription(), vuln.getDescription())) {
-                                    vuln.setDescription(prVuln.getRevisedDescription());
-                                }
-                                break;
-                            case "recommendation":
-                                if (prVuln.getRevisedRecommendation() != null
-                                        && !isBlankOverwrite(prVuln.getRevisedRecommendation(), vuln.getRecommendation())) {
-                                    vuln.setRecommendation(prVuln.getRevisedRecommendation());
-                                }
-                                break;
-                            case "details":
-                                if (prVuln.getRevisedDetails() != null
-                                        && !isBlankOverwrite(prVuln.getRevisedDetails(), vuln.getDetails())) {
-                                    vuln.setDetails(prVuln.getRevisedDetails());
-                                }
-                                break;
-                            default:
-                                // custom field
-                                if (prVuln.getRevisedFieldValues() != null && prVuln.getRevisedFieldValues().containsKey(field)
-                                        && !isBlankOverwrite(prVuln.getRevisedFieldValues().get(field),
-                                                vuln.getFieldValues().get(field))) {
-                                    vuln.getFieldValues().put(field, prVuln.getRevisedFieldValues().get(field));
-                                }
-                                break;
-                        }
-                    }
-                    vulnerabilityRepository.save(vuln);
-                });
+                vulnerabilityRepository.findById(vulnId)
+                        .filter(vuln -> vuln.getDeletedAt() == null)
+                        .ifPresent(vuln -> {
+                            UpdateVulnerabilityRequest update = acceptedUpdate(prVuln, vuln, acceptedFields);
+                            if (update != null) {
+                                vulnerabilityService.update(review.getAssessmentId(), vulnId, update, userId);
+                            }
+                        });
             }
         }
 
         log.info("Peer review {} changes accepted; assessment {} is COMPLETE", reviewId, review.getAssessmentId());
         return enrich(PeerReviewDto.fromEntity(peerReviewRepository.findById(reviewId).orElse(review)));
+    }
+
+    /**
+     * The reviewer's accepted revisions of one finding, as an ordinary finding update, so accepting
+     * a review behaves like the assessor making the same edit: a severity change moves the finding
+     * to its new severity group and checklist items are marked Vulnerable / Not Vulnerable.
+     * {@code null} when nothing accepted would change the finding.
+     */
+    private static UpdateVulnerabilityRequest acceptedUpdate(PeerReviewVulnerability pr, Vulnerability live,
+                                                             List<String> acceptedFields) {
+        UpdateVulnerabilityRequest req = new UpdateVulnerabilityRequest();
+        boolean any = false;
+        Map<String, String> fieldValues = null;
+        for (String field : acceptedFields) {
+            switch (field) {
+                case "name" -> {
+                    if (hasVisibleText(pr.getRevisedName())) { req.setName(pr.getRevisedName().trim()); any = true; }
+                }
+                case "severity" -> {
+                    if (pr.getRevisedSeverity() != null) { req.setSeverity(pr.getRevisedSeverity()); any = true; }
+                }
+                case "likelihood" -> {
+                    if (pr.getRevisedLikelihood() != null) { req.setLikelihood(pr.getRevisedLikelihood()); any = true; }
+                }
+                case "impact" -> {
+                    if (pr.getRevisedImpact() != null) { req.setImpact(pr.getRevisedImpact()); any = true; }
+                }
+                case "cvss" -> {
+                    if (pr.getRevisedCvssString() != null) {
+                        req.setCvssString(pr.getRevisedCvssString());
+                        req.setCvssScore(pr.getRevisedCvssScore());
+                        if (pr.getRevisedSeverity() != null) req.setSeverity(pr.getRevisedSeverity());
+                        any = true;
+                    }
+                }
+                case "assetLocation" -> {
+                    if (pr.getRevisedAssetLocation() != null) { req.setAssetLocation(pr.getRevisedAssetLocation()); any = true; }
+                }
+                case "section" -> {
+                    // Blank is a real choice here: it moves the finding back to unsectioned.
+                    if (pr.getRevisedSection() != null) { req.setSection(pr.getRevisedSection()); any = true; }
+                }
+                case "checklistItems" -> {
+                    if (pr.getRevisedChecklistItems() != null) {
+                        req.setChecklistItems(pr.getRevisedChecklistItems().stream()
+                                .map(i -> new ChecklistItemRef(i.getTemplateId(), i.getQuestionId()))
+                                .collect(Collectors.toList()));
+                        any = true;
+                    }
+                }
+                case "description" -> {
+                    if (pr.getRevisedDescription() != null
+                            && !isBlankOverwrite(pr.getRevisedDescription(), live.getDescription())) {
+                        req.setDescription(pr.getRevisedDescription()); any = true;
+                    }
+                }
+                case "impactNarrative" -> {
+                    if (pr.getRevisedImpactNarrative() != null
+                            && !isBlankOverwrite(pr.getRevisedImpactNarrative(), live.getImpactNarrative())) {
+                        req.setImpactNarrative(pr.getRevisedImpactNarrative()); any = true;
+                    }
+                }
+                case "recommendation" -> {
+                    if (pr.getRevisedRecommendation() != null
+                            && !isBlankOverwrite(pr.getRevisedRecommendation(), live.getRecommendation())) {
+                        req.setRecommendation(pr.getRevisedRecommendation()); any = true;
+                    }
+                }
+                case "details" -> {
+                    if (pr.getRevisedDetails() != null
+                            && !isBlankOverwrite(pr.getRevisedDetails(), live.getDetails())) {
+                        req.setDetails(pr.getRevisedDetails()); any = true;
+                    }
+                }
+                default -> {
+                    // a template field, by its id
+                    Map<String, String> revised = pr.getRevisedFieldValues();
+                    Map<String, String> current = live.getFieldValues() != null ? live.getFieldValues() : Map.of();
+                    if (revised != null && revised.containsKey(field)
+                            && !isBlankOverwrite(revised.get(field), current.get(field))) {
+                        if (fieldValues == null) fieldValues = new HashMap<>(current);
+                        fieldValues.put(field, revised.get(field));
+                    }
+                }
+            }
+        }
+        if (fieldValues != null) { req.setFieldValues(fieldValues); any = true; }
+        return any ? req : null;
     }
 
     /**

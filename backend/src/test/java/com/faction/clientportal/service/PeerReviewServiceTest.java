@@ -3,6 +3,7 @@ package com.faction.clientportal.service;
 import com.faction.clientportal.dto.AcceptPeerReviewRequest;
 import com.faction.clientportal.dto.PeerReviewDto;
 import com.faction.clientportal.dto.UpdatePeerReviewRequest;
+import com.faction.clientportal.dto.UpdateVulnerabilityRequest;
 import com.faction.clientportal.model.*;
 import com.faction.clientportal.repository.AssessmentRepository;
 import com.faction.clientportal.repository.PeerReviewRepository;
@@ -42,6 +43,9 @@ class PeerReviewServiceTest {
 
     @Mock
     private PeerReviewLockService lockService;
+
+    @Mock
+    private VulnerabilityService vulnerabilityService;
 
     @InjectMocks
     private PeerReviewService service;
@@ -299,8 +303,6 @@ class PeerReviewServiceTest {
                 .thenReturn(Optional.of(assessment));
         when(assessmentRepository.save(any(Assessment.class))).thenReturn(assessment);
         when(vulnerabilityRepository.findById("vuln-1")).thenReturn(Optional.of(liveVuln));
-        when(vulnerabilityRepository.save(any(Vulnerability.class)))
-                .thenAnswer(inv -> inv.getArgument(0));
 
         AcceptPeerReviewRequest request = AcceptPeerReviewRequest.builder()
                 .acceptedAssessmentFieldIds(List.of("field-1"))
@@ -312,8 +314,112 @@ class PeerReviewServiceTest {
 
         // Blank values ignored; real revisions applied
         assertThat(assessment.getFieldValues().get("field-1")).isEqualTo("original-value");
-        assertThat(liveVuln.getDescription()).isEqualTo("<p>original description</p>");
-        assertThat(liveVuln.getRecommendation()).isEqualTo("<p>improved</p>");
+        ArgumentCaptor<UpdateVulnerabilityRequest> update = ArgumentCaptor.forClass(UpdateVulnerabilityRequest.class);
+        verify(vulnerabilityService).update(eq("assess-1"), eq("vuln-1"), update.capture(), eq("user-1"));
+        assertThat(update.getValue().getDescription()).isNull();
+        assertThat(update.getValue().getRecommendation()).isEqualTo("<p>improved</p>");
+    }
+
+    @Test
+    void submitForPeerReview_SnapshotsEveryPartOfAFinding() {
+        Vulnerability vuln = Vulnerability.builder()
+                .id("vuln-1").name("SQL Injection").severity(VulnerabilitySeverity.HIGH).order(0)
+                .likelihood("High").impact("Critical").cvssScore(8.1).cvssString("CVSS:3.1/AV:N")
+                .assetLocation("https://app/login").section("Web")
+                .description("<p>d</p>").impactNarrative("<p>impact</p>")
+                .recommendation("<p>r</p>").details("<p>poc</p>")
+                .checklistItems(new ArrayList<>(List.of(VulnerabilityChecklistItem.builder()
+                        .templateId("tpl").questionId("q1").checklistName("OWASP").questionText("A05").build())))
+                .fieldDefinitions(new ArrayList<>(List.of(UserDefinedField.builder()
+                        .id("f1").displayName("References").fieldType(FieldType.RICH_TEXT).build())))
+                .fieldValues(new HashMap<>(Map.of("f1", "<p>ref</p>")))
+                .build();
+        when(assessmentRepository.findByIdAndDeletedAtIsNull("assess-1")).thenReturn(Optional.of(assessment));
+        when(vulnerabilityRepository.findByAssessmentIdAndDeletedAtIsNull("assess-1")).thenReturn(List.of(vuln));
+        when(peerReviewRepository.save(any(PeerReview.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(assessmentRepository.save(any(Assessment.class))).thenReturn(assessment);
+
+        var snap = service.submitForPeerReview("assess-1", "user-1").getVulnerabilities().get(0);
+
+        assertThat(snap.getImpactNarrative()).isEqualTo("<p>impact</p>");
+        assertThat(snap.getAssetLocation()).isEqualTo("https://app/login");
+        assertThat(snap.getSection()).isEqualTo("Web");
+        assertThat(snap.getLikelihood()).isEqualTo("High");
+        assertThat(snap.getCvssString()).isEqualTo("CVSS:3.1/AV:N");
+        assertThat(snap.getChecklistItems()).extracting(VulnerabilityChecklistItem::getQuestionId).containsExactly("q1");
+        assertThat(snap.getFieldDefinitions()).extracting(UserDefinedField::getDisplayName).containsExactly("References");
+    }
+
+    @Test
+    void acceptChanges_appliesEveryAcceptedPartOfAFindingThroughTheFindingUpdate() {
+        assessment.setPeerReviewStatus(AssessmentPeerReviewStatus.NEEDS_ACCEPTANCE);
+        Vulnerability liveVuln = Vulnerability.builder()
+                .id("vuln-1").assessmentId("assess-1").name("Sqli")
+                .impactNarrative("<p>old impact</p>")
+                .fieldValues(new HashMap<>(Map.of("f1", "<p>old ref</p>", "f2", "keep")))
+                .build();
+        completedReview.setVulnerabilities(new ArrayList<>(List.of(PeerReviewVulnerability.builder()
+                .vulnerabilityId("vuln-1").name("Sqli")
+                .revisedName("SQL Injection")
+                .revisedSeverity(VulnerabilitySeverity.CRITICAL)
+                .revisedLikelihood("High")
+                .revisedImpact("Critical")
+                .revisedCvssScore(9.8).revisedCvssString("CVSS:3.1/AV:N/AC:L")
+                .revisedAssetLocation("https://app/api")
+                .revisedSection("")
+                .revisedChecklistItems(List.of(VulnerabilityChecklistItem.builder()
+                        .templateId("tpl").questionId("q2").build()))
+                .revisedImpactNarrative("<p>new impact</p>")
+                .revisedFieldValues(new HashMap<>(Map.of("f1", "<p>new ref</p>")))
+                .build())));
+        when(peerReviewRepository.findById("review-2")).thenReturn(Optional.of(completedReview));
+        when(assessmentRepository.findByIdAndDeletedAtIsNull("assess-1")).thenReturn(Optional.of(assessment));
+        when(assessmentRepository.save(any(Assessment.class))).thenReturn(assessment);
+        when(vulnerabilityRepository.findById("vuln-1")).thenReturn(Optional.of(liveVuln));
+
+        service.acceptChanges("review-2", AcceptPeerReviewRequest.builder()
+                .acceptedAssessmentFieldIds(List.of())
+                .acceptedVulnerabilityChanges(new HashMap<>(Map.of("vuln-1", List.of(
+                        "name", "likelihood", "impact", "cvss", "assetLocation", "section",
+                        "checklistItems", "impactNarrative", "f1"))))
+                .build(), "user-1");
+
+        ArgumentCaptor<UpdateVulnerabilityRequest> captor = ArgumentCaptor.forClass(UpdateVulnerabilityRequest.class);
+        verify(vulnerabilityService).update(eq("assess-1"), eq("vuln-1"), captor.capture(), eq("user-1"));
+        UpdateVulnerabilityRequest u = captor.getValue();
+        assertThat(u.getName()).isEqualTo("SQL Injection");
+        assertThat(u.getLikelihood()).isEqualTo("High");
+        assertThat(u.getImpact()).isEqualTo("Critical");
+        assertThat(u.getCvssScore()).isEqualTo(9.8);
+        assertThat(u.getCvssString()).isEqualTo("CVSS:3.1/AV:N/AC:L");
+        // A CVSS change carries the severity the score gives
+        assertThat(u.getSeverity()).isEqualTo(VulnerabilitySeverity.CRITICAL);
+        assertThat(u.getAssetLocation()).isEqualTo("https://app/api");
+        assertThat(u.getSection()).isEmpty();
+        assertThat(u.getChecklistItems()).extracting(r -> r.getQuestionId()).containsExactly("q2");
+        assertThat(u.getImpactNarrative()).isEqualTo("<p>new impact</p>");
+        // Template fields keep the ones the reviewer did not touch
+        assertThat(u.getFieldValues()).containsEntry("f1", "<p>new ref</p>").containsEntry("f2", "keep");
+    }
+
+    @Test
+    void acceptChanges_leavesFindingsAloneWhenNothingAcceptedChangesThem() {
+        assessment.setPeerReviewStatus(AssessmentPeerReviewStatus.NEEDS_ACCEPTANCE);
+        Vulnerability liveVuln = Vulnerability.builder().id("vuln-1").assessmentId("assess-1")
+                .impactNarrative("<p>impact</p>").build();
+        completedReview.setVulnerabilities(new ArrayList<>(List.of(PeerReviewVulnerability.builder()
+                .vulnerabilityId("vuln-1").revisedImpactNarrative("<p></p>").build())));
+        when(peerReviewRepository.findById("review-2")).thenReturn(Optional.of(completedReview));
+        when(assessmentRepository.findByIdAndDeletedAtIsNull("assess-1")).thenReturn(Optional.of(assessment));
+        when(assessmentRepository.save(any(Assessment.class))).thenReturn(assessment);
+        when(vulnerabilityRepository.findById("vuln-1")).thenReturn(Optional.of(liveVuln));
+
+        service.acceptChanges("review-2", AcceptPeerReviewRequest.builder()
+                .acceptedAssessmentFieldIds(List.of())
+                .acceptedVulnerabilityChanges(new HashMap<>(Map.of("vuln-1", List.of("impactNarrative", "name"))))
+                .build(), "user-1");
+
+        verifyNoInteractions(vulnerabilityService);
     }
 
     // ── rejectReview ──────────────────────────────────────────────────────────

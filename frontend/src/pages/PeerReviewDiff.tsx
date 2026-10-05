@@ -8,6 +8,7 @@ import { peerReviewsApi } from '../api';
 import { peerReviewerLabel } from '../utils/peerReview';
 import TrackChangesResolver from '../components/TrackChangesResolver';
 import PlainEditor from '../components/PlainEditor';
+import { fieldIsRich, fieldLabel, vulnAttributeChanges } from '../utils/peerReviewFinding';
 import './PeerReviewDiff.css';
 
 interface Props {
@@ -193,12 +194,24 @@ function isActualChange(revised: string | null | undefined, snapshot: string | n
   return revisedText !== '' && revisedText !== visibleText(snapshot);
 }
 
-// The vulnerability fields that genuinely changed in this review.
+/** The finding's rich-text fields, by the key the server accepts them under. */
+const VULN_RICH_FIELDS = [
+  { key: 'description', label: 'Description', snapshot: 'description', revised: 'revisedDescription', notes: 'descriptionNotes' },
+  { key: 'impactNarrative', label: 'Impact', snapshot: 'impactNarrative', revised: 'revisedImpactNarrative', notes: 'impactNarrativeNotes' },
+  { key: 'recommendation', label: 'Recommendation', snapshot: 'recommendation', revised: 'revisedRecommendation', notes: 'recommendationNotes' },
+  { key: 'details', label: 'Proof Of Concept', snapshot: 'details', revised: 'revisedDetails', notes: 'detailsNotes' },
+] as const;
+const VULN_RICH_KEYS: string[] = VULN_RICH_FIELDS.map(f => f.key);
+
+/** Pseudo-field for the finding's attributes, shown as one block; never sent to the server. */
+const ATTRIBUTES = '__attributes__';
+
+// The vulnerability fields that genuinely changed in this review, by the keys the server accepts.
 function vulnChangedFields(v: PeerReviewVulnerability): string[] {
-  const changed: string[] = [];
-  if (isActualChange(v.revisedDescription, v.description)) changed.push('description');
-  if (isActualChange(v.revisedRecommendation, v.recommendation)) changed.push('recommendation');
-  if (isActualChange(v.revisedDetails, v.details)) changed.push('details');
+  const changed: string[] = vulnAttributeChanges(v).map(c => c.key);
+  VULN_RICH_FIELDS.forEach(f => {
+    if (isActualChange(v[f.revised], v[f.snapshot])) changed.push(f.key);
+  });
   Object.entries(v.revisedFieldValues || {}).forEach(([k, rev]) => {
     if (isActualChange(rev, v.fieldValues?.[k])) changed.push(k);
   });
@@ -214,9 +227,10 @@ function hasNote(note?: string | null): boolean {
 // displayed but never applied on accept.
 function vulnVisibleFields(v: PeerReviewVulnerability): string[] {
   const visible = new Set(vulnChangedFields(v));
-  if (hasNote(v.descriptionNotes)) visible.add('description');
-  if (hasNote(v.recommendationNotes)) visible.add('recommendation');
-  if (hasNote(v.detailsNotes)) visible.add('details');
+  VULN_RICH_FIELDS.forEach(f => {
+    if (hasNote(v[f.notes])) visible.add(f.key);
+  });
+  if (vulnAttributeChanges(v).length > 0 || hasNote(v.attributesNotes)) visible.add(ATTRIBUTES);
   Object.entries(v.fieldNotes || {}).forEach(([k, n]) => {
     if (hasNote(n)) visible.add(k);
   });
@@ -225,20 +239,29 @@ function vulnVisibleFields(v: PeerReviewVulnerability): string[] {
 
 /** One before/after pair per visible field of a vulnerability, for the Diff tab. */
 function vulnDiffEntries(v: PeerReviewVulnerability) {
-  const known: Record<string, { label: string; revised?: string; snapshot?: string; note?: string }> = {
-    description: { label: 'Description', revised: v.revisedDescription, snapshot: v.description, note: v.descriptionNotes },
-    recommendation: { label: 'Recommendation', revised: v.revisedRecommendation, snapshot: v.recommendation, note: v.recommendationNotes },
-    details: { label: 'Details', revised: v.revisedDetails, snapshot: v.details, note: v.detailsNotes },
-  };
-  return vulnVisibleFields(v).map(key => {
+  const known: Record<string, { label: string; revised?: string; snapshot?: string; note?: string }> = {};
+  VULN_RICH_FIELDS.forEach(f => {
+    known[f.key] = { label: f.label, revised: v[f.revised], snapshot: v[f.snapshot], note: v[f.notes] };
+  });
+  const attributeKeys = new Set(vulnAttributeChanges(v).map(c => c.key));
+  const entries = vulnVisibleFields(v).filter(key => key !== ATTRIBUTES && !attributeKeys.has(key)).map(key => {
     const f = known[key] ?? {
-      label: key,
+      label: fieldLabel(v, key),
       revised: v.revisedFieldValues?.[key],
       snapshot: v.fieldValues?.[key],
       note: v.fieldNotes?.[key],
     };
-    return { key, label: f.label, note: f.note, ...diffSides(f.revised, f.snapshot) };
+    return { key, label: f.label, note: f.note as string | undefined, ...diffSides(f.revised, f.snapshot) };
   });
+  // Attributes first, as the finding reads; their one note rides on the first of them.
+  const attributes = vulnAttributeChanges(v).map((c, i) => ({
+    key: c.key, label: c.label, note: i === 0 ? v.attributesNotes : undefined,
+    original: c.from === '—' ? '' : c.from, revised: c.to === '—' ? '' : c.to,
+  }));
+  if (attributes.length === 0 && hasNote(v.attributesNotes)) {
+    attributes.push({ key: ATTRIBUTES, label: 'Finding Details', note: v.attributesNotes, original: '', revised: '' });
+  }
+  return [...attributes, ...entries];
 }
 
 /** The reviewer's note on a field, rendered the same way in both tabs. */
@@ -304,9 +327,12 @@ export default function PeerReviewDiff({ review, assessment, onAccepted, readOnl
         const html = resolved[key] ?? original ?? '';
         if (hasUnresolved(html)) unresolved.push(`${v.name} → ${label}`);
       };
-      if (changed.includes('description')) check('description', 'Description', v.revisedDescription);
-      if (changed.includes('recommendation')) check('recommendation', 'Recommendation', v.revisedRecommendation);
-      if (changed.includes('details')) check('details', 'Details', v.revisedDetails);
+      VULN_RICH_FIELDS.forEach(f => {
+        if (changed.includes(f.key)) check(f.key, f.label, v[f.revised]);
+      });
+      Object.keys(v.revisedFieldValues || {}).forEach(fid => {
+        if (changed.includes(fid) && fieldIsRich(v, fid)) check(fid, fieldLabel(v, fid), v.revisedFieldValues?.[fid]);
+      });
     });
 
     if (unresolved.length > 0) {
@@ -327,21 +353,19 @@ export default function PeerReviewDiff({ review, assessment, onAccepted, readOnl
         const resolved = resolvedVulnValues[v.vulnerabilityId] || {};
         const changed = vulnChangedFields(v);
         const cleaned = { ...v };
-        if (changed.includes('description')) {
-          cleaned.revisedDescription = iceResolvedHtml(resolved['description'] ?? v.revisedDescription ?? '');
-        } else {
-          cleaned.revisedDescription = undefined;
-        }
-        if (changed.includes('recommendation')) {
-          cleaned.revisedRecommendation = iceResolvedHtml(resolved['recommendation'] ?? v.revisedRecommendation ?? '');
-        } else {
-          cleaned.revisedRecommendation = undefined;
-        }
-        if (changed.includes('details')) {
-          cleaned.revisedDetails = iceResolvedHtml(resolved['details'] ?? v.revisedDetails ?? '');
-        } else {
-          cleaned.revisedDetails = undefined;
-        }
+        VULN_RICH_FIELDS.forEach(f => {
+          cleaned[f.revised] = changed.includes(f.key)
+            ? iceResolvedHtml(resolved[f.key] ?? v[f.revised] ?? '')
+            : undefined;
+        });
+        // Rich template fields carry tracked changes too; they must reach the finding clean.
+        const fields = { ...(v.revisedFieldValues || {}) };
+        Object.keys(fields).forEach(fid => {
+          if (changed.includes(fid) && fieldIsRich(v, fid)) {
+            fields[fid] = iceResolvedHtml(resolved[fid] ?? fields[fid] ?? '');
+          }
+        });
+        cleaned.revisedFieldValues = fields;
         return cleaned;
       });
 
@@ -579,31 +603,55 @@ function VulnDiff({ vuln, onResolve, disabled, readOnly = false }: VulnDiffProps
   // Note-only fields (no text change) fall back to the snapshot content so
   // the assessor sees what the note refers to.
   const visible = vulnVisibleFields(vuln);
-  if (visible.includes('description')) {
-    fields.push({ key: 'description', label: 'Description', revised: vuln.revisedDescription || vuln.description, snapshot: vuln.description, note: vuln.descriptionNotes, isRich: true });
-  }
-  if (visible.includes('recommendation')) {
-    fields.push({ key: 'recommendation', label: 'Recommendation', revised: vuln.revisedRecommendation || vuln.recommendation, snapshot: vuln.recommendation, note: vuln.recommendationNotes, isRich: true });
-  }
-  if (visible.includes('details')) {
-    fields.push({ key: 'details', label: 'Details', revised: vuln.revisedDetails || vuln.details, snapshot: vuln.details, note: vuln.detailsNotes, isRich: true });
-  }
+  const attributeChanges = vulnAttributeChanges(vuln);
+  VULN_RICH_FIELDS.forEach(f => {
+    if (visible.includes(f.key)) {
+      fields.push({ key: f.key, label: f.label, revised: vuln[f.revised] || vuln[f.snapshot], snapshot: vuln[f.snapshot], note: vuln[f.notes], isRich: true });
+    }
+  });
+  const attributeKeys = new Set(attributeChanges.map(c => c.key));
   visible
-    .filter(k => !['description', 'recommendation', 'details'].includes(k))
+    .filter(k => k !== ATTRIBUTES && !attributeKeys.has(k) && !VULN_RICH_KEYS.includes(k))
     .forEach(k => {
-      fields.push({
-        key: k, label: k,
-        original: vuln.fieldValues?.[k],
-        revised: vuln.revisedFieldValues?.[k] ?? vuln.fieldValues?.[k],
-        note: vuln.fieldNotes?.[k], isRich: false,
-      });
+      if (fieldIsRich(vuln, k)) {
+        fields.push({
+          key: k, label: fieldLabel(vuln, k),
+          revised: vuln.revisedFieldValues?.[k] || vuln.fieldValues?.[k],
+          snapshot: vuln.fieldValues?.[k],
+          note: vuln.fieldNotes?.[k], isRich: true,
+        });
+      } else {
+        fields.push({
+          key: k, label: fieldLabel(vuln, k),
+          original: vuln.fieldValues?.[k],
+          revised: vuln.revisedFieldValues?.[k] ?? vuln.fieldValues?.[k],
+          note: vuln.fieldNotes?.[k], isRich: false,
+        });
+      }
     });
 
-  if (fields.length === 0) return null;
+  const showAttributes = visible.includes(ATTRIBUTES);
+  if (fields.length === 0 && !showAttributes) return null;
 
   return (
     <div className="pr-diff-vuln">
       <div className="pr-diff-vuln-title">{vuln.name}</div>
+      {showAttributes && (
+        <div className="pr-diff-field">
+          <div className="pr-diff-field-header">
+            <span className="pr-diff-field-name">Finding Details</span>
+          </div>
+          {attributeChanges.map(c => (
+            <div key={c.key} className="pr-diff-text-change">
+              <span className="pr-diff-attr-label">{c.label}</span>
+              <span className="pr-diff-original-text">{c.from}</span>
+              <span className="pr-diff-arrow">→</span>
+              <span className="pr-diff-revised-text">{c.to}</span>
+            </div>
+          ))}
+          <FieldNote note={vuln.attributesNotes} />
+        </div>
+      )}
       {fields.map(f => (
         <div key={f.key} className="pr-diff-field">
           <div className="pr-diff-field-header">

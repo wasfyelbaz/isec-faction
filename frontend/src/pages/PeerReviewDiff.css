@@ -294,3 +294,23 @@
 .pr-inline-diff ins {
   text-decoration: none;
 }
+
+/* ── Finding details: one row per revised attribute ── */
+.pr-diff-field .pr-diff-text-change + .pr-diff-text-change {
+  margin-top: 0.4rem;
+}
+
+.pr-diff-attr-label {
+  min-width: 8.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+/* Checklist items list one per line. */
+.pr-diff-text-change .pr-diff-original-text,
+.pr-diff-text-change .pr-diff-revised-text {
+  white-space: pre-line;
+}
