@@ -544,7 +544,7 @@ class NotebookControllerTest extends TestContainersConfig {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data", hasSize(1)))
-                .andExpect(jsonPath("$.data[0].title", containsString("Auto Notebook Assessment")));
+                .andExpect(jsonPath("$.data[0].title", containsString("Test Organization Test Application Penetration Test")));
     }
 
     // -------------------------------------------------------------------------

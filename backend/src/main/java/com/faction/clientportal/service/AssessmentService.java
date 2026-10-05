@@ -47,6 +47,8 @@ public class AssessmentService {
     private final ObjectMapper objectMapper;
     private final ReportTemplateRepository reportTemplateRepository;
     private final ApplicationRepository applicationRepository;
+    private final com.faction.clientportal.repository.PeerReviewRepository peerReviewRepository;
+    private final com.faction.clientportal.repository.OrganizationRepository organizationRepository;
     private final AssessmentTypeRepository assessmentTypeRepository;
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
@@ -199,7 +201,7 @@ public class AssessmentService {
 
         // Create assessment
         Assessment assessment = Assessment.builder()
-            .name(request.getName())
+            .name(standardName(application, assessmentType.getName(), request.getName()))
             .applicationId(application.getId())
             .assessmentTypeId(request.getAssessmentTypeId())
             .organizationId(application.getOrganizationId())
@@ -341,10 +343,8 @@ public class AssessmentService {
             }
         }
 
-        // Update name
-        if (request.getName() != null) {
-            assessment.setName(request.getName());
-        }
+        // The name is not taken from the request: it is always Client + Target + Assessment Type,
+        // recomputed below once the target and type are final (see standardName).
 
         // Update assessment type. The report template is chosen per type, so a type change needs a
         // template of the new type. A caller that names one belonging to another type is rejected —
@@ -461,6 +461,14 @@ public class AssessmentService {
                 }
                 // No longer completed: clear the stamp so a later completion starts a fresh window.
                 assessment.setCompletedDate(null);
+            }
+
+            // Block finalization until the assessment has been sent to peer review at least once.
+            if (AssessmentWorkflows.isCompleted(workflow, request.getStatus())
+                    && !AssessmentWorkflows.isCompleted(workflow, oldStatus)
+                    && peerReviewRepository.findByAssessmentIdOrderByCreatedAtDesc(assessment.getId()).isEmpty()) {
+                throw new BusinessRuleException(
+                        "Send this assessment to peer review at least once before finalizing it");
             }
 
             // Block finalization if any preventClosure checklists have unanswered questions
@@ -634,6 +642,15 @@ public class AssessmentService {
 
         // Sync field definitions if template version changed (including the switch above)
         syncFieldDefinitionsIfNeeded(assessment);
+
+        // Recomputed on every save, so a changed target or type — or a renamed client or target —
+        // reaches the name the next time the assessment is saved.
+        Application currentTarget = assessment.getApplicationId() == null ? null
+                : applicationRepository.findById(assessment.getApplicationId()).orElse(null);
+        String currentType = assessment.getAssessmentTypeId() == null ? null
+                : assessmentTypeRepository.findById(assessment.getAssessmentTypeId())
+                        .map(AssessmentType::getName).orElse(null);
+        assessment.setName(standardName(currentTarget, currentType, assessment.getName()));
 
         Assessment updatedAssessment = assessmentRepository.save(assessment);
         log.info("Updated assessment: {} (status: {})", updatedAssessment.getName(), updatedAssessment.getStatus());
@@ -840,6 +857,23 @@ public class AssessmentService {
             log.info("Auto-transitioned assessment {} to {} (date window active)",
                     assessment.getId(), inProgressStatus);
         }
+    }
+
+    /**
+     * An assessment's name: Client + Target + Assessment Type, e.g. "Network International TMS Web
+     * Application Pentest". iSec names every engagement this way and the report prints it on the
+     * cover and as the Document Title, so it is set here rather than typed. Parts that cannot be
+     * resolved are left out; {@code fallback} is kept only when none can be.
+     */
+    String standardName(Application target, String assessmentTypeName, String fallback) {
+        String client = target == null || target.getOrganizationId() == null ? null
+                : organizationRepository.findById(target.getOrganizationId())
+                        .map(com.faction.clientportal.model.Organization::getName).orElse(null);
+        String name = java.util.stream.Stream.of(client, target == null ? null : target.getName(), assessmentTypeName)
+                .filter(part -> part != null && !part.isBlank())
+                .map(String::trim)
+                .collect(Collectors.joining(" "));
+        return name.isBlank() ? fallback : name;
     }
 
     private UserDefinedField deepCopyField(UserDefinedField src) {

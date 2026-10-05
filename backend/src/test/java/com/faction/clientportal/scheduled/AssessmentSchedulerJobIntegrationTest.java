@@ -107,7 +107,7 @@ class AssessmentSchedulerJobIntegrationTest extends TestContainersConfig {
 
         // Successor should exist with correct start date and new status
         Assessment successor = assessmentRepository.findById(updated.getAutoScheduledSuccessorId()).orElseThrow();
-        assertThat(successor.getName()).isEqualTo("Annual Pentest");
+        assertThat(successor.getName()).isEqualTo("Critical App Pentest");
         assertThat(successor.getApplicationId()).isEqualTo(yearlyApp.getId());
         assertThat(successor.getStartDate()).isNull();
         assertThat(successor.getPlannedEndDate()).isNull();

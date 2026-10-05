@@ -46,6 +46,9 @@ class AssessmentControllerTest extends TestContainersConfig {
     private MockMvc mockMvc;
 
     @Autowired
+    private com.faction.clientportal.repository.PeerReviewRepository peerReviewRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     @Autowired
@@ -183,7 +186,7 @@ class AssessmentControllerTest extends TestContainersConfig {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.name").value("Test Assessment"))
+                .andExpect(jsonPath("$.data.name").value("Test Organization Test Application Penetration Test"))
                 .andExpect(jsonPath("$.data.assessorIds", hasSize(1)))
                 .andExpect(jsonPath("$.data.engagementManagerId").value(testUser.getId()))
                 .andExpect(jsonPath("$.data.scope").value("Test scope content"));
@@ -321,7 +324,7 @@ class AssessmentControllerTest extends TestContainersConfig {
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.name").value("Updated Assessment"))
+                .andExpect(jsonPath("$.data.name").value("Test Organization Test Application Penetration Test"))
                 .andExpect(jsonPath("$.data.status").value("Testing"))
                 .andExpect(jsonPath("$.data.scope").value("Updated scope"))
                 .andExpect(jsonPath("$.data.engagementManagerId").value(testUser.getId()));
@@ -456,7 +459,7 @@ class AssessmentControllerTest extends TestContainersConfig {
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.name").value("Editable Assessment Updated"))
+                .andExpect(jsonPath("$.data.name").value("Test Organization Test Application Penetration Test"))
                 .andExpect(jsonPath("$.data.status").value("Testing"));
     }
 
@@ -583,6 +586,7 @@ class AssessmentControllerTest extends TestContainersConfig {
         // Importers load historical work, so the record has to carry the date testing actually
         // finished rather than the moment the import ran.
         Assessment assessment = createTestAssessment("Historic Test", "Testing");
+        sentToPeerReview(assessment.getId());
 
         mockMvc.perform(put("/api/v1/assessments/" + assessment.getId())
                         .header("Authorization", "Bearer " + jwtToken)
@@ -606,6 +610,7 @@ class AssessmentControllerTest extends TestContainersConfig {
     @Test
     void testUpdateAssessment_StampsCompletionNowWhenNoDateGiven() throws Exception {
         Assessment assessment = createTestAssessment("Finished Today", "Testing");
+        sentToPeerReview(assessment.getId());
 
         mockMvc.perform(put("/api/v1/assessments/" + assessment.getId())
                         .header("Authorization", "Bearer " + jwtToken)
@@ -617,6 +622,21 @@ class AssessmentControllerTest extends TestContainersConfig {
         org.assertj.core.api.Assertions
                 .assertThat(assessmentRepository.findById(assessment.getId()).orElseThrow().getCompletedDate())
                 .isAfter(LocalDateTime.now().minusMinutes(5));
+    }
+
+    @Test
+    void testUpdateAssessment_RefusesToFinalizeBeforeAnyPeerReview() throws Exception {
+        Assessment assessment = createTestAssessment("Not Reviewed", "Testing");
+
+        mockMvc.perform(put("/api/v1/assessments/" + assessment.getId())
+                        .header("Authorization", "Bearer " + jwtToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"Completed\"}"))
+                .andExpect(status().is4xxClientError());
+
+        org.assertj.core.api.Assertions
+                .assertThat(assessmentRepository.findById(assessment.getId()).orElseThrow().getStatus())
+                .isEqualTo("Testing");
     }
 
     // ── Status and open-survey filters ─────────────────────────────────────────
@@ -1198,4 +1218,12 @@ class AssessmentControllerTest extends TestContainersConfig {
                 .andExpect(jsonPath("$.data.valid").value(true))
                 .andExpect(jsonPath("$.data.newCampaignCount").value(1));
     }
+    /** Finalizing needs the assessment to have been sent to peer review at least once. */
+    private void sentToPeerReview(String assessmentId) {
+        peerReviewRepository.save(com.faction.clientportal.model.PeerReview.builder()
+                .assessmentId(assessmentId)
+                .createdAt(java.time.LocalDateTime.now())
+                .build());
+    }
+
 }

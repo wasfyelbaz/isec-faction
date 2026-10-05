@@ -4,6 +4,7 @@ import { X, Calendar, Plus, Trash2, Paperclip, UploadCloud, FileText, Download, 
 import {
   assessmentsApi,
   applicationsApi,
+  organizationsApi,
   assessmentTypesApi,
   reportTemplatesApi,
   usersApi,
@@ -203,6 +204,8 @@ export default function CreateAssessment() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [applicationAppId, setApplicationAppId] = useState('');
   const [applicationName, setApplicationName] = useState('');
+  // The chosen target's client, for the automatic assessment name.
+  const [clientName, setClientName] = useState('');
   const [assessmentTypes, setAssessmentTypes] = useState<AssessmentType[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [reportTemplates, setReportTemplates] = useState<any[]>([]);
@@ -218,8 +221,6 @@ export default function CreateAssessment() {
 
   // Name autocomplete (create mode only)
   const [allPreviousAssessments, setAllPreviousAssessments] = useState<Assessment[]>([]);
-  const [nameSuggestions, setNameSuggestions] = useState<Assessment[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const [sourceAssessmentId, setSourceAssessmentId] = useState<string | null>(null);
   const [sourceFiles, setSourceFiles] = useState<AssessmentFile[]>([]);
   const [editorKey, setEditorKey] = useState(0);
@@ -232,7 +233,6 @@ export default function CreateAssessment() {
   const [pendingSurveyTemplateIds, setPendingSurveyTemplateIds] = useState<string[]>([]);
   const [removingSurveyId, setRemovingSurveyId] = useState<string | null>(null);
   const [viewSurveyId, setViewSurveyId] = useState<string | null>(null);
-  const nameWrapRef = useRef<HTMLDivElement>(null);
 
   const [formData, setFormData] = useState<{
     name: string;
@@ -292,7 +292,6 @@ export default function CreateAssessment() {
   const [newUrl, setNewUrl] = useState({ url: '', description: '' });
 
   const [stakeholders, setStakeholders] = useState<Array<{ name: string; email: string; role?: string }>>([]);
-  const [newStakeholder, setNewStakeholder] = useState({ name: '', email: '', role: '' });
 
   // Assessment variables, keyed by variable name rather than field id: the id differs between
   // templates (and between a template and an assessment's snapshot of it) while the name does
@@ -373,17 +372,6 @@ export default function CreateAssessment() {
         .catch(() => {});
     }
   }, [id]);
-
-  // Dismiss name suggestions on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (nameWrapRef.current && !nameWrapRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   useEffect(() => {
     if (formData.assessmentTypeId) {
@@ -610,11 +598,32 @@ export default function CreateAssessment() {
     }
   }, [formData.applicationId]);
 
-  const fillApplicationNameFromAssessmentName = () => {
-    if (!formData.applicationId && !applicationName && formData.name) {
-      setApplicationName(formData.name);
+  // The chosen target's client, looked up by id (a target carries only the id). A role that
+  // cannot read clients simply gets a name without one.
+  useEffect(() => {
+    if (!formData.applicationId) { setClientName(''); return; }
+    let cancelled = false;
+    applicationsApi.getById(formData.applicationId)
+      .then(res => res.data?.organizationId ? organizationsApi.getById(res.data.organizationId) : null)
+      .then(org => { if (!cancelled) setClientName(org?.data?.name ?? ''); })
+      .catch(() => { if (!cancelled) setClientName(''); });
+    return () => { cancelled = true; };
+  }, [formData.applicationId]);
+
+  // The assessment is named Client + Target + Assessment Type, e.g. "Network International TMS Web
+  // Application Pentest" — the name the report prints on its cover and as the Document Title. It is
+  // not editable; this keeps the field in step with the target and type, and the server sets the
+  // same name when the assessment is saved.
+  useEffect(() => {
+    const typeName = assessmentTypes.find(t => t.id === formData.assessmentTypeId)?.name ?? '';
+    const auto = [clientName, formData.applicationId ? applicationName : '', typeName]
+      .map(part => part.trim()).filter(Boolean).join(' ');
+    if (auto && auto !== formData.name) {
+      setFormData(prev => ({ ...prev, name: auto }));
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientName, applicationName, formData.applicationId, formData.assessmentTypeId, assessmentTypes]);
+
 
   const fillAssessmentNameFromApplicationName = () => {
     if (!formData.name && applicationName) {
@@ -849,79 +858,7 @@ export default function CreateAssessment() {
     }
   };
 
-  const handleNameChange = (value: string) => {
-    setFormData(prev => ({ ...prev, name: value }));
-    if (value.trim().length >= 2) {
-      const q = value.toLowerCase();
-      const seen = new Set<string>();
-      const matches = allPreviousAssessments
-        .filter(a => a.name.toLowerCase().includes(q))
-        .filter(a => {
-          const key = a.name.toLowerCase();
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        })
-        .slice(0, 8);
-      setNameSuggestions(matches);
-      setShowSuggestions(matches.length > 0);
-    } else {
-      setNameSuggestions([]);
-      setShowSuggestions(false);
-    }
-  };
 
-  const handleSelectSuggestion = async (suggestionName: string) => {
-    setFormData(prev => ({ ...prev, name: suggestionName }));
-    setShowSuggestions(false);
-
-    // Find the most recent assessment with this name
-    const source = allPreviousAssessments
-      .filter(a => a.name === suggestionName)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-    if (!source) return;
-
-    try {
-      const res = await assessmentsApi.getById(source.id);
-      if (!res.success || !res.data) return;
-      const full = res.data;
-
-      // Reload templates explicitly — the assessmentTypeId effect won't refire
-      // when the source assessment has the same type as the current selection
-      if (full.assessmentTypeId) {
-        loadReportTemplates(full.assessmentTypeId);
-      } else {
-        setReportTemplates([]);
-      }
-      setFormData(prev => ({
-        ...prev,
-        name: suggestionName,
-        applicationId: full.applicationId || '',
-        assessmentTypeId: full.assessmentTypeId || '',
-        campaignId: full.campaignId || '',
-        reportTemplateId: full.reportTemplateId || '',
-        engagementManagerId: full.engagementManagerId || '',
-        remediationManagerId: full.remediationManagerId || '',
-        assessorIds: full.assessorIds || [],
-        scope: full.scope || '',
-      }));
-      setApplicationAppId(full.appId || '');
-      setApplicationName(full.applicationName || '');
-      setEngagementUrls(full.engagementUrls || []);
-      setStakeholders(full.stakeholders || []);
-      // A copy of that assessment, like everything above — not just its empty fields.
-      setVariableValues(variableValuesByName(full.fieldDefinitions, full.fieldValues));
-      setEditorKey(k => k + 1);
-
-      if (full.attachments?.length) {
-        setSourceAssessmentId(source.id);
-        setSourceFiles(full.attachments);
-      } else {
-        setSourceAssessmentId(null);
-        setSourceFiles([]);
-      }
-    } catch { /* ignore */ }
-  };
 
   const checkConflicts = async () => {
     try {
@@ -978,17 +915,6 @@ export default function CreateAssessment() {
 
   const handleRemoveUrl = (index: number) => {
     setEngagementUrls(engagementUrls.filter((_, i) => i !== index));
-  };
-
-  const handleAddStakeholder = () => {
-    if (newStakeholder.name && newStakeholder.email) {
-      setStakeholders([...stakeholders, newStakeholder]);
-      setNewStakeholder({ name: '', email: '', role: '' });
-    }
-  };
-
-  const handleRemoveStakeholder = (index: number) => {
-    setStakeholders(stakeholders.filter((_, i) => i !== index));
   };
 
   const formatBytes = (bytes: number): string => {
@@ -1282,7 +1208,6 @@ export default function CreateAssessment() {
     setEngagementUrls([]);
     setNewUrl({ url: '', description: '' });
     setStakeholders([]);
-    setNewStakeholder({ name: '', email: '', role: '' });
     setVariableValues({});
     setPrefillNotes([]);
     setPendingPrefillVariables({});
@@ -1293,8 +1218,6 @@ export default function CreateAssessment() {
     setSourceFiles([]);
     setAssessmentSurveys([]);
     setPendingSurveyTemplateIds([]);
-    setNameSuggestions([]);
-    setShowSuggestions(false);
     // Force the rich text editor to remount so its internal state clears too
     setEditorKey((k) => k + 1);
   };
@@ -1407,20 +1330,8 @@ export default function CreateAssessment() {
                 )}
               </div>
               <div className="row g-3">
-                <div className="col-md-4">
-                  <FormLabel>{targetSingular} Id</FormLabel>
-                  <Input
-                    type="text"
-                    value={applicationAppId}
-                    onChange={(e) => {
-                      setApplicationAppId(e.target.value);
-                      // Editing this field directly overrides any previously selected
-                      // existing application — fall back to appId-based lookup/create.
-                      setFormData((prev) => (prev.applicationId ? { ...prev, applicationId: '' } : prev));
-                    }}
-                    placeholder={`Optional — ${targetLower} ID`}
-                  />
-                </div>
+                {/* No Target Id field: the target is picked by name, and its App ID is generated by
+                    the server and filled in from the selection (or a pasted CSV row). */}
                 <div className="col-md-4">
                   <FormLabel required>{targetSingular}</FormLabel>
                   <SearchableApplicationSelect
@@ -1443,42 +1354,17 @@ export default function CreateAssessment() {
                 </div>
                 <div className="col-md-4">
                   <FormLabel required>Assessment Name</FormLabel>
-                  {mode === 'create' ? (
-                    <div className="name-autocomplete-wrap" ref={nameWrapRef}>
-                      <Input
-                        type="text"
-                        placeholder="Assessment name"
-                        value={formData.name}
-                        onChange={(e) => handleNameChange(e.target.value)}
-                        onFocus={() => nameSuggestions.length > 0 && setShowSuggestions(true)}
-                        onBlur={fillApplicationNameFromAssessmentName}
-                        autoComplete="off"
-                        required
-                      />
-                      {showSuggestions && (
-                        <ul className="name-suggestions-dropdown">
-                          {nameSuggestions.map(a => (
-                            <li key={a.id} onMouseDown={() => handleSelectSuggestion(a.name)}>
-                              <span className="name-suggestion-name">{a.name}</span>
-                              <span className="name-suggestion-meta">
-                                {a.applicationId === formData.applicationId ? applicationName : ''}
-                                {a.startDate ? ` · ${new Date(a.startDate).toLocaleDateString()}` : ''}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  ) : (
-                    <Input
-                      type="text"
-                      placeholder="Assessment name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      onBlur={fillApplicationNameFromAssessmentName}
-                      required
-                    />
-                  )}
+                  {/* Not typed: always Client + Target + Assessment Type, the name the report prints
+                      on its cover and as the Document Title. The server sets it on every save. */}
+                  <Input
+                    type="text"
+                    value={formData.name}
+                    placeholder={`Pick a ${targetLower} and a type`}
+                    readOnly
+                    tabIndex={-1}
+                    title="Set automatically: client, target and assessment type"
+                  />
+                  <small className="text-muted d-block mt-1">Set automatically: client, {targetLower} and type.</small>
                 </div>
                 <div className="col-md-4">
                   <FormLabel required>Assessment Type</FormLabel>
@@ -1712,77 +1598,8 @@ export default function CreateAssessment() {
                 </div>
               )}
 
-              {/* Stakeholders */}
-              <div>
-                <FormLabel>Stakeholders</FormLabel>
-                <div className="row g-3">
-                  <div className="col-md-12">
-                    <div className="stakeholder-list">
-                      {stakeholders.length === 0 ? (
-                        <div className="text-center text-muted py-3">
-                          <small>No Stakeholders</small>
-                        </div>
-                      ) : (
-                        stakeholders.map((stakeholder, index) => (
-                          <div key={index} className="row g-2 mb-2 align-items-center">
-                            <div className="col-md-4">
-                              <div className="small">{stakeholder.name}</div>
-                            </div>
-                            <div className="col-md-4">
-                              <a href={`mailto:${stakeholder.email}`} className="small text-muted">
-                                {stakeholder.email}
-                              </a>
-                            </div>
-                            <div className="col-md-2">
-                              <div className="small text-muted">{stakeholder.role || '-'}</div>
-                            </div>
-                            <div className="col-md-2">
-                              <button
-                                type="button"
-                                className="stakeholder-remove-btn"
-                                onClick={() => handleRemoveStakeholder(index)}
-                                title="Remove"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="row g-2">
-                  <div className="col-md-4">
-                    <Input
-                      placeholder="Name"
-                      value={newStakeholder.name}
-                      onChange={(e) => setNewStakeholder({ ...newStakeholder, name: e.target.value })}
-                    />
-                  </div>
-                  <div className="col-md-4">
-                    <Input
-                      type="email"
-                      placeholder="Email"
-                      value={newStakeholder.email}
-                      onChange={(e) => setNewStakeholder({ ...newStakeholder, email: e.target.value })}
-                    />
-                  </div>
-                  <div className="col-md-2">
-                    <Input
-                      placeholder="Role"
-                      value={newStakeholder.role}
-                      onChange={(e) => setNewStakeholder({ ...newStakeholder, role: e.target.value })}
-                    />
-                  </div>
-                  <div className="col-md-2">
-                    <Button type="button" onClick={handleAddStakeholder} variant="primary" size="sm">
-                      <Plus size={16} style={{ marginRight: '0.25rem' }} />
-                      Add
-                    </Button>
-                  </div>
-                </div>
-              </div>
+              {/* No Stakeholders section (iSec does not use them). Any stakeholders already on the
+                  assessment, or carried from its target, are still saved unchanged. */}
             </div>
 
             {/* Scope */}

@@ -168,6 +168,8 @@ export default function AssessmentFinalizeSection({
   const [exporting, setExporting] = useState<'sarif' | 'cyclonedx' | null>(null);
   const [exportError, setExportError] = useState('');
   const [peerReviews, setPeerReviews] = useState<PeerReview[]>([]);
+  // Whether the assessment has ever been sent to peer review — finalizing needs at least one.
+  const [sentToPeerReview, setSentToPeerReview] = useState(false);
   const [openReview, setOpenReview] = useState<PeerReview | null>(null);
   const [blockingChecklists, setBlockingChecklists] = useState<AssessmentChecklist[]>([]);
   // Correcting the completion date: super-admin only, mirrored by the server. The date drives
@@ -198,6 +200,7 @@ export default function AssessmentFinalizeSection({
     peerReviewsApi.getByAssessment(assessmentId).then(res => {
       if (res.success && res.data) {
         setPeerReviews(res.data.filter(r => r.status === 'COMPLETED'));
+        setSentToPeerReview(res.data.length > 0);
       }
     });
   }, [assessmentId]);
@@ -206,6 +209,8 @@ export default function AssessmentFinalizeSection({
 
   const isPendingReview = assessment.peerReviewStatus === 'IN_PEER_REVIEW'
     || assessment.peerReviewStatus === 'NEEDS_ACCEPTANCE';
+  // Sent to peer review at least once: a review on record, one in flight, or one accepted.
+  const hasPeerReview = sentToPeerReview || isPendingReview || !!assessment.peerReviewedAt;
   // Statuses are workflow-configured; until the config loads nothing counts as completed.
   const isCompleted = !!completedStatus && assessment.status === completedStatus;
 
@@ -533,6 +538,11 @@ export default function AssessmentFinalizeSection({
               </ul>
             </div>
           )}
+          {!isCompleted && !hasPeerReview && (
+            <div className="finalize-checklist-block">
+              <strong>Cannot finalize yet:</strong> send this assessment to peer review at least once first.
+            </div>
+          )}
           <div className="finalize-action-row">
             <div className="finalize-action-info">
               <span className="finalize-action-name">Finalize Assessment</span>
@@ -544,7 +554,8 @@ export default function AssessmentFinalizeSection({
               variant="primary"
               size="sm"
               onClick={() => setShowFinalizeConfirm(true)}
-              disabled={submittingFinalize || isCompleted || !completedStatus || blockingChecklists.length > 0}
+              disabled={submittingFinalize || isCompleted || !completedStatus || blockingChecklists.length > 0
+                || !hasPeerReview}
             >
               <CheckCircle2 size={14} />
               {submittingFinalize ? 'Finalizing…' : 'Finalize'}

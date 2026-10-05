@@ -109,6 +109,11 @@ class AssessmentServiceTest {
     @Mock
     private com.faction.clientportal.service.UnavailabilitySource unavailabilitySource;
 
+    // Finalizing needs the assessment to have been sent to peer review at least once; these tests
+    // are about what finalizing does, so every assessment here has one on record.
+    @Mock
+    private com.faction.clientportal.repository.PeerReviewRepository peerReviewRepository;
+
     @InjectMocks
     private AssessmentService assessmentService;
 
@@ -123,6 +128,8 @@ class AssessmentServiceTest {
     void setUp() {
         // These tests cover assessment behaviour, not authorization — the scope tiers have their
         // own coverage in AssessmentAccessScopeTest — so the caller always sees everything here.
+        lenient().when(peerReviewRepository.findByAssessmentIdOrderByCreatedAtDesc(any()))
+                .thenReturn(java.util.List.of(new com.faction.clientportal.model.PeerReview()));
         lenient().when(accessScopeService.resolveAssessmentScope(any()))
                 .thenReturn(new AccessScopeService.AssessmentScope(
                         AccessScopeService.AssessmentScopeKind.UNRESTRICTED, null, null, null, null));

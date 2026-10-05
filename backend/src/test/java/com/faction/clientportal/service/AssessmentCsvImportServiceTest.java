@@ -369,7 +369,7 @@ class AssessmentCsvImportServiceTest extends TestContainersConfig {
 
         assertThat(result.getCreated()).isEqualTo(1);
         Assessment a = assessmentRepository.findById(result.getAssessmentIds().get(0)).orElseThrow();
-        assertThat(a.getName()).isEqualTo("Q4 Pentest");
+        assertThat(a.getName()).isEqualTo("Acme Checkout Penetration Test");
         assertThat(a.getApplicationId()).isEqualTo(checkout.getId());
         assertThat(a.getAssessmentTypeId()).isEqualTo(pentest.getId());
         assertThat(a.getReportTemplateId()).isEqualTo(pentestTemplate.getId());
