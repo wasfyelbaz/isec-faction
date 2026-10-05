@@ -1408,6 +1408,20 @@ export interface VulnerabilityContext {
   stakeholders?: Stakeholder[];
 }
 
+/** A checklist item a finding is filed under, keyed on the checklist template and its question. */
+export interface VulnerabilityChecklistItem {
+  templateId: string;
+  questionId: string;
+  checklistName?: string;
+  questionText?: string;
+}
+
+/** A checklist item as sent when saving a finding; the server fills in the names. */
+export interface ChecklistItemRef {
+  templateId: string;
+  questionId: string;
+}
+
 export interface Vulnerability {
   /**
    * The finding this one was carried forward from, when it was added from another assessment's
@@ -1452,6 +1466,8 @@ export interface Vulnerability {
   assessmentId: string;
   vulnerabilityCategoryId?: string;
   vulnerabilityCategory?: VulnerabilityCategory;
+  /** The checklist items this finding is filed under; each is marked Vulnerable in its checklist. */
+  checklistItems?: VulnerabilityChecklistItem[];
   createdBy: string;
   lastUpdatedBy: string;
   createdAt: string;
@@ -1497,6 +1513,8 @@ export interface CreateVulnerabilityRequest {
   details?: string;
   vulnerabilityCategoryId?: string;
   fieldValues?: Record<string, string>;
+  /** Update: omit to leave the selection alone, [] to clear it. */
+  checklistItems?: ChecklistItemRef[];
   section?: string;
 }
 
@@ -1514,6 +1532,8 @@ export interface UpdateVulnerabilityRequest {
   details?: string;
   vulnerabilityCategoryId?: string;
   fieldValues?: Record<string, string>;
+  /** Update: omit to leave the selection alone, [] to clear it. */
+  checklistItems?: ChecklistItemRef[];
   openedAt?: string;
   section?: string;
 }

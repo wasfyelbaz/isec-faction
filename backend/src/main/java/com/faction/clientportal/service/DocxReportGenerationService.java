@@ -672,9 +672,22 @@ public class DocxReportGenerationService implements ReportGenerationService {
                         ? categoryNames.get(v.getVulnerabilityCategoryId())
                         : null)
                 .section(v.getSection())
+                .checklistItems(checklistItemsByName(v))
                 .fieldValues(vFieldValues)
                 .fieldTypes(vFieldTypes)
                 .build();
+    }
+
+    /** A finding's checklist items grouped by checklist, keyed the way the checklist tables are. */
+    static Map<String, List<String>> checklistItemsByName(Vulnerability v) {
+        Map<String, List<String>> byName = new java.util.LinkedHashMap<>();
+        if (v.getChecklistItems() == null) return byName;
+        for (var item : v.getChecklistItems()) {
+            if (item == null || item.getQuestionText() == null) continue;
+            byName.computeIfAbsent(ChecklistTableRenderer.variableNameFor(item.getChecklistName()),
+                    k -> new ArrayList<>()).add(item.getQuestionText());
+        }
+        return byName;
     }
 
     /**

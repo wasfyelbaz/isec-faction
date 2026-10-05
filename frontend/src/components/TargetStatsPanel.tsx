@@ -32,12 +32,16 @@ export default function TargetStatsPanel({ assessments, vulnerabilities, loading
 
   const completedCount = assessments.filter((a) => a.completed).length;
 
-  // Most common weakness: the category the most reported findings fall under.
+  // Most common weakness: the checklist item the most reported findings are filed under, across
+  // every checklist attached to the target's assessments (iSec and OWASP on a WAPT, the network
+  // checklist on a network test, …). A finding counts once per item it names.
   const weaknesses = useMemo(() => {
     const byName = new Map<string, number>();
     for (const v of reported) {
-      const name = v.vulnerabilityCategory?.name?.trim();
-      if (name) byName.set(name, (byName.get(name) || 0) + 1);
+      for (const item of v.checklistItems ?? []) {
+        const name = item.questionText?.trim();
+        if (name) byName.set(name, (byName.get(name) || 0) + 1);
+      }
     }
     return [...byName.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [reported]);
@@ -91,7 +95,7 @@ export default function TargetStatsPanel({ assessments, vulnerabilities, loading
         {loading ? (
           <div className="vdash-card-body vdash-card-empty">Loading…</div>
         ) : weaknesses.length === 0 ? (
-          <div className="vdash-card-body vdash-card-empty">No categorized findings yet</div>
+          <div className="vdash-card-body vdash-card-empty">No findings filed under a checklist item yet</div>
         ) : (
           <div className="vdash-card-body tsp-body">
             <div className="tsp-headline" title={weaknesses[0][0]}>{weaknesses[0][0]}</div>

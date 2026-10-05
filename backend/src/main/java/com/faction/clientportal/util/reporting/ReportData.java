@@ -226,6 +226,12 @@ public class ReportData {
         private LocalDateTime closedInDevAt;
         private LocalDateTime closedInStagingAt;
         private String categoryName;
+        /**
+         * The checklist items this finding is filed under, by checklist — keyed on the checklist's
+         * variable name (its title lowercased, spaces to hyphens), the same key the checklist
+         * tables use. Read by {@code ${checklistItems <name>}}.
+         */
+        private Map<String, List<String>> checklistItems;
         /** The report section this finding is filed under; null or blank means Default. */
         private String section;
 

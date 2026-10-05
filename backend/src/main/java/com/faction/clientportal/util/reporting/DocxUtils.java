@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -233,6 +234,37 @@ public class DocxUtils {
     }
 
     // ── CDATA wrap ──────────────────────────────────────────────────────────
+
+    /** {@code ${checklistItems <checklist name>}}, inside a finding's own XML. */
+    private static final Pattern CHECKLIST_ITEMS = Pattern.compile("\\$\\{checklistItems\\s+([^}\\s]+)\\s*\\}");
+
+    /**
+     * Fills {@code ${checklistItems <name>}} with the checklist items the finding is filed under on
+     * that checklist, one per line — e.g. {@code ${checklistItems owasp-web-top-10}} in the OWASP
+     * Top Ten row of the finding table. The name is the checklist's variable name, as in
+     * {@code ${checklist-<name>}}; matched case-insensitively. Nothing when none are chosen.
+     *
+     * <p>The tag sits inside a run's text, so each further item closes that text, adds a line
+     * break and opens a new text in the same run, keeping the run's formatting.
+     */
+    String replaceChecklistItems(String xml, ReportData.ReportVulnerability v) {
+        Matcher m = CHECKLIST_ITEMS.matcher(xml);
+        if (!m.find()) return xml;
+        m.reset();
+        Map<String, List<String>> byName = new HashMap<>();
+        if (v.getChecklistItems() != null) {
+            v.getChecklistItems().forEach((k, items) -> byName.put(k.toLowerCase(Locale.ROOT), items));
+        }
+        StringBuilder out = new StringBuilder();
+        while (m.find()) {
+            List<String> items = byName.getOrDefault(m.group(1).toLowerCase(Locale.ROOT), List.of());
+            String joined = String.join("</w:t><w:br/><w:t xml:space=\"preserve\">",
+                    items.stream().map(this::CData).toList());
+            m.appendReplacement(out, Matcher.quoteReplacement(joined));
+        }
+        m.appendTail(out);
+        return out.toString();
+    }
 
     private String CData(String text) {
         if (text == null) return "";
@@ -583,6 +615,7 @@ public class DocxUtils {
                             v.getLikelihood() == null ? "" : v.getLikelihood());
                     nxml = nxml.replaceAll("\\$\\{category\\}",
                             v.getCategoryName() == null ? "UnCategorized" : CData(v.getCategoryName()));
+                    nxml = replaceChecklistItems(nxml, v);
                     nxml = nxml.replaceAll("\\$\\{remediationStatus\\}",
                             v.isOpen() ? "Open" : "Closed");
                     nxml = nxml.replaceAll("\\$\\{count\\}", "" + count);
@@ -962,6 +995,7 @@ public class DocxUtils {
                         v.getLikelihood() == null ? "" : v.getLikelihood());
                 nxml = nxml.replaceAll("\\$\\{category\\}",
                         v.getCategoryName() == null ? "UnCategorized" : CData(v.getCategoryName()));
+                nxml = replaceChecklistItems(nxml, v);
                 nxml = nxml.replaceAll("\\$\\{remediationStatus\\}",
                         v.isOpen() ? "Open" : "Closed");
                 if (!sev.isEmpty()) {

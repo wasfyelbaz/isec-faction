@@ -26,6 +26,7 @@ public class AssessmentChecklistService {
     private final AssessmentChecklistRepository repository;
     private final ChecklistTemplateRepository templateRepository;
     private final AccessScopeService accessScopeService;
+    private final ChecklistFindingSync checklistFindingSync;
 
     public List<AssessmentChecklistDto> getByAssessment(String assessmentId) {
         return getByAssessment(assessmentId, null);
@@ -50,12 +51,15 @@ public class AssessmentChecklistService {
         ChecklistTemplate template = templateRepository.findById(req.getTemplateId())
                 .orElseThrow(() -> new ResourceNotFoundException("Checklist template not found: " + req.getTemplateId()));
 
+        // Every item starts Not Vulnerable (PASS). Findings filed under an item turn it Vulnerable
+        // (markReferenced below, then ChecklistFindingSync), and N/A is set by hand — so a checklist
+        // nobody has touched reads as fully tested and clean rather than unanswered.
         List<ChecklistResponse> responses = template.getQuestions() == null ? List.of() :
                 template.getQuestions().stream()
                         .map(q -> ChecklistResponse.builder()
                                 .questionId(q.getId())
                                 .questionText(q.getText())
-                                .result(null)
+                                .result(com.faction.clientportal.model.ChecklistResult.PASS)
                                 .comment(null)
                                 .order(q.getOrder())
                                 .build())
@@ -71,6 +75,8 @@ public class AssessmentChecklistService {
                 .createdAt(Instant.now())
                 .updatedAt(Instant.now())
                 .build();
+        // Findings already filed under one of its items mark it Vulnerable straight away.
+        checklistFindingSync.markReferenced(checklist);
 
         return AssessmentChecklistDto.fromEntity(repository.save(checklist));
     }

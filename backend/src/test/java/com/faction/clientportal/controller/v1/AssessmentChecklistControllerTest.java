@@ -110,7 +110,9 @@ class AssessmentChecklistControllerTest extends TestContainersConfig {
                 .andExpect(jsonPath("$.data.assessmentId").value(assessmentId))
                 .andExpect(jsonPath("$.data.responses", hasSize(2)))
                 .andExpect(jsonPath("$.data.responses[0].questionText").value("Check login"))
-                .andExpect(jsonPath("$.data.responses[0].result").doesNotExist());
+                // Every item starts Not Vulnerable; findings turn items Vulnerable, N/A is manual
+                .andExpect(jsonPath("$.data.responses[0].result").value("PASS"))
+                .andExpect(jsonPath("$.data.responses[1].result").value("PASS"));
     }
 
     @Test

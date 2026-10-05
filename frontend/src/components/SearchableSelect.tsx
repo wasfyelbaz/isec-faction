@@ -36,6 +36,11 @@ export interface MultiSelectProps {
    *  (so an unbounded set is reachable, not just what's loaded). */
   onQueryChange?: (query: string) => void;
   loading?: boolean;
+  /** Read-only: the selection shows but cannot be opened or cleared. */
+  disabled?: boolean;
+  /** Wording after the count when several are chosen ("3 items selected"). Defaults to the
+   *  placeholder without a leading "All", which suits filters ("All Statuses" → "3 Statuses"). */
+  countLabel?: string;
 }
 
 /** Close the dropdown on any click outside `ref`. */
@@ -66,7 +71,7 @@ function useDropdownQuery(open: boolean) {
  * "N <noun>" for several — the noun comes from the placeholder ("All Statuses" → "Statuses").
  */
 export function MultiSelect({ selected, onChange, options, placeholder, searchable = true,
-                              onQueryChange, loading }: MultiSelectProps) {
+                              onQueryChange, loading, disabled = false, countLabel }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { query, setQuery, inputRef } = useDropdownQuery(open);
@@ -87,7 +92,7 @@ export function MultiSelect({ selected, onChange, options, placeholder, searchab
     ? placeholder
     : selected.length === 1
       ? (options.find(o => o.value === selected[0])?.label ?? placeholder)
-      : `${selected.length} ${placeholder.replace(/^all\s+/i, '')}`;
+      : `${selected.length} ${countLabel ?? placeholder.replace(/^all\s+/i, '')}`;
 
   const toggle = (value: string) =>
     onChange(selected.includes(value) ? selected.filter(v => v !== value) : [...selected, value]);
@@ -96,11 +101,12 @@ export function MultiSelect({ selected, onChange, options, placeholder, searchab
     <div className="ss-wrap" ref={ref}>
       <button
         type="button"
-        className={`ss-trigger${selected.length > 0 ? ' ss-trigger--active' : ''}`}
-        onClick={() => setOpen(v => !v)}
+        className={`ss-trigger${selected.length > 0 ? ' ss-trigger--active' : ''}${disabled ? ' ss-trigger--disabled' : ''}`}
+        aria-disabled={disabled || undefined}
+        onClick={() => { if (!disabled) setOpen(v => !v); }}
       >
         <span className="ss-trigger-label">{label}</span>
-        {selected.length > 0
+        {selected.length > 0 && !disabled
           ? <XIcon size={13} onClick={e => { e.stopPropagation(); onChange([]); setOpen(false); }} className="ss-clear" />
           : <ChevronDown size={13} className="ss-chevron" />
         }
